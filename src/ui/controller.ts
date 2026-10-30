@@ -26,12 +26,14 @@ import {
   SPECIALS,
   dashAmount,
   healAmount,
+  hookPath,
   previewSpecial,
   specialBlockedReason,
   specialChoices,
   specialIdOf,
   specialOf,
   specialTargets,
+  targetsUnit,
 } from '../core/specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
 import { speedName } from '../data/config';
@@ -223,13 +225,21 @@ export class Controller {
 
     if (ev.movedId && ev.to) {
       this.render();
-      await this.board.animateMove(ev.movedId, [ev.to]);
+      await this.board.animateMove(ev.movedId, ev.path ?? [ev.to]);
     }
 
     const kills = (ev.effects ?? []).filter((e) => e.killed).length;
     let message = `${unitDef(before, unit).name} used ${sp.name}.`;
-    if (ev.effects) message += ` ${this.effectsText(before, unit.owner, ev.effects, false)}`;
-    if (kills) message += ` ${kills} destroyed!`;
+    if (ev.special === 'hook' && target) {
+      // "Grappler hooks Artillery (ally), 1 damage, pulled 2 hexes."
+      const ally = target.owner === unit.owner ? ' (ally)' : '';
+      const dmg = ev.effects?.[0]?.damage ?? 0;
+      const outcome = kills ? 'destroyed!' : `pulled ${ev.amount} hex${ev.amount === 1 ? '' : 'es'}.`;
+      message = `${unitDef(before, unit).name} hooks ${unitDef(before, target).name}${ally}, ${dmg} damage, ${outcome}`;
+    } else {
+      if (ev.effects) message += ` ${this.effectsText(before, unit.owner, ev.effects, false)}`;
+      if (kills) message += ` ${kills} destroyed!`;
+    }
     if (ev.special === 'vault' && getUnit(this.state, unit.id)?.movesLeft) message += ' It can keep moving.';
     this.ui.message = message;
   }
@@ -426,7 +436,8 @@ export class Controller {
     const choices = specialChoices(s, unit);
     switch (specialOf(s, unit).targeting) {
       case 'ally':
-      case 'enemy': {
+      case 'enemy':
+      case 'model': {
         const occupant = unitAt(s, hex);
         return occupant && choices.find((c) => c.targetId === occupant.id);
       }
@@ -512,8 +523,12 @@ export class Controller {
     const s = this.state;
     const sp = specialOf(s, unit);
     const choices = specialChoices(s, unit);
-    if (sp.targeting === 'ally' || sp.targeting === 'enemy') {
+    if (targetsUnit(sp.targeting)) {
       for (const t of specialTargets(s, unit)) o.specialTargetIds.add(t.id);
+      // Specials that move their target (Hook, Shove): mark where each one would land.
+      for (const c of choices) {
+        for (const a of previewSpecial(s, unit, c)?.area ?? []) if (a.kind === 'landing') o.shade.set(hexKey(a.hex), 'option');
+      }
     } else if (sp.targeting === 'hex') {
       for (const c of choices) o.shade.set(hexKey(c.hex!), 'option');
     } else if (sp.targeting === 'direction') {
@@ -669,12 +684,22 @@ export class Controller {
           const t = getUnit(s, choice.targetId!)!;
           detail = ` +${Math.min(healAmount(s, unit.die!), unitDef(s, t).health - t.hp)} HP`;
         }
-        if (sp.targeting === 'ally' || sp.targeting === 'enemy') {
+        if (targetsUnit(sp.targeting)) {
           detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
         }
         if (id === 'grenade' || id === 'torch' || id === 'sweep') {
           const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
           model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
+        } else if (id === 'hook') {
+          const t = getUnit(s, choice.targetId!)!;
+          const e = effects[0];
+          const hexes = hookPath(s, unit, t).length;
+          const pulled = e?.killed ? 'destroyed' : `pulled ${hexes} hex${hexes === 1 ? '' : 'es'}`;
+          const ally = t.owner === unit.owner;
+          model.preview = {
+            text: `${unitDef(s, t).name}${ally ? ' (ally)' : ''}: −${e?.damage ?? 0}, ${pulled}`,
+            good: !ally,
+          };
         } else if (id === 'vault') {
           model.preview = { text: `Land here, then keep moving (${unit.movesLeft} left).`, good: true };
         } else if (id === 'overwatch') {
@@ -696,6 +721,7 @@ export class Controller {
         const how: Record<string, string> = {
           ally: `Tap a purple-ringed model to ${sp.name}.`,
           enemy: `Tap a purple-ringed model to ${sp.name}.`,
+          model: `Tap a purple-ringed model to ${sp.name}. Purple hexes show where each would land.`,
           hex: `Tap a purple hex to choose where to ${sp.name}.`,
           direction: `Tap a purple hex to choose the ${sp.name} direction.`,
         };

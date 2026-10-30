@@ -19,7 +19,8 @@ export type SpecialId =
   | 'torch'
   | 'sweep'
   | 'load'
-  | 'overwatch';
+  | 'overwatch'
+  | 'hook';
 
 export interface UnitDef {
   name: string;
@@ -80,6 +81,10 @@ export interface SpecialRules {
   /** How many hexes Torch reaches. */
   torchLength: number;
   sweepDamage: number;
+  /** Hook needs a die of at least this. */
+  hookMinDie: number;
+  hookRange: number;
+  hookDamage: number;
 }
 
 export interface Terrain {

@@ -2,7 +2,10 @@ import type { Hex } from '../hex';
 import type { GameState, SpecialId, SpecialRules, Unit } from '../types';
 
 /** What a special is aimed at. */
-export type Targeting = 'none' | 'ally' | 'enemy' | 'hex' | 'direction';
+/** 'model' = any model except the user itself, friend or foe. */
+export type Targeting = 'none' | 'ally' | 'enemy' | 'model' | 'hex' | 'direction';
+
+export const targetsUnit = (t: Targeting): boolean => t === 'ally' || t === 'enemy' || t === 'model';
 
 /** The player's choice of target, as sent in an Action. Which field is used depends on the Targeting. */
 export interface SpecialChoice {
@@ -47,6 +50,8 @@ export interface SpecialResult {
   movedId?: string;
   from?: Hex;
   to?: Hex;
+  /** Hexes passed through, ending at `to` (Hook's pull). */
+  path?: Hex[];
   /** Area specials (Grenade, Torch). */
   hex?: Hex;
   dir?: number;

@@ -43,7 +43,7 @@ export const UNITS: Record<string, UnitDef> = {
   sniper: {
     name: 'Sniper',
     label: 'Sn',
-    cost: 3,
+    cost: 4,
     size: 1, // small
     speed: SPEED.slow,
     defense: 5,
@@ -152,6 +152,18 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 2,
     special: 'overwatch',
   },
+  grappler: {
+    name: 'Grappler',
+    label: 'Gr',
+    cost: 5,
+    size: 3, // large
+    speed: SPEED.slow,
+    defense: 7,
+    health: 12,
+    range: 1, // melee only
+    damage: 3,
+    special: 'hook',
+  },
 };
 
 export const DEFAULT_CONFIG: GameConfig = {
@@ -176,5 +188,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     grenadeSplashDamage: 1,
     torchLength: 2,
     sweepDamage: 3,
+    hookMinDie: 7,
+    hookRange: 3,
+    hookDamage: 1,
   },
 };

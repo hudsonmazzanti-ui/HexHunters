@@ -13,6 +13,7 @@ import { brace } from './brace';
 import { dash } from './dash';
 import { grenade } from './grenade';
 import { heal } from './heal';
+import { hook } from './hook';
 import { load } from './load';
 import { overwatch } from './overwatch';
 import { prep } from './prep';
@@ -30,6 +31,7 @@ export { shoveDestination } from './shove';
 export { vaultOver } from './vault';
 export { grenadeArcClear } from './grenade';
 export { torchLine } from './torch';
+export { hookPath } from './hook';
 
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   brace,
@@ -44,6 +46,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   sweep,
   load,
   overwatch,
+  hook,
 };
 
 export const specialIdOf = (state: GameState, unit: Unit): SpecialId => state.config.units[unit.type].special;
@@ -56,11 +59,13 @@ function resolve(state: GameState, unit: Unit, sp: SpecialDef, choice: SpecialCh
     case 'none':
       return {};
     case 'ally':
-    case 'enemy': {
+    case 'enemy':
+    case 'model': {
       const target = choice.targetId ? getUnit(state, choice.targetId) : undefined;
       if (!target?.pos) return 'Choose a target';
       if (sp.targeting === 'ally' && (target.owner !== unit.owner || target.id === unit.id)) return 'Choose an ally';
       if (sp.targeting === 'enemy' && target.owner === unit.owner) return 'Choose an enemy';
+      if (target.id === unit.id) return 'Choose another model';
       return { target };
     }
     case 'hex':
@@ -91,6 +96,7 @@ export function specialChoices(state: GameState, unit: Unit): SpecialChoice[] {
       return [];
     case 'ally':
     case 'enemy':
+    case 'model':
       candidates = state.units.map((u) => ({ targetId: u.id }));
       break;
     case 'hex':
