@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c2230" />
+    <title>HexHunters</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="topbar"></header>
+      <main id="stage">
+        <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="board-tools">
+          <button id="btn-fit" class="tool" aria-label="Fit board to screen">⤢</button>
+          <button id="btn-menu" class="tool" aria-label="Menu">☰</button>
+        </div>
+      </main>
+      <section id="panel"></section>
+    </div>
+    <div id="overlay" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
