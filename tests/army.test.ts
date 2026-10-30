@@ -24,6 +24,9 @@ describe('army building', () => {
       warden: 6,
       masterninja: 7,
       standardbearer: 6,
+      zombie: 2,
+      skeleton: 1,
+      pyromancer: 6,
     });
   });
 

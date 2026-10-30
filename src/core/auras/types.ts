@@ -18,6 +18,8 @@ export interface AuraEffects {
   doubleAction?: boolean;
   /** Added to the die when the unit acts (attack or special) while this aura affects it. */
   actionRollBonus?: number;
+  /** Which of its actions set Burn on every model they hit (Pyromancer). */
+  burnsOn?: ('attack' | 'special')[];
 }
 
 /**

@@ -6,7 +6,7 @@
  */
 import { dealDamage } from '../combat';
 import { type Hex, direction, hexAdd, hexScale } from '../hex';
-import { actionDie, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
+import { actionDie, burnsOn, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -50,10 +50,12 @@ export const torch: SpecialDef = {
   preview: (state, unit, { dir }) => flames(state, unit, dir!),
   apply: (state, unit, { dir }) => {
     const { effects } = flames(state, unit, dir!);
+    const burn = burnsOn(state, unit, 'special');
     for (const e of effects) {
       if (!e.hit) continue;
       const u = state.units.find((x) => x.id === e.unitId) as Unit;
       e.killed = dealDamage(state, u, e.damage);
+      if (burn && !e.killed) u.burning = e.burned = true;
     }
     return { dir, effects };
   },

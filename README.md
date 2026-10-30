@@ -34,6 +34,8 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Artillery | 3    | medium (2) | 1     | 4   | 8  | 10        | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
+| Zombie    | 2    | medium (2) | 3     | 0   | 9  | 1 (melee) | 3   | **Eat** (die 8+): adjacent enemy, normal hit roll; 2 damage and the Zombie heals 2. Crawls once hurt |
+| Skeleton  | 1    | medium (2) | 3     | 2   | 1  | 1 (melee) | 2   | No special. Rests on the second of back-to-back turns |
 
 **Heroes** (max one per army, optional; no special, their die is only for attacking):
 
@@ -45,12 +47,15 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
 | Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1 |
+| Pyromancer    | 6    | medium (2) | 3     | 7   | 10 | 3            | 2   | Burn: its attacks, Flamer Torch and Grenadier Grenade set every model they hit burning |
 
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
 
 Optional unit fields: `hitBonus` (added to basic attacks), `attackName` (e.g. "Fire"), `needsLoading` (attack only
-while loaded; firing unloads), `indirectFire` (attack ignores line of sight).
+while loaded; firing unloads), `indirectFire` (attack ignores line of sight), `woundedForm` (size and speed it
+switches to for good the first time it takes damage: Zombie), `restsOnDoubleTurn` (sits out the second of
+back-to-back turns: Skeleton).
 
 Game settings: army point limit 16, board radius 7 (15 hexes across), 3 mirrored terrain pairs of length 2–4,
 2 deployment rows, d12, first to 5 points, first player flips every 2 rounds (`firstPlayerSwapEvery`). Special-action
@@ -153,6 +158,21 @@ Dash amounts, Sweep and Torch rolls, and the die a Sentinel locks for overwatch.
 those models glow gold while on the point. Winning the control point at the end of a round scores 2 points instead
 of 1 (shown as "Player 1 holds the point: +2 (Standard Bearer)"). Heroes wear
 a gold crown, and units under a hero's aura glow gold, for both players to see.
+
+**Zombie.** The first time a Zombie takes damage from any source (attacks, specials, overwatch, Burn) and survives,
+it permanently becomes a crawler: small (so it hides behind height-1 walls and blocks sight like a small model) and
+speed 1. If that happens during its own turn, its remaining movement is capped at 1. Healing never reverses it.
+Crawlers are drawn smaller with a dashed outline. **Eat** (die 8+, adjacent enemy) is a normal hit roll: Spot, the
+Standard Bearer's +2 and the target's Brace all count; on a hit it deals 2 and heals the Zombie 2 (up to max health).
+
+**Skeleton.** When the turn order flips and a player takes two turns in a row, their Skeletons get no die and no
+movement on the second of those turns (greyed out with "Zz"). Otherwise they act normally.
+
+**Burn (Pyromancer).** In an army with a Pyromancer, the Pyromancer's attacks, the Flamer's Torch (each model hit) and
+the Grenadier's Grenade (impact and splash) set every model they hit and don't kill burning, allies included. The
+Flamer's and Grenadier's basic attacks don't burn. At the start of the burning model's owner's next turn it takes 1
+damage (this can kill, end the game, and make a Zombie crawl), then stops burning. Burn doesn't stack. Burning models
+show a flame icon, and the handoff screen logs the damage.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).

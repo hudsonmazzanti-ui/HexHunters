@@ -5,6 +5,7 @@
 import type { AuraId, GameState, PlayerId, Unit } from '../types';
 import { marshal } from './marshal';
 import { ninja } from './ninja';
+import { pyro } from './pyro';
 import { siege } from './siege';
 import { standard } from './standard';
 import type { AuraDef, AuraEffects } from './types';
@@ -13,7 +14,7 @@ import { warlord } from './warlord';
 
 export * from './types';
 
-export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden, ninja, standard };
+export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden, ninja, standard, pyro };
 
 /** Points a player scores for winning the control point at the end of a round (Standard Bearer: 2). */
 export const holdPoints = (state: GameState, player: PlayerId): number =>
@@ -33,6 +34,7 @@ export function auraEffects(state: GameState, unit: Unit): AuraEffects {
     }
     if (e.noLoading) total.noLoading = true;
     if (e.doubleAction) total.doubleAction = true;
+    if (e.burnsOn) total.burnsOn = [...(total.burnsOn ?? []), ...e.burnsOn];
   }
   return total;
 }

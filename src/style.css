@@ -963,3 +963,36 @@ button.danger {
   border-radius: 6px;
   padding: 1px 6px;
 }
+
+/* ---------- Zombies, Skeletons, Burn ---------- */
+
+/* A crawling Zombie is drawn small with a ragged, dashed outline. */
+.unit.crawling .body {
+  stroke-dasharray: 3 2;
+  filter: saturate(0.6) brightness(0.85);
+}
+.unit.resting {
+  opacity: 0.45;
+}
+.unit .zz,
+.unit .flame-icon {
+  display: none;
+}
+.unit.resting .zz {
+  display: block;
+  fill: #e5e7eb;
+  font-size: 11px;
+  font-weight: 900;
+  font-style: italic;
+  paint-order: stroke;
+  stroke: #111;
+  stroke-width: 3px;
+}
+.unit.burning .flame-icon {
+  display: block;
+}
+.flame-icon path {
+  fill: #f97316;
+  stroke: #7c2d12;
+  stroke-width: 1.2;
+}

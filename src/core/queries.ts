@@ -48,13 +48,13 @@ export const hasDoubleAction = (state: GameState, unit: Unit): boolean => !!aura
  */
 export function canSeeHex(state: GameState, viewer: Unit, target: Hex, targetSize: number): boolean {
   if (!viewer.pos) return false;
-  const viewerSize = unitDef(state, viewer).size;
+  const viewerSize = unitSize(state, viewer);
   return hasLineOfSight(viewer.pos, target, (h) => {
     const model = unitAt(state, h);
     return blocksSight(
       {
         terrainHeight: terrainHeight(state, h),
-        model: model && { size: unitDef(state, model).size, friendlyToViewer: model.owner === viewer.owner },
+        model: model && { size: unitSize(state, model), friendlyToViewer: model.owner === viewer.owner },
       },
       viewerSize,
       targetSize,
@@ -63,7 +63,7 @@ export function canSeeHex(state: GameState, viewer: Unit, target: Hex, targetSiz
 }
 
 export function canSeeUnit(state: GameState, viewer: Unit, target: Unit): boolean {
-  return !!target.pos && canSeeHex(state, viewer, target.pos, unitDef(state, target).size);
+  return !!target.pos && canSeeHex(state, viewer, target.pos, unitSize(state, target));
 }
 
 /**
@@ -96,9 +96,22 @@ export const unitsOnControlPoint = (state: GameState, player: PlayerId): Unit[] 
 export const canAct = (state: GameState, unit: Unit): boolean =>
   state.phase === 'play' && unit.owner === state.current && !!unit.pos && !unit.acted && unit.die !== null;
 
-/** Hexes of movement per turn, including hero auras (Warlord). */
-export const unitSpeed = (state: GameState, unit: Unit): number =>
-  unitDef(state, unit).speed + (auraEffects(state, unit).speedBonus ?? 0);
+/** Current size (height for line of sight): a crawling Zombie is small. */
+export function unitSize(state: GameState, unit: Unit): UnitDef['size'] {
+  const def = unitDef(state, unit);
+  return unit.crawling && def.woundedForm ? def.woundedForm.size : def.size;
+}
+
+/** Hexes of movement per turn: base (crawl once a Zombie is crawling) plus hero auras (Warlord). */
+export function unitSpeed(state: GameState, unit: Unit): number {
+  const def = unitDef(state, unit);
+  const base = unit.crawling && def.woundedForm ? def.woundedForm.speed : def.speed;
+  return base + (auraEffects(state, unit).speedBonus ?? 0);
+}
+
+/** Does this unit's attack / special set Burn on what it hits? (Pyromancer's aura) */
+export const burnsOn = (state: GameState, unit: Unit, action: 'attack' | 'special'): boolean =>
+  (auraEffects(state, unit).burnsOn ?? []).includes(action);
 
 /** Must this unit be loaded to fire? (Artillery, unless the Siege Master's aura applies.) */
 export const needsLoading = (state: GameState, unit: Unit): boolean =>

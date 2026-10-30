@@ -1,6 +1,16 @@
 /** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
 import { hexDistance } from './hex';
-import { actionBonus, attackDamage, canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
+import {
+  actionBonus,
+  attackDamage,
+  burnsOn,
+  canAct,
+  canSeeUnit,
+  effectiveDefense,
+  needsLoading,
+  unitDef,
+  unitSpeed,
+} from './queries';
 import type { GameState, Unit } from './types';
 
 export interface AttackPreview {
@@ -61,13 +71,24 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
   if (p.spotBonus > 0) target.spottedBy = null;
 
   const killed = p.hit && dealDamage(state, target, p.damage);
+  if (p.hit && !killed && burnsOn(state, attacker, 'attack')) target.burning = true;
   return { roll: p.roll, bonus: p.bonus, defense: p.defense, hit: p.hit, damage: p.hit ? p.damage : 0, killed };
 }
 
-/** Applies damage, removing the model at 0 health. Returns true if it was killed. */
+/**
+ * Applies damage, removing the model at 0 health. Returns true if it was killed.
+ * Every source of damage goes through here, so on-damage rules live here too: the
+ * first damage a Zombie survives turns it into a crawler for good.
+ */
 export function dealDamage(state: GameState, target: Unit, amount: number): boolean {
   target.hp = Math.max(0, target.hp - amount);
-  if (target.hp > 0) return false;
-  state.units = state.units.filter((u) => u.id !== target.id);
-  return true;
+  if (target.hp <= 0) {
+    state.units = state.units.filter((u) => u.id !== target.id);
+    return true;
+  }
+  if (amount > 0 && unitDef(state, target).woundedForm && !target.crawling) {
+    target.crawling = true;
+    target.movesLeft = Math.min(target.movesLeft, unitSpeed(state, target));
+  }
+  return false;
 }

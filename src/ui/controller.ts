@@ -25,6 +25,7 @@ import {
   terrainHeight,
   unitAt,
   unitDef,
+  unitSize,
   unitSpeed,
 } from '../core/queries';
 import { randomSeed } from '../core/rng';
@@ -33,6 +34,7 @@ import {
   type SpecialChoice,
   SPECIALS,
   dashAmount,
+  eatHeal,
   healAmount,
   hookPath,
   previewSpecial,
@@ -138,6 +140,8 @@ export class Controller {
     } finally {
       this.busy = false;
     }
+    const crawl = crawlText(before, this.state);
+    if (crawl) this.ui.message = `${this.ui.message ?? ''} ${crawl}`.trim();
     this.render();
     return true;
   }
@@ -173,6 +177,11 @@ export class Controller {
         case 'special':
           await this.playSpecial(before, ev);
           break;
+        case 'burn': {
+          const pos = getUnit(before, ev.unitId)?.pos;
+          if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, '#fb923c');
+          break;
+        }
         case 'overwatch': {
           const sentinel = getUnit(before, ev.unitId)!;
           const target = getUnit(before, ev.targetId)!;
@@ -248,6 +257,7 @@ export class Controller {
     } else {
       if (ev.effects) message += ` ${this.effectsText(before, unit.owner, ev.effects, false)}`;
       if (kills) message += ` ${kills} destroyed!`;
+      if (ev.special === 'eat' && ev.amount) message += ` ${unitDef(before, unit).name} heals ${ev.amount}.`;
     }
     if (ev.special === 'vault' && getUnit(this.state, unit.id)?.movesLeft) message += ' It can keep moving.';
     this.ui.message = message;
@@ -286,7 +296,10 @@ export class Controller {
 
   private async turnHandoff(player: PlayerId, round: number, events: GameEvent[], before: GameState): Promise<void> {
     const lines: string[] = [];
-    for (const e of events) if (e.type === 'overwatch') lines.push(overwatchText(before, e));
+    for (const e of events) {
+      if (e.type === 'overwatch') lines.push(overwatchText(before, e));
+      if (e.type === 'burn') lines.push(burnText(before, this.state, e));
+    }
     if (before.phase === 'play' && before.current === player) {
       lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
     }
@@ -618,8 +631,11 @@ export class Controller {
       }
       if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
+      if (sel.burning) stats.push(['', `Burning: -${s.config.specials.burnDamage} at its next turn`]);
+      if (sel.crawling) stats.push(['', 'Crawling (small, speed 1)']);
+      if (sel.resting && ownTurn) stats.push(['', 'Resting (back-to-back turn)']);
       model.info = {
-        title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[def.size]})`,
+        title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[unitSize(s, sel)]})`,
         owner: sel.owner,
         stats,
         special: def.hero
@@ -726,6 +742,17 @@ export class Controller {
         if (id === 'grenade' || id === 'torch' || id === 'sweep') {
           const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
           model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
+        } else if (id === 'eat') {
+          const e = effects[0];
+          const t = getUnit(s, choice.targetId!)!;
+          const heal = eatHeal(s, unit, t);
+          model.preview = {
+            text: e.hit
+              ? `${unitDef(s, t).name}: HIT −${e.damage} (${e.roll} vs ${e.defense})${e.killed ? ', destroyed' : ''}` +
+                (heal ? `, Zombie +${heal} HP` : ', Zombie already at full health')
+              : `${unitDef(s, t).name}: miss (${e.roll} vs ${e.defense})`,
+            good: !!e.hit,
+          };
         } else if (id === 'hook') {
           const t = getUnit(s, choice.targetId!)!;
           const e = effects[0];
@@ -863,4 +890,21 @@ function moveNote(state: GameState, unit: Unit): string {
   const base = unitDef(state, unit).speed;
   const bonus = unitSpeed(state, unit) - base;
   return bonus ? `(${speedName(base)} +${bonus})` : speedName(base);
+}
+
+/** "Infantry burns for 1." / "... destroyed!" / "... now crawling!" */
+function burnText(before: GameState, after: GameState, ev: Extract<GameEvent, { type: 'burn' }>): string {
+  const unit = getUnit(before, ev.unitId);
+  const name = unit ? `${PLAYER_NAMES[unit.owner]} ${unitDef(before, unit).name}` : 'A model';
+  if (ev.killed) return `${name} burns for ${ev.damage}: destroyed!`;
+  const crawls = unit && !unit.crawling && getUnit(after, ev.unitId)?.crawling;
+  return `${name} burns for ${ev.damage}${crawls ? ' and is now crawling!' : '.'}`;
+}
+
+/** "Zombie is crawling!" for Zombies that started crawling during an action. */
+function crawlText(before: GameState, after: GameState): string {
+  const names = after.units
+    .filter((u) => u.crawling && getUnit(before, u.id)?.crawling === false)
+    .map((u) => unitDef(after, u).name);
+  return names.length ? `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} now crawling!` : '';
 }

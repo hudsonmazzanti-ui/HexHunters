@@ -30,6 +30,8 @@ export interface Effect {
   defense?: number;
   hit?: boolean;
   killed: boolean;
+  /** Set burning by this hit (Pyromancer's aura). */
+  burned?: boolean;
 }
 
 export type AreaKind = 'impact' | 'splash' | 'flame' | 'path' | 'landing' | 'watch';
