@@ -44,6 +44,8 @@ export interface BoardOverlay {
   targetIds: Set<string>;
   specialTargetIds: Set<string>;
   pendingTargetId: string | null;
+  /** The selected model's twin, outlined so the pair is easy to spot. */
+  partnerId: string | null;
   /** hexKey -> owner of a Sentinel watching that hex (overwatch, shown to both players). */
   watch: Map<string, PlayerId>;
 }
@@ -185,6 +187,12 @@ export class BoardView {
     const flame = el('g', { class: 'flame-icon', transform: `translate(${-r - 5} 0)` }, g);
     el('path', { d: 'M0 6C-4 6 -5 2 -3 -1C-2 1 -1 1 -1 0C-1 -3 1 -5 1 -7C3 -4 5 -1 4 2C3.5 4.5 2 6 0 6Z' }, flame);
 
+    // Twins: a purple chain-link badge at the upper left marks the pair.
+    const link = el('g', { class: 'twin-link', transform: `translate(${-r - 3} ${-r + 3})` }, g);
+    el('circle', { r: 6.5, class: 'twin-bg' }, link);
+    el('ellipse', { cx: -2, cy: 0, rx: 3, ry: 2.2 }, link);
+    el('ellipse', { cx: 2, cy: 0, rx: 3, ry: 2.2 }, link);
+
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
 
@@ -246,6 +254,8 @@ export class BoardView {
     cls.toggle('crawling', unit.crawling);
     cls.toggle('resting', unit.resting && state.phase === 'play' && unit.owner === state.current);
     cls.toggle('burning', unit.burning);
+    cls.toggle('twin', !!unit.partnerId);
+    cls.toggle('partner', o.partnerId === unit.id);
     cls.toggle('aura', aurasOn(state, unit).length > 0);
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';

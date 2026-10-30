@@ -4,8 +4,8 @@
  * Everything a player can do is an Action, so AI or network play can later drive
  * the game by producing the same actions as the UI.
  */
-import { type Hex, hexEquals } from './hex';
-import { validateArmy } from './army';
+import { type Hex, hexEquals, neighbors } from './hex';
+import { entryModels, validateArmy } from './army';
 import { type AttackResult, dealDamage, resolveAttack } from './combat';
 import { auraEffects, holdPoints } from './auras';
 import { generateMap } from './mapgen';
@@ -17,7 +17,8 @@ import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
 
 export type Action =
   | { type: 'chooseArmy'; units: string[] }
-  | { type: 'place'; unitId: string; hex: Hex }
+  /** Place one model. A twin also needs `partnerHex`: its partner goes there, next to it, in the same step. */
+  | { type: 'place'; unitId: string; hex: Hex; partnerHex?: Hex }
   | { type: 'move'; unitId: string; to: Hex }
   | { type: 'undoMove'; unitId: string }
   | { type: 'attack'; unitId: string; targetId: string }
@@ -96,13 +97,20 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       const reason = validateArmy(state.config, action.units);
       if (reason) fail(reason);
       const player = state.current;
+      // Squads (the Twins) expand into all their models.
+      const models = action.units.map((t) => entryModels(state.config, t));
       // Hero auras belong to the army for the whole game, even if the hero later dies.
-      state.auras[player] = action.units.flatMap((t) => state.config.units[t].hero?.aura ?? []);
-      action.units.forEach((type, i) => {
-        const unit = newUnit(state.config, player, type, i);
-        state.units.push(unit);
-        unit.hp = maxHealth(state, unit); // aura health bonuses (Warden) apply from the start
-      });
+      state.auras[player] = models.flat().flatMap((t) => state.config.units[t].hero?.aura ?? []);
+      let index = 0;
+      for (const group of models) {
+        const units = group.map((type) => newUnit(state.config, player, type, index++));
+        // Link squad members as partners (the Twins: each other).
+        if (units.length === 2) [units[0].partnerId, units[1].partnerId] = [units[1].id, units[0].id];
+        for (const unit of units) {
+          state.units.push(unit);
+          unit.hp = maxHealth(state, unit); // aura health bonuses (Warden) apply from the start
+        }
+      }
       if (player === 0) {
         state.current = 1;
       } else {
@@ -118,6 +126,16 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (unit.pos) fail('Already placed');
       if (!isInDeployZone(state, state.current, action.hex)) fail('Outside your deployment zone');
       if (unitAt(state, action.hex)) fail('Hex occupied');
+      const partner = unit.partnerId ? getUnit(state, unit.partnerId) : undefined;
+      if (partner && !partner.pos) {
+        // Twins are placed together: the partner on a free zone hex next to this one.
+        if (!freePartnerHexes(state, action.hex).length) fail('No free hex next to it for the other twin');
+        const ph = action.partnerHex ?? fail('Place the other twin next to it');
+        if (!freePartnerHexes(state, action.hex).some((h) => hexEquals(h, ph))) {
+          fail('The other twin must go on a free hex next to the first, inside your zone');
+        }
+        partner.pos = ph;
+      }
       unit.pos = action.hex;
       const next = nextDeployer(state);
       events.push({ type: 'placed', unitId: unit.id, hex: action.hex, next });
@@ -203,6 +221,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     crawling: false,
     resting: false,
     burning: false,
+    partnerId: null,
   };
 }
 
@@ -236,6 +255,11 @@ function guard<T>(fn: () => T): T {
   } catch (e) {
     throw e instanceof RuleError ? e : new RuleError((e as Error).message);
   }
+}
+
+/** Free hexes in the current player's zone next to `h`, where a twin's partner can be placed. */
+export function freePartnerHexes(state: GameState, h: Hex): Hex[] {
+  return neighbors(h).filter((n) => isInDeployZone(state, state.current, n) && !unitAt(state, n) && !hexEquals(n, h));
 }
 
 export function isInDeployZone(state: GameState, player: PlayerId, h: Hex): boolean {

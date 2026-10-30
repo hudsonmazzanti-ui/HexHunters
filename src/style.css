@@ -996,3 +996,29 @@ button.danger {
   stroke: #7c2d12;
   stroke-width: 1.2;
 }
+
+/* ---------- The Twins ---------- */
+
+.unit .twin-link {
+  display: none;
+}
+.unit.twin .twin-link {
+  display: block;
+}
+.twin-link .twin-bg {
+  fill: #a855f7;
+  stroke: #111;
+  stroke-width: 1.2;
+}
+.twin-link ellipse {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.4;
+}
+/* The selected twin's partner gets a solid purple outline. */
+.unit.partner .ring.tgt {
+  display: block;
+  stroke: #a855f7;
+  stroke-dasharray: none;
+  stroke-width: 2.5;
+}
