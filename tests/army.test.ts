@@ -10,13 +10,14 @@ describe('army building', () => {
       assassin: 2,
       infantry: 3,
       medic: 3,
-      sniper: 3,
+      sniper: 4,
       grenadier: 3,
       heavy: 4,
       flamer: 4,
       monster: 5,
       artillery: 3,
       sentinel: 3,
+      grappler: 5,
     });
   });
 

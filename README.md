@@ -26,13 +26,14 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Assassin  | 2    | small (1)  | 4     | 5   | 3  | 1 (melee) | 4   | **Vault**: leap an adjacent wall, then keep moving |
 | Infantry  | 3    | medium (2) | 3     | 6   | 6  | 5         | 2   | **Prep**: +2 on this model's die roll next turn |
 | Medic     | 3    | small (1)  | 3     | 5   | 4  | 3         | 1   | **Heal**: adjacent damaged ally heals ⌊die/2⌋ (up to max) |
-| Sniper    | 3    | small (1)  | 2     | 5   | 4  | 10        | 4   | **Spot**: mark a visible enemy; your next attack on it gets +2 |
+| Sniper    | 4    | small (1)  | 2     | 5   | 4  | 10        | 4   | **Spot**: mark a visible enemy; your next attack on it gets +2 |
 | Grenadier | 3    | medium (2) | 3     | 6   | 5  | 4         | 2   | **Grenade** (die 10+): 2 damage on impact, 1 to each neighbor |
 | Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 4   | **Brace**: +2 defense until your next turn |
 | Flamer    | 4    | medium (2) | 2     | 6   | 9  | 3         | 3   | **Torch**: die vs each model in a 2-hex line, ignores Brace |
 | Monster   | 5    | large (3)  | 3     | 3   | 18 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy. Basic attack +1 to hit |
 | Artillery | 3    | medium (2) | 1     | 4   | 8  | 10        | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
+| Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
@@ -42,8 +43,8 @@ while loaded; firing unloads), `indirectFire` (attack ignores line of sight).
 
 Game settings: army point limit 16, board radius 7 (15 hexes across), 3 mirrored terrain pairs of length 2–4,
 2 deployment rows, d12, first to 5 points, first player flips every 2 rounds (`firstPlayerSwapEvery`). Special-action
-numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade threshold and damage, Torch length, Sweep damage) are under
-`specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
+numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade threshold and damage, Torch length, Sweep damage, Hook threshold/range/damage)
+are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
 **Adding a special:** write a module in `src/core/specials/` (see `types.ts` for the `SpecialDef` interface), add its
@@ -112,6 +113,15 @@ start of your next turn. Spot has no range limit, only line of sight.
   fired or not. It also ends if the Sentinel dies, moves or uses its die. If the turn order flips right after you set
   it, it survives your back-to-back turn and still gets the opponent's next turn. Overwatch shots resolve before
   round scoring.
+
+- **Hook** (Grappler): only with a die of 7+. Target any other model, **ally or enemy**, within 3 hexes that the
+  Grappler can see (normal line of sight). Always hits for 1 damage (allies too), then pulls the target along the
+  straight line toward the Grappler, stopping in the last empty hex before terrain or a model; with a clear path it
+  lands next to the Grappler. An adjacent or immediately blocked target takes the damage but doesn't move. On a line
+  that runs exactly along hex edges, the path that pulls it farther is used. The pulled model keeps its die, movement
+  and acted status (a hooked ally can still move and act); its "undo move" point becomes where it landed, and a pulled
+  Sentinel loses its overwatch. Any size can be hooked. Selecting Hook rings valid targets and marks where each would
+  land.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).
 First to 5 points wins, or eliminate every enemy model to win immediately. If one action (Grenade or Torch) wipes out
