@@ -22,6 +22,9 @@ export type SpecialId =
   | 'overwatch'
   | 'hook';
 
+/** Army-wide passive rules granted by heroes (see src/core/auras/). */
+export type AuraId = 'marshal' | 'siege' | 'warlord';
+
 export interface UnitDef {
   name: string;
   /** Army-building cost in points. Any positive integer. */
@@ -35,7 +38,10 @@ export interface UnitDef {
   health: number;
   range: number;
   damage: number;
-  special: SpecialId;
+  /** The unit's special action. Heroes have none: their die is only for attacking. */
+  special?: SpecialId;
+  /** Marks a hero: max one per army, grants a permanent army-wide aura. */
+  hero?: { aura: AuraId };
   /** Name of the basic attack in the UI (default "Attack"). */
   attackName?: string;
   /** Added to the die on basic attacks. */
@@ -59,6 +65,8 @@ export interface GameConfig {
   pointsToWin: number;
   /** Maximum total cost of each player's army. */
   armyPointLimit: number;
+  /** Max heroes per army. */
+  maxHeroesPerArmy: number;
   /** The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...). */
   firstPlayerSwapEvery: number;
   units: Record<string, UnitDef>;
@@ -85,6 +93,10 @@ export interface SpecialRules {
   hookMinDie: number;
   hookRange: number;
   hookDamage: number;
+  /** Field Marshal aura: added to every Infantry die at turn start (stacks with Prep). */
+  marshalRollBonus: number;
+  /** Warlord aura: extra movement for large models. */
+  warlordSpeedBonus: number;
 }
 
 export interface Terrain {
@@ -152,6 +164,8 @@ export interface GameState {
   /** 0 for the first turn of a round, 1 for the second. */
   turnInRound: 0 | 1;
   scores: [number, number];
+  /** Auras each player's army has. Set when the army is chosen; they last all game, even if the hero dies. */
+  auras: [AuraId[], AuraId[]];
   /** null with phase 'over' means a draw. */
   winner: PlayerId | null;
   winReason: WinReason | null;

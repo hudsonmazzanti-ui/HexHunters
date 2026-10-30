@@ -49,9 +49,14 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   hook,
 };
 
-export const specialIdOf = (state: GameState, unit: Unit): SpecialId => state.config.units[unit.type].special;
+/** The unit's special, or undefined for heroes (they have none). */
+export const specialIdOf = (state: GameState, unit: Unit): SpecialId | undefined =>
+  state.config.units[unit.type].special;
 
-export const specialOf = (state: GameState, unit: Unit): SpecialDef => SPECIALS[specialIdOf(state, unit)];
+export const specialOf = (state: GameState, unit: Unit): SpecialDef | undefined => {
+  const id = specialIdOf(state, unit);
+  return id && SPECIALS[id];
+};
 
 /** Look up the target unit and check the choice has the fields this targeting needs. */
 function resolve(state: GameState, unit: Unit, sp: SpecialDef, choice: SpecialChoice): ResolvedChoice | string {
@@ -79,6 +84,7 @@ function resolve(state: GameState, unit: Unit, sp: SpecialDef, choice: SpecialCh
 export function specialBlockedReason(state: GameState, unit: Unit, choice?: SpecialChoice): string | null {
   if (!canAct(state, unit)) return 'This model cannot act';
   const sp = specialOf(state, unit);
+  if (!sp) return 'No special action';
   const general = sp.usable?.(state, unit);
   if (general) return general;
   if (!choice) return null;
@@ -90,6 +96,7 @@ export function specialBlockedReason(state: GameState, unit: Unit, choice?: Spec
 /** Every valid choice for this unit's special right now (empty for untargeted specials). */
 export function specialChoices(state: GameState, unit: Unit): SpecialChoice[] {
   const sp = specialOf(state, unit);
+  if (!sp) return [];
   let candidates: SpecialChoice[];
   switch (sp.targeting) {
     case 'none':
@@ -118,7 +125,7 @@ export const specialTargets = (state: GameState, unit: Unit): Unit[] =>
 /** Area and predicted effects of a valid choice, or null if the special has no preview. */
 export function previewSpecial(state: GameState, unit: Unit, choice: SpecialChoice): SpecialPreview | null {
   const sp = specialOf(state, unit);
-  if (!sp.preview || specialBlockedReason(state, unit, choice)) return null;
+  if (!sp?.preview || specialBlockedReason(state, unit, choice)) return null;
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
   return sp.preview(state, unit, resolved);
 }
@@ -127,10 +134,10 @@ export function previewSpecial(state: GameState, unit: Unit, choice: SpecialChoi
 export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice = {}): SpecialResult {
   const reason = specialBlockedReason(state, unit, choice);
   if (reason) throw new Error(reason);
-  const sp = specialOf(state, unit);
+  const sp = specialOf(state, unit)!; // a unit without a special was rejected above
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
   unit.acted = true;
   // Using the die ends movement, unless the special says otherwise (Dash, Vault).
   if (!sp.keepsMovement) unit.movesLeft = 0;
-  return { special: specialIdOf(state, unit), ...sp.apply(state, unit, resolved) };
+  return { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };
 }

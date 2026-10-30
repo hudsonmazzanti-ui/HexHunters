@@ -4,6 +4,7 @@
  * army is empty or over the point limit. Resolves with the chosen unit type ids.
  */
 import { armyCost, validateArmy } from '../core/army';
+import { AURAS } from '../core/auras';
 import { SPECIALS } from '../core/specials';
 import type { GameConfig, PlayerId } from '../core/types';
 import { speedName } from '../data/config';
@@ -20,8 +21,12 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
 
 export function showBuilder(config: GameConfig, player: PlayerId): Promise<string[]> {
   const army: string[] = [];
+  // Heroes first (their own section), then regular units; each by cost, then name.
   const types = Object.keys(config.units).sort(
-    (a, b) => config.units[a].cost - config.units[b].cost || config.units[a].name.localeCompare(config.units[b].name),
+    (a, b) =>
+      Number(!!config.units[b].hero) - Number(!!config.units[a].hero) ||
+      config.units[a].cost - config.units[b].cost ||
+      config.units[a].name.localeCompare(config.units[b].name),
   );
 
   const root = h('div', 'builder');
@@ -55,17 +60,27 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       header.append(title, points, bar, summary);
 
       const list = h('div', 'builder-list');
+      let section: 'hero' | 'unit' | null = null;
       for (const t of types) {
         const def = config.units[t];
-        const sp = SPECIALS[def.special];
+        const sp = def.special ? SPECIALS[def.special] : undefined;
         const count = army.filter((x) => x === t).length;
-        const card = h('div', `unit-card${count ? ' picked' : ''}`);
 
+        const kind = def.hero ? 'hero' : 'unit';
+        if (kind !== section) {
+          section = kind;
+          const max = config.maxHeroesPerArmy;
+          list.append(h('div', 'builder-section', kind === 'hero' ? `Heroes (max ${max} per army, optional)` : 'Units'));
+        }
+
+        const card = h('div', `unit-card${count ? ' picked' : ''}${def.hero ? ' hero' : ''}`);
         const top = h('div', 'unit-card-top');
         const tag = h('span', 'unit-tag', def.label);
         const name = h('span', 'unit-name', def.name);
         const costBadge = h('span', 'unit-cost', `${def.cost} pt${def.cost === 1 ? '' : 's'}`);
-        top.append(tag, name, costBadge);
+        top.append(tag, name);
+        if (def.hero) top.append(h('span', 'hero-badge', 'HERO'));
+        top.append(costBadge);
 
         const stats = h('div', 'unit-stats');
         const statList: [string, string][] = [
@@ -84,12 +99,18 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         }
 
         const special = h('div', 'unit-special');
-        special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
-        // Callouts: the unit's attack quirks, then the special's.
+        if (def.hero) {
+          const aura = AURAS[def.hero.aura].describe(config.specials);
+          special.append(h('b', '', 'Passive (whole army): '), document.createTextNode(aura));
+        } else if (sp) {
+          special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
+        }
+        // Callouts: hero rules, the unit's attack quirks, then the special's.
         const callouts = [
+          ...(def.hero ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
           ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
           ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
-          ...(sp.tags ?? []),
+          ...(sp?.tags ?? []),
         ];
         const tags = h('div', 'unit-tags');
         for (const t of callouts) tags.append(h('span', 'unit-pill', t));

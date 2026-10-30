@@ -18,6 +18,9 @@ describe('army building', () => {
       artillery: 3,
       sentinel: 3,
       grappler: 5,
+      marshal: 7,
+      siegemaster: 8,
+      warlord: 6,
     });
   });
 

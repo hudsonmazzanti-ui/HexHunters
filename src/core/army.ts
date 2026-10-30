@@ -13,6 +13,11 @@ export function validateArmy(config: GameConfig, types: string[]): string | null
   if (unknown) return `Unknown unit "${unknown}"`;
   const cost = armyCost(config, types);
   if (cost > config.armyPointLimit) return `Army costs ${cost} points; the limit is ${config.armyPointLimit}`;
+  const heroes = types.filter((t) => config.units[t].hero).length;
+  if (heroes > config.maxHeroesPerArmy) {
+    const max = config.maxHeroesPerArmy;
+    return `Only ${max === 1 ? 'one hero' : `${max} heroes`} per army (you have ${heroes})`;
+  }
   const room = deployZones(config.boardRadius, config.deployRows)[0].length;
   if (types.length > room) return `Too many models to deploy (max ${room})`;
   return null;

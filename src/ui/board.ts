@@ -4,6 +4,7 @@
  * transitions can animate them.
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
+import { aurasOn } from '../core/auras';
 import { unitDef } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
@@ -171,6 +172,10 @@ export class BoardView {
     el('circle', { r, class: 'body' }, g);
     el('text', { class: 'label', 'font-size': LABEL_SIZE[def.size] }, g).textContent = def.label;
 
+    // Hero crown, above the model.
+    const crown = el('g', { class: 'crown', transform: `translate(0 ${-r - 3})` }, g);
+    el('path', { d: 'M-7 3L-7 -3L-3.5 0L0 -5L3.5 0L7 -3L7 3Z' }, crown);
+
     // Spotted marker: small crosshair at the lower left.
     const spot = el('g', { class: 'spot', transform: `translate(${-r - 2} ${r - 2})` }, g);
     el('circle', { r: 6, fill: '#f97316', stroke: '#111', 'stroke-width': 1.5 }, spot);
@@ -221,6 +226,8 @@ export class BoardView {
     cls.toggle('braced', unit.braced);
     cls.toggle('spotted', unit.spottedBy !== null);
     cls.toggle('loaded', unit.loaded);
+    cls.toggle('hero', !!def.hero);
+    cls.toggle('aura', aurasOn(state, unit).length > 0);
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';
 

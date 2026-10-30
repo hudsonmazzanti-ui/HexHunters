@@ -915,3 +915,51 @@ button.danger {
   border-radius: 50%;
   vertical-align: middle;
 }
+
+/* ---------- Heroes & auras ---------- */
+
+/* Units under a friendly hero aura glow gold (visible to both players). */
+.unit.aura .body {
+  stroke: #facc15;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.9));
+}
+.unit .crown {
+  display: none;
+}
+.unit.hero .crown {
+  display: block;
+}
+.crown path {
+  fill: #facc15;
+  stroke: #111;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+
+.builder-section {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.unit-card.hero {
+  background: linear-gradient(160deg, rgba(250, 204, 21, 0.14), var(--panel) 55%);
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.45);
+}
+.unit-card.hero.picked {
+  box-shadow: none;
+}
+.hero-badge {
+  background: #1c2230;
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  border-radius: 6px;
+  padding: 1px 6px;
+}

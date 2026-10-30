@@ -7,9 +7,10 @@
 import { type Hex, hexEquals } from './hex';
 import { validateArmy } from './army';
 import { type AttackResult, resolveAttack } from './combat';
+import { auraEffects } from './auras';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
-import { movePath, getUnit, livingUnits, other, unitAt, unitDef, unitsOnControlPoint } from './queries';
+import { getUnit, livingUnits, movePath, other, unitAt, unitSpeed, unitsOnControlPoint } from './queries';
 import { nextRandom } from './rng';
 import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
@@ -62,6 +63,7 @@ export function newGame(config: GameConfig, seed: number): GameState {
     round: 1,
     turnInRound: 0,
     scores: [0, 0],
+    auras: [[], []],
     winner: null,
     winReason: null,
     // A separate random stream from the map so dice don't depend on map attempts.
@@ -92,6 +94,8 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (reason) fail(reason);
       const player = state.current;
       action.units.forEach((type, i) => state.units.push(newUnit(state.config, player, type, i)));
+      // Hero auras belong to the army for the whole game, even if the hero later dies.
+      state.auras[player] = action.units.flatMap((t) => state.config.units[t].hero?.aura ?? []);
       if (player === 0) {
         state.current = 1;
       } else {
@@ -137,7 +141,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (!canUndoMove(state, unit)) fail('Cannot undo this move');
       events.push({ type: 'move', unitId: unit.id, path: [unit.turnStartPos!] });
       unit.pos = unit.turnStartPos;
-      unit.movesLeft = unitDef(state, unit).speed;
+      unit.movesLeft = unitSpeed(state, unit);
       break;
     }
     case 'attack': {
@@ -243,10 +247,12 @@ function rollDie(state: GameState): number {
 function startTurn(state: GameState, events: GameEvent[]): void {
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
-    unit.dieBonus = unit.prepped ? state.config.specials.prepRollBonus : 0;
+    // Prep and the Field Marshal's aura both add to the roll, and stack.
+    const prep = unit.prepped ? state.config.specials.prepRollBonus : 0;
+    unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0);
     unit.prepped = false;
     unit.die = rollDie(state) + unit.dieBonus;
-    unit.movesLeft = unitDef(state, unit).speed;
+    unit.movesLeft = unitSpeed(state, unit);
     unit.acted = false;
     unit.turnStartPos = unit.pos;
     unit.braced = false; // Brace lasts "until your next turn"
