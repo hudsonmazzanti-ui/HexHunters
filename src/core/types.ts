@@ -20,10 +20,11 @@ export type SpecialId =
   | 'sweep'
   | 'load'
   | 'overwatch'
-  | 'hook';
+  | 'hook'
+  | 'eat';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
-export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard';
+export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard' | 'pyro';
 
 export interface UnitDef {
   name: string;
@@ -50,6 +51,10 @@ export interface UnitDef {
   needsLoading?: boolean;
   /** The basic attack ignores line of sight entirely. */
   indirectFire?: boolean;
+  /** The first time it takes damage it permanently changes to this size and speed (Zombie crawling). */
+  woundedForm?: { size: Size; speed: number };
+  /** Can't move or act on the second of back-to-back turns (Skeleton). */
+  restsOnDoubleTurn?: boolean;
 }
 
 export interface GameConfig {
@@ -105,6 +110,12 @@ export interface SpecialRules {
   standardRollBonus: number;
   /** Standard Bearer aura: points scored for winning the control point at the end of a round. */
   standardHoldPoints: number;
+  /** Zombie's Eat: needs this die; damage dealt and health regained on a hit. */
+  eatMinDie: number;
+  eatDamage: number;
+  eatHeal: number;
+  /** Damage Burn deals at the start of the burning model's owner's next turn. */
+  burnDamage: number;
 }
 
 export interface Terrain {
@@ -152,6 +163,12 @@ export interface Unit {
   loaded: boolean;
   /** Sentinel overwatch: the locked die and the hexes watched (fixed when activated). */
   overwatch: Overwatch | null;
+  /** Zombie: permanently crawling (see UnitDef.woundedForm). */
+  crawling: boolean;
+  /** Skeleton: sitting out the second of back-to-back turns. */
+  resting: boolean;
+  /** Takes Burn damage at the start of its owner's next turn, then stops burning. */
+  burning: boolean;
 }
 
 export interface Overwatch {

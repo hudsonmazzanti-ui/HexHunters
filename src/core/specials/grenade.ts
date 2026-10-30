@@ -10,7 +10,7 @@
 import { dealDamage } from '../combat';
 import { type Hex, hexDistance, neighbors } from '../hex';
 import { hasLineOfSight } from '../los';
-import { actionDie, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
+import { actionDie, burnsOn, onBoard, terrainHeight, unitAt, unitDef, unitSize } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -21,7 +21,7 @@ export function grenadeArcClear(state: GameState, from: Hex, to: Hex): boolean {
   return hasLineOfSight(from, to, (h) => {
     if (terrainHeight(state, h) >= ARC_BLOCK_HEIGHT) return true;
     const model = unitAt(state, h);
-    return !!model && unitDef(state, model).size >= ARC_BLOCK_HEIGHT;
+    return !!model && unitSize(state, model) >= ARC_BLOCK_HEIGHT;
   });
 }
 
@@ -59,11 +59,13 @@ export const grenade: SpecialDef = {
     return grenadeArcClear(state, unit.pos!, hex!) ? null : 'Arc blocked';
   },
   preview: (state, _unit, { hex }) => blast(state, hex!),
-  apply: (state, _unit, { hex }) => {
+  apply: (state, unit, { hex }) => {
     const { effects } = blast(state, hex!);
+    const burn = burnsOn(state, unit, 'special');
     for (const e of effects) {
       const u = state.units.find((x) => x.id === e.unitId) as Unit;
       e.killed = dealDamage(state, u, e.damage);
+      if (burn && !e.killed) u.burning = e.burned = true;
     }
     return { hex: hex!, effects };
   },

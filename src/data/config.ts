@@ -165,6 +165,31 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 3,
     special: 'hook',
   },
+  zombie: {
+    name: 'Zombie',
+    label: 'Z',
+    cost: 2,
+    size: 2, // medium (small once crawling)
+    speed: SPEED.normal,
+    defense: 0,
+    health: 9,
+    range: 1, // melee only
+    damage: 3,
+    special: 'eat',
+    woundedForm: { size: 1, speed: SPEED.crawl },
+  },
+  skeleton: {
+    name: 'Skeleton',
+    label: 'Sk',
+    cost: 1,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 2,
+    health: 1,
+    range: 1, // melee only
+    damage: 2,
+    restsOnDoubleTurn: true,
+  },
 
   // ---- Heroes: max one per army, no special; grant a permanent army-wide aura ----
   marshal: {
@@ -240,6 +265,18 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 3,
     hero: { aura: 'standard' },
   },
+  pyromancer: {
+    name: 'Pyromancer',
+    label: 'Py',
+    cost: 6,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 7,
+    health: 10,
+    range: 3,
+    damage: 2,
+    hero: { aura: 'pyro' },
+  },
 };
 
 /** Display name of the hero that grants an aura (e.g. "Warlord"). */
@@ -279,5 +316,9 @@ export const DEFAULT_CONFIG: GameConfig = {
     wardenSentinelHealthBonus: 2,
     standardRollBonus: 2,
     standardHoldPoints: 2,
+    eatMinDie: 8,
+    eatDamage: 2,
+    eatHeal: 2,
+    burnDamage: 1,
   },
 };

@@ -110,6 +110,9 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
           ...(def.hero ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
           ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
           ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
+          ...(def.woundedForm ? ['Crawls when first hurt: small, speed 1, for good'] : []),
+          ...(def.restsOnDoubleTurn ? ['Rests on back-to-back turns'] : []),
+          ...(!def.hero && !sp ? ['No special'] : []),
           ...(sp?.tags ?? []),
         ];
         const tags = h('div', 'unit-tags');

@@ -6,11 +6,11 @@
  */
 import { type Hex, hexEquals } from './hex';
 import { validateArmy } from './army';
-import { type AttackResult, resolveAttack } from './combat';
+import { type AttackResult, dealDamage, resolveAttack } from './combat';
 import { auraEffects, holdPoints } from './auras';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
-import { getUnit, livingUnits, maxHealth, movePath, other, unitAt, unitSpeed, unitsOnControlPoint } from './queries';
+import { getUnit, livingUnits, maxHealth, movePath, other, unitAt, unitDef, unitSpeed, unitsOnControlPoint } from './queries';
 import { nextRandom } from './rng';
 import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
@@ -32,6 +32,8 @@ export type GameEvent =
   | { type: 'move'; unitId: string; path: Hex[] }
   | ({ type: 'attack'; unitId: string; targetId: string } & AttackResult)
   | ({ type: 'special'; unitId: string } & SpecialResult)
+  /** Burn damage at the start of the burning model's owner's turn. */
+  | { type: 'burn'; unitId: string; damage: number; killed: boolean }
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
   | ({ type: 'overwatch' } & OverwatchShot)
   /** `points` is what the scorer got (Standard Bearer: 2), 0 on a tie. */
@@ -198,6 +200,9 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     spottedBy: null,
     loaded: false,
     overwatch: null,
+    crawling: false,
+    resting: false,
+    burning: false,
   };
 }
 
@@ -250,9 +255,35 @@ function rollDie(state: GameState): number {
   return 1 + Math.floor(value * state.config.dieSides);
 }
 
-function startTurn(state: GameState, events: GameEvent[]): void {
+/**
+ * Starts the current player's turn. `backToBack` is true when they also took the
+ * previous turn (the turn order just flipped): Skeletons rest on that turn.
+ */
+function startTurn(state: GameState, events: GameEvent[], backToBack = false): void {
+  // Burn ticks first, so a Zombie that starts crawling from it moves at crawl speed.
+  for (const unit of livingUnits(state, state.current)) {
+    if (!unit.burning) continue;
+    unit.burning = false;
+    const damage = state.config.specials.burnDamage;
+    const killed = dealDamage(state, unit, damage);
+    events.push({ type: 'burn', unitId: unit.id, damage, killed });
+  }
+  if (checkElimination(state, events)) return;
+
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
+    unit.resting = backToBack && !!unitDef(state, unit).restsOnDoubleTurn;
+    if (unit.resting) {
+      // Sits this turn out: no die, no movement.
+      unit.die = null;
+      unit.dieBonus = 0;
+      unit.movesLeft = 0;
+      unit.acted = true;
+      unit.specialUsed = false;
+      unit.turnStartPos = unit.pos;
+      unit.braced = false;
+      continue;
+    }
     // Prep and the Field Marshal's aura both add to the roll, and stack.
     const prep = unit.prepped ? state.config.specials.prepRollBonus : 0;
     unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0);
@@ -291,10 +322,11 @@ function endTurn(state: GameState, events: GameEvent[]): void {
 
   scoreRound(state, events);
   if (state.phase === 'over') return;
+  const previous = state.current;
   state.round += 1;
   state.turnInRound = 0;
   state.current = firstPlayerOfRound(state.round, state.config.firstPlayerSwapEvery);
-  startTurn(state, events);
+  startTurn(state, events, state.current === previous);
 }
 
 function scoreRound(state: GameState, events: GameEvent[]): void {

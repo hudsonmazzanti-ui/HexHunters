@@ -60,6 +60,9 @@ export function addUnit(
     spottedBy: null,
     loaded: false,
     overwatch: null,
+    crawling: false,
+    resting: false,
+    burning: false,
     ...extra,
   };
   state.units.push(unit);

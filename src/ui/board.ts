@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, maxHealth, unitDef } from '../core/queries';
+import { actionBonus, maxHealth, unitDef, unitSize } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -56,6 +56,8 @@ interface UnitNodes {
   owText: SVGTextElement;
   hp: SVGGElement;
   hpText: SVGTextElement;
+  /** Size the model was drawn at; redrawn if it changes (a Zombie starting to crawl). */
+  size: number;
 }
 
 export class BoardView {
@@ -150,7 +152,12 @@ export class BoardView {
     for (const unit of state.units) {
       if (!unit.pos) continue;
       alive.add(unit.id);
-      const nodes = this.units.get(unit.id) ?? this.createUnit(state, unit);
+      let nodes = this.units.get(unit.id);
+      if (nodes && nodes.size !== unitSize(state, unit)) {
+        nodes.g.remove();
+        nodes = undefined;
+      }
+      nodes ??= this.createUnit(state, unit);
       this.updateUnit(state, unit, nodes, overlay);
     }
     for (const [id, nodes] of this.units) {
@@ -163,7 +170,8 @@ export class BoardView {
 
   private createUnit(state: GameState, unit: Unit): UnitNodes {
     const def = unitDef(state, unit);
-    const r = BODY_RADIUS[def.size];
+    const size = unitSize(state, unit);
+    const r = BODY_RADIUS[size];
     const g = el('g', { class: 'unit' }, this.layers.units);
     // Place immediately (no transition from the origin) on first appearance.
     g.style.transition = 'none';
@@ -171,7 +179,14 @@ export class BoardView {
     el('circle', { r: r + 4, class: 'ring sel' }, g);
     el('circle', { r: r + 3, class: 'brace' }, g);
     el('circle', { r, class: 'body' }, g);
-    el('text', { class: 'label', 'font-size': LABEL_SIZE[def.size] }, g).textContent = def.label;
+    el('text', { class: 'label', 'font-size': LABEL_SIZE[size] }, g).textContent = def.label;
+
+    // Burning: a small flame at the left.
+    const flame = el('g', { class: 'flame-icon', transform: `translate(${-r - 5} 0)` }, g);
+    el('path', { d: 'M0 6C-4 6 -5 2 -3 -1C-2 1 -1 1 -1 0C-1 -3 1 -5 1 -7C3 -4 5 -1 4 2C3.5 4.5 2 6 0 6Z' }, flame);
+
+    // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
+    el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
 
     // Hero crown, above the model.
     const crown = el('g', { class: 'crown', transform: `translate(0 ${-r - 3})` }, g);
@@ -203,7 +218,7 @@ export class BoardView {
     el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
     const hpText = el('text', {}, hp);
 
-    const nodes = { g, die, dieText, dieRect, owText, hp, hpText };
+    const nodes = { g, die, dieText, dieRect, owText, hp, hpText, size };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -228,6 +243,9 @@ export class BoardView {
     cls.toggle('spotted', unit.spottedBy !== null);
     cls.toggle('loaded', unit.loaded);
     cls.toggle('hero', !!def.hero);
+    cls.toggle('crawling', unit.crawling);
+    cls.toggle('resting', unit.resting && state.phase === 'play' && unit.owner === state.current);
+    cls.toggle('burning', unit.burning);
     cls.toggle('aura', aurasOn(state, unit).length > 0);
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';

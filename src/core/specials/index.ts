@@ -11,6 +11,7 @@ import { canAct, getUnit, hasDoubleAction } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
 import { dash } from './dash';
+import { eat } from './eat';
 import { grenade } from './grenade';
 import { heal } from './heal';
 import { hook } from './hook';
@@ -32,6 +33,7 @@ export { vaultOver } from './vault';
 export { grenadeArcClear } from './grenade';
 export { torchLine } from './torch';
 export { hookPath } from './hook';
+export { eatHeal } from './eat';
 
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   brace,
@@ -47,6 +49,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   load,
   overwatch,
   hook,
+  eat,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */
