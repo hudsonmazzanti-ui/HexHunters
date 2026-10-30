@@ -13,9 +13,12 @@ import { brace } from './brace';
 import { dash } from './dash';
 import { grenade } from './grenade';
 import { heal } from './heal';
+import { load } from './load';
+import { overwatch } from './overwatch';
 import { prep } from './prep';
 import { shove } from './shove';
 import { spot } from './spot';
+import { sweep } from './sweep';
 import { torch } from './torch';
 import type { ResolvedChoice, SpecialChoice, SpecialDef, SpecialPreview, SpecialResult } from './types';
 import { vault } from './vault';
@@ -38,6 +41,9 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   vault,
   grenade,
   torch,
+  sweep,
+  load,
+  overwatch,
 };
 
 export const specialIdOf = (state: GameState, unit: Unit): SpecialId => state.config.units[unit.type].special;

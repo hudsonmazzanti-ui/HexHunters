@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { unitDef } from '../core/queries';
-import type { GameMap, GameState, Unit } from '../core/types';
+import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
 export const HEX_SIZE = 32;
@@ -43,20 +43,24 @@ export interface BoardOverlay {
   targetIds: Set<string>;
   specialTargetIds: Set<string>;
   pendingTargetId: string | null;
+  /** hexKey -> owner of a Sentinel watching that hex (overwatch, shown to both players). */
+  watch: Map<string, PlayerId>;
 }
 
 interface UnitNodes {
   g: SVGGElement;
   die: SVGGElement;
   dieText: SVGTextElement;
+  owText: SVGTextElement;
   hp: SVGGElement;
   hpText: SVGTextElement;
 }
 
 export class BoardView {
   readonly world: SVGGElement;
-  private layers: Record<'base' | 'terrain' | 'shade' | 'cp' | 'dots' | 'units' | 'fx', SVGGElement>;
+  private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'cp' | 'dots' | 'units' | 'fx', SVGGElement>;
   private shades = new Map<string, SVGPolygonElement>();
+  private watches = new Map<string, SVGPolygonElement>();
   private dots = new Map<string, SVGCircleElement>();
   private units = new Map<string, UnitNodes>();
   /** Dice currently mid-animation; render() leaves their text alone. */
@@ -67,6 +71,7 @@ export class BoardView {
     this.layers = {
       base: el('g', {}, this.world),
       terrain: el('g', {}, this.world),
+      watch: el('g', {}, this.world),
       shade: el('g', {}, this.world),
       cp: el('g', {}, this.world),
       dots: el('g', {}, this.world),
@@ -79,6 +84,7 @@ export class BoardView {
   setMap(map: GameMap): Bounds {
     for (const layer of Object.values(this.layers)) layer.replaceChildren();
     this.shades.clear();
+    this.watches.clear();
     this.dots.clear();
     this.units.clear();
 
@@ -89,6 +95,7 @@ export class BoardView {
       const key = hexKey(h);
       el('polygon', { points: points(h), class: `hex-base${cpKeys.has(key) ? ' cp' : ''}` }, this.layers.base);
       this.shades.set(key, el('polygon', { points: points(h), class: 'shade' }, this.layers.shade));
+      this.watches.set(key, el('polygon', { points: points(h, HEX_SIZE - 2), class: 'watch' }, this.layers.watch));
       const c = hexToPixel(h, HEX_SIZE);
       const dot = el('circle', { cx: c.x, cy: c.y, r: 6, class: 'reach-dot', visibility: 'hidden' }, this.layers.dots);
       this.dots.set(key, dot);
@@ -131,6 +138,10 @@ export class BoardView {
 
   render(state: GameState, overlay: BoardOverlay): void {
     for (const [key, poly] of this.shades) poly.setAttribute('class', `shade ${overlay.shade.get(key) ?? ''}`);
+    for (const [key, poly] of this.watches) {
+      const owner = overlay.watch.get(key);
+      poly.setAttribute('class', owner === undefined ? 'watch' : `watch on watch-${owner}`);
+    }
     for (const [key, dot] of this.dots) dot.setAttribute('visibility', overlay.dots.has(key) ? 'visible' : 'hidden');
 
     const alive = new Set<string>();
@@ -160,8 +171,8 @@ export class BoardView {
     el('circle', { r, class: 'body' }, g);
     el('text', { class: 'label', 'font-size': LABEL_SIZE[def.size] }, g).textContent = def.label;
 
-    // Spotted marker: small crosshair at the upper left.
-    const spot = el('g', { class: 'spot', transform: `translate(${-r - 2} ${-r + 2})` }, g);
+    // Spotted marker: small crosshair at the lower left.
+    const spot = el('g', { class: 'spot', transform: `translate(${-r - 2} ${r - 2})` }, g);
     el('circle', { r: 6, fill: '#f97316', stroke: '#111', 'stroke-width': 1.5 }, spot);
     el('path', { d: 'M-4 0H4M0 -4V4', stroke: '#111', 'stroke-width': 1.5 }, spot);
 
@@ -171,11 +182,22 @@ export class BoardView {
     el('rect', { x: -9, y: -9, width: 18, height: 18, rx: 4 }, die);
     const dieText = el('text', {}, die);
 
+    // Overwatch: eye + locked die at the upper left (visible to both players).
+    const ow = el('g', { class: 'badge ow', transform: `translate(${-r - 6} ${-r + 1})` }, g);
+    el('rect', { x: -12, y: -8, width: 26, height: 16, rx: 8 }, ow);
+    el('ellipse', { cx: -5, cy: 0, rx: 5, ry: 3.2, class: 'eye' }, ow);
+    el('circle', { cx: -5, cy: 0, r: 1.6, class: 'pupil' }, ow);
+    const owText = el('text', { x: 6 }, ow);
+
+    // Loaded shell at the lower right (units that must load to fire).
+    const shell = el('g', { class: 'shell', transform: `translate(${r * 0.8 + 3} ${r * 0.6})` }, g);
+    el('path', { d: 'M-4 6V-2A4 4 0 0 1 4 -2V6Z' }, shell);
+
     const hp = el('g', { class: 'badge hp', transform: `translate(0 ${r + 5})` }, g);
     el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
     const hpText = el('text', {}, hp);
 
-    const nodes = { g, die, dieText, hp, hpText };
+    const nodes = { g, die, dieText, owText, hp, hpText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -198,6 +220,9 @@ export class BoardView {
     cls.toggle('pending', o.pendingTargetId === unit.id);
     cls.toggle('braced', unit.braced);
     cls.toggle('spotted', unit.spottedBy !== null);
+    cls.toggle('loaded', unit.loaded);
+    cls.toggle('overwatching', !!unit.overwatch);
+    n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';
 
     n.die.style.display = unit.die === null ? 'none' : '';
     n.die.classList.toggle('used', unit.acted);

@@ -30,7 +30,7 @@ export interface Effect {
   killed: boolean;
 }
 
-export type AreaKind = 'impact' | 'splash' | 'flame' | 'path' | 'landing';
+export type AreaKind = 'impact' | 'splash' | 'flame' | 'path' | 'landing' | 'watch';
 
 /** Shown on the board before confirming: the affected hexes and predicted effects. */
 export interface SpecialPreview {

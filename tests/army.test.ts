@@ -14,6 +14,9 @@ describe('army building', () => {
       grenadier: 3,
       heavy: 4,
       flamer: 4,
+      monster: 5,
+      artillery: 3,
+      sentinel: 3,
     });
   });
 

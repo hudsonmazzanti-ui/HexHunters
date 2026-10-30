@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../src/data/config';
-import { type Action, type GameEvent, applyAction, newGame, unplacedUnits } from '../src/core/game';
+import { type Action, type GameEvent, applyAction, firstPlayerOfRound, newGame, unplacedUnits } from '../src/core/game';
 import { hex, hexEquals } from '../src/core/hex';
 import { getUnit, livingUnits } from '../src/core/queries';
 import type { GameState } from '../src/core/types';
@@ -111,15 +111,45 @@ describe('turn flow', () => {
     for (let v = 1; v <= 12; v++) expect(counts[v]).toBeGreaterThan(100);
   });
 
-  it('alternates the first player each round', () => {
+  it('flips the first player every two rounds', () => {
     let state = deployBoth(newGame(DEFAULT_CONFIG, 1)).state;
     const order: number[] = [];
-    for (let i = 0; i < 6; i++) {
+    const rounds: number[] = [];
+    for (let i = 0; i < 12; i++) {
       order.push(state.current);
+      rounds.push(state.round);
       state = applyAction(state, { type: 'endTurn' }).state;
     }
-    // Round 1: P1, P2. Round 2: P2, P1. Round 3: P1, P2.
-    expect(order).toEqual([0, 1, 1, 0, 0, 1]);
+    expect(rounds).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
+    // Rounds 1–2: P1, P2. Rounds 3–4: P2, P1. Rounds 5–6: P1, P2.
+    expect(order).toEqual([0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1]);
+  });
+
+  it('firstPlayerOfRound follows the configured swap interval', () => {
+    expect([1, 2, 3, 4, 5, 6, 7].map((r) => firstPlayerOfRound(r, 2))).toEqual([0, 0, 1, 1, 0, 0, 1]);
+    expect([1, 2, 3, 4].map((r) => firstPlayerOfRound(r, 1))).toEqual([0, 1, 0, 1]);
+    expect([1, 2, 3, 4].map((r) => firstPlayerOfRound(r, 3))).toEqual([0, 0, 0, 1]);
+  });
+
+  it('back-to-back turns happen only where the order flips, and each round still scores once', () => {
+    const s = makeState();
+    addUnit(s, 'infantry', 0, hex(0, 0)); // P1 holds the control point
+    addUnit(s, 'infantry', 1, hex(0, -6));
+    let state = s;
+    const starts: { player: number; round: number }[] = [];
+    let scored = 0;
+    for (let i = 0; i < 8; i++) {
+      const r = run(state, { type: 'endTurn' });
+      state = r.state;
+      for (const e of r.events) {
+        if (e.type === 'turnStart') starts.push({ player: e.player, round: e.round });
+        if (e.type === 'roundScored') scored++;
+      }
+    }
+    const repeats = starts.filter((t, i) => i > 0 && t.player === starts[i - 1].player);
+    expect(repeats.map((t) => t.round)).toEqual([3, 5]); // P2 twice going into round 3, P1 going into round 5
+    expect(scored).toBe(4);
+    expect(state.scores).toEqual([4, 0]);
   });
 
   it('moves spend movement and can be split across several moves', () => {
@@ -165,8 +195,7 @@ describe('turn flow', () => {
     state = run(state, { type: 'endTurn' }).state; // player 2's turn
     expect(getUnit(state, inf.id)!.braced).toBe(true);
     expect(getUnit(state, enemy.id)!.spottedBy).toBe(0);
-    state = run(state, { type: 'endTurn' }).state; // round 2: player 2 goes again
-    state = run(state, { type: 'endTurn' }).state; // player 1's turn
+    state = run(state, { type: 'endTurn' }).state; // round 2: player 1 first again
     expect(getUnit(state, inf.id)!.braced).toBe(false);
     expect(getUnit(state, enemy.id)!.spottedBy).toBeNull();
   });
@@ -181,7 +210,7 @@ describe('turn flow', () => {
     // Same seed with and without Prep, so the underlying rolls are identical.
     const a = setup();
     const b = setup();
-    const toP1Turn: Action[] = [{ type: 'endTurn' }, { type: 'endTurn' }, { type: 'endTurn' }];
+    const toP1Turn: Action[] = [{ type: 'endTurn' }, { type: 'endTurn' }]; // P2's turn, then round 2 (P1 first)
     let prepped = run(a.s, { type: 'special', unitId: a.inf.id }, ...toP1Turn).state;
     const plain = run(b.s, ...toP1Turn).state;
     expect(prepped.current).toBe(0);
@@ -189,8 +218,9 @@ describe('turn flow', () => {
     expect(getUnit(prepped, a.inf.id)!.die).toBe(getUnit(plain, b.inf.id)!.die! + 2);
 
     // The bonus doesn't carry over to the turn after.
-    prepped = run(prepped, { type: 'endTurn' }).state; // round 2 ends; P1 goes first in round 3
-    expect(prepped.current).toBe(0);
+    // Round 2: P2; round 3: P2 then P1.
+    prepped = run(prepped, { type: 'endTurn' }, { type: 'endTurn' }, { type: 'endTurn' }).state;
+    expect(prepped).toMatchObject({ current: 0, round: 3 });
     expect(getUnit(prepped, a.inf.id)!.dieBonus).toBe(0);
   });
 });

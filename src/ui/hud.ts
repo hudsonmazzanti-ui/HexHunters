@@ -3,6 +3,7 @@
  * models with dice and health, selected-model info, hint text, action buttons).
  * The controller builds a plain PanelModel; this module only draws it.
  */
+import { firstPlayerOfRound } from '../core/game';
 import type { GameState } from '../core/types';
 
 export const PLAYER_COLORS = ['#3b82f6', '#ef4444'] as const;
@@ -72,7 +73,22 @@ export function renderTopBar(state: GameState): void {
     sub.textContent = `Round ${state.round}`;
   } else {
     who.textContent = `${PLAYER_NAMES[state.current]}'s turn`;
-    sub.textContent = `Round ${state.round} · turn ${state.turnInRound + 1}/2`;
+    // "R3 · ●P2 first · next ●P2": who goes first this round and next.
+    const swap = state.config.firstPlayerSwapEvery;
+    const first = (round: number) => {
+      const p = firstPlayerOfRound(round, swap);
+      const span = h('span', 'topbar-order');
+      const dot = h('span', 'order-dot');
+      dot.style.background = PLAYER_COLORS[p];
+      span.append(dot, document.createTextNode(`P${p + 1}`));
+      return span;
+    };
+    sub.append(
+      document.createTextNode(`R${state.round} · `),
+      first(state.round),
+      document.createTextNode(' first · next '),
+      first(state.round + 1),
+    );
   }
   const color = state.phase === 'over' ? (state.winner === null ? '#9aa4b6' : PLAYER_COLORS[state.winner]) : PLAYER_COLORS[state.current];
   who.style.color = color;

@@ -6,6 +6,7 @@
 import { armyCost, validateArmy } from '../core/army';
 import { SPECIALS } from '../core/specials';
 import type { GameConfig, PlayerId } from '../core/types';
+import { speedName } from '../data/config';
 import { PLAYER_COLORS, PLAYER_NAMES } from './hud';
 
 const SIZE_NAMES = ['', 'small', 'medium', 'large'];
@@ -69,12 +70,13 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         const stats = h('div', 'unit-stats');
         const statList: [string, string][] = [
           ['Size', SIZE_NAMES[def.size]],
-          ['Move', `${def.speed}`],
+          ['Move', `${def.speed} ${speedName(def.speed)}`.trim()],
           ['Def', `${def.defense}`],
           ['HP', `${def.health}`],
           ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
           ['Dmg', `${def.damage}`],
         ];
+        if (def.hitBonus) statList.push(['Hit', `+${def.hitBonus}`]);
         for (const [k, v] of statList) {
           const s = h('span', '', `${k} `);
           s.append(h('b', '', v));
@@ -83,8 +85,14 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
 
         const special = h('div', 'unit-special');
         special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
+        // Callouts: the unit's attack quirks, then the special's.
+        const callouts = [
+          ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
+          ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
+          ...(sp.tags ?? []),
+        ];
         const tags = h('div', 'unit-tags');
-        for (const t of sp.tags ?? []) tags.append(h('span', 'unit-pill', t));
+        for (const t of callouts) tags.append(h('span', 'unit-pill', t));
 
         const controls = h('div', 'unit-controls');
         const minus = h('button', 'step', '−');
@@ -101,7 +109,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         controls.append(minus, h('span', 'unit-count', String(count)), plus);
 
         card.append(top, stats, special);
-        if (sp.tags?.length) card.append(tags);
+        if (callouts.length) card.append(tags);
         card.append(controls);
         list.append(card);
       }

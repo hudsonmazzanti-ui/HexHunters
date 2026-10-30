@@ -7,7 +7,19 @@ export type Size = 1 | 2 | 3;
 
 export type TerrainHeight = 1 | 2;
 
-export type SpecialId = 'brace' | 'prep' | 'heal' | 'spot' | 'dash' | 'shove' | 'vault' | 'grenade' | 'torch';
+export type SpecialId =
+  | 'brace'
+  | 'prep'
+  | 'heal'
+  | 'spot'
+  | 'dash'
+  | 'shove'
+  | 'vault'
+  | 'grenade'
+  | 'torch'
+  | 'sweep'
+  | 'load'
+  | 'overwatch';
 
 export interface UnitDef {
   name: string;
@@ -16,13 +28,21 @@ export interface UnitDef {
   /** 1–2 letter label drawn on the model. */
   label: string;
   size: Size;
-  /** Hexes per turn: slow = 2, normal = 3, fast = 4. */
+  /** Hexes per turn: crawl = 1, slow = 2, normal = 3, fast = 4 (see SPEED in config.ts). */
   speed: number;
   defense: number;
   health: number;
   range: number;
   damage: number;
   special: SpecialId;
+  /** Name of the basic attack in the UI (default "Attack"). */
+  attackName?: string;
+  /** Added to the die on basic attacks. */
+  hitBonus?: number;
+  /** The basic attack can only be used while loaded (see the Load special); firing unloads. */
+  needsLoading?: boolean;
+  /** The basic attack ignores line of sight entirely. */
+  indirectFire?: boolean;
 }
 
 export interface GameConfig {
@@ -38,6 +58,8 @@ export interface GameConfig {
   pointsToWin: number;
   /** Maximum total cost of each player's army. */
   armyPointLimit: number;
+  /** The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...). */
+  firstPlayerSwapEvery: number;
   units: Record<string, UnitDef>;
   specials: SpecialRules;
 }
@@ -57,6 +79,7 @@ export interface SpecialRules {
   grenadeSplashDamage: number;
   /** How many hexes Torch reaches. */
   torchLength: number;
+  sweepDamage: number;
 }
 
 export interface Terrain {
@@ -98,6 +121,15 @@ export interface Unit {
   prepped: boolean;
   /** Set by an enemy Sniper's Spot; the spotter's side gets a bonus on its next attack. */
   spottedBy: PlayerId | null;
+  /** A shell is loaded (units with needsLoading). Persists across moves and turns until fired. */
+  loaded: boolean;
+  /** Sentinel overwatch: the locked die and the hexes watched (fixed when activated). */
+  overwatch: Overwatch | null;
+}
+
+export interface Overwatch {
+  die: number;
+  hexes: Hex[];
 }
 
 export type WinReason = 'points' | 'elimination' | 'draw';
