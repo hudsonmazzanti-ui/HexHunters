@@ -120,7 +120,7 @@ describe('turn flow', () => {
 
   it('Brace and Spot expire at the start of the owner’s next turn', () => {
     const s = makeState();
-    const inf = addUnit(s, 'infantry', 0, hex(0, 3));
+    const inf = addUnit(s, 'heavy', 0, hex(0, 3));
     const sniper = addUnit(s, 'sniper', 0, hex(2, 3));
     const enemy = addUnit(s, 'infantry', 1, hex(0, -3));
     let state = run(s, { type: 'special', unitId: inf.id }, { type: 'special', unitId: sniper.id, targetId: enemy.id }).state;
@@ -131,6 +131,29 @@ describe('turn flow', () => {
     state = run(state, { type: 'endTurn' }).state; // player 1's turn
     expect(getUnit(state, inf.id)!.braced).toBe(false);
     expect(getUnit(state, enemy.id)!.spottedBy).toBeNull();
+  });
+
+  it('Prep adds +2 to the model’s die on its next turn only', () => {
+    const setup = () => {
+      const s = makeState();
+      const inf = addUnit(s, 'infantry', 0, hex(0, 3));
+      addUnit(s, 'infantry', 1, hex(0, -3));
+      return { s, inf };
+    };
+    // Same seed with and without Prep, so the underlying rolls are identical.
+    const a = setup();
+    const b = setup();
+    const toP1Turn: Action[] = [{ type: 'endTurn' }, { type: 'endTurn' }, { type: 'endTurn' }];
+    let prepped = run(a.s, { type: 'special', unitId: a.inf.id }, ...toP1Turn).state;
+    const plain = run(b.s, ...toP1Turn).state;
+    expect(prepped.current).toBe(0);
+    expect(getUnit(prepped, a.inf.id)).toMatchObject({ prepped: false, dieBonus: 2 });
+    expect(getUnit(prepped, a.inf.id)!.die).toBe(getUnit(plain, b.inf.id)!.die! + 2);
+
+    // The bonus doesn't carry over to the turn after.
+    prepped = run(prepped, { type: 'endTurn' }).state; // round 2 ends; P1 goes first in round 3
+    expect(prepped.current).toBe(0);
+    expect(getUnit(prepped, a.inf.id)!.dieBonus).toBe(0);
   });
 });
 

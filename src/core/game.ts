@@ -51,10 +51,12 @@ export function newGame(config: GameConfig, seed: number): GameState {
         pos: null,
         hp: config.units[type].health,
         die: null,
+        dieBonus: 0,
         movesLeft: 0,
         acted: false,
         turnStartPos: null,
         braced: false,
+        prepped: false,
         spottedBy: null,
       });
     });
@@ -204,7 +206,9 @@ function rollDie(state: GameState): number {
 function startTurn(state: GameState, events: GameEvent[]): void {
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
-    unit.die = rollDie(state);
+    unit.dieBonus = unit.prepped ? state.config.specials.prepRollBonus : 0;
+    unit.prepped = false;
+    unit.die = rollDie(state) + unit.dieBonus;
     unit.movesLeft = unitDef(state, unit).speed;
     unit.acted = false;
     unit.turnStartPos = unit.pos;
@@ -219,6 +223,7 @@ function startTurn(state: GameState, events: GameEvent[]): void {
 function endTurn(state: GameState, events: GameEvent[]): void {
   for (const unit of livingUnits(state, state.current)) {
     unit.die = null;
+    unit.dieBonus = 0;
     unit.movesLeft = 0;
     unit.turnStartPos = null;
   }

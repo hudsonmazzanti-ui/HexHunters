@@ -124,6 +124,7 @@ export class Controller {
           const name = SPECIAL_INFO[ev.special].name;
           const texts: Record<string, string> = {
             brace: 'BRACED',
+            prep: 'PREPPED',
             dash: `DASH +${ev.amount}`,
             heal: `+${ev.amount}`,
             spot: 'SPOTTED',
@@ -416,7 +417,11 @@ export class Controller {
         ['Dmg', `${def.damage}`],
         ['Move', s.phase === 'play' && sel.owner === s.current ? `${sel.movesLeft}/${def.speed}` : `${def.speed}`],
       ];
-      if (sel.die !== null) stats.unshift(['Die', `${sel.die}${sel.acted ? ' (used)' : ''}`]);
+      if (sel.die !== null) {
+        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} prep)` : '';
+        stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
+      }
+      if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
       const sp = SPECIAL_INFO[def.special];
       model.info = {

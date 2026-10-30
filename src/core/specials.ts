@@ -1,6 +1,6 @@
 /**
  * Special actions. Each one uses the model's die for the turn (like an attack).
- * Brace, Spot and Shove always succeed; Heal and Dash scale with the die.
+ * Brace, Prep, Spot and Shove always succeed; Heal and Dash scale with the die.
  * A special that would do nothing (e.g. Heal on a full-health ally, Dash for 0
  * hexes, Shove into a wall) is not allowed, so a die is never wasted by accident.
  */
@@ -12,6 +12,7 @@ export type SpecialTarget = 'none' | 'ally' | 'enemy';
 
 export const SPECIAL_TARGET: Record<SpecialId, SpecialTarget> = {
   brace: 'none',
+  prep: 'none',
   dash: 'none',
   heal: 'ally',
   spot: 'enemy',
@@ -43,6 +44,8 @@ export function specialBlockedReason(state: GameState, unit: Unit, target?: Unit
   switch (special) {
     case 'brace':
       return unit.braced ? 'Already braced' : null;
+    case 'prep':
+      return unit.prepped ? 'Already prepped' : null;
     case 'dash':
       return dashAmount(state, die) < 1 ? 'Die too low to dash' : null;
     case 'heal':
@@ -91,6 +94,9 @@ export function applySpecial(state: GameState, unit: Unit, target?: Unit): Speci
   switch (special) {
     case 'brace':
       unit.braced = true;
+      return { special };
+    case 'prep':
+      unit.prepped = true;
       return { special };
     case 'dash': {
       const amount = dashAmount(state, die);

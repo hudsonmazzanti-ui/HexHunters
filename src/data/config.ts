@@ -12,18 +12,18 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'I',
     size: 2, // medium
     speed: 3, // normal
-    defense: 7,
+    defense: 6,
     health: 6,
     range: 5,
     damage: 2,
-    special: 'brace',
+    special: 'prep',
   },
   medic: {
     name: 'Medic',
     label: 'M',
     size: 1, // small
     speed: 3, // normal
-    defense: 6,
+    defense: 5,
     health: 4,
     range: 3,
     damage: 1,
@@ -34,7 +34,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Sn',
     size: 1, // small
     speed: 2, // slow
-    defense: 6,
+    defense: 5,
     health: 4,
     range: 10,
     damage: 4,
@@ -45,7 +45,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Sc',
     size: 1, // small
     speed: 4, // fast
-    defense: 8,
+    defense: 7,
     health: 3,
     range: 3,
     damage: 2,
@@ -60,12 +60,13 @@ export const UNITS: Record<string, UnitDef> = {
     health: 12,
     range: 3,
     damage: 4,
-    special: 'shove',
+    special: 'brace',
   },
 };
 
 export const SPECIAL_INFO: Record<SpecialId, { name: string; text: string }> = {
   brace: { name: 'Brace', text: '+2 defense until your next turn.' },
+  prep: { name: 'Prep', text: '+2 on this model\'s die roll next turn.' },
   heal: { name: 'Heal', text: 'Heal an adjacent ally for half the die (rounded down).' },
   spot: { name: 'Spot', text: 'Mark a visible enemy: your next attack on it gets +2.' },
   dash: { name: 'Dash', text: 'Move extra hexes equal to die / 3 (rounded down).' },
@@ -84,6 +85,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   units: UNITS,
   specials: {
     braceDefenseBonus: 2,
+    prepRollBonus: 2,
     spotAttackBonus: 2,
     healDivisor: 2,
     dashDivisor: 3,

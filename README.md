@@ -22,11 +22,11 @@ All unit stats, the army list and game settings live in **`src/data/config.ts`**
 
 | Unit     | Size       | Speed | Def | HP | Range | Dmg | Special |
 |----------|------------|-------|-----|----|-------|-----|---------|
-| Infantry | medium (2) | 3     | 7   | 6  | 5     | 2   | **Brace**: +2 defense until your next turn |
-| Medic    | small (1)  | 3     | 6   | 4  | 3     | 1   | **Heal**: adjacent damaged ally heals ⌊die/2⌋ (up to max) |
-| Sniper   | small (1)  | 2     | 6   | 4  | 10    | 4   | **Spot**: mark a visible enemy; your next attack on it gets +2 |
-| Scout    | small (1)  | 4     | 8   | 3  | 3     | 2   | **Dash**: move ⌊die/3⌋ extra hexes (can move after acting) |
-| Heavy    | large (3)  | 2     | 6   | 12 | 3     | 4   | **Shove**: push an adjacent enemy 1 hex directly away |
+| Infantry | medium (2) | 3     | 6   | 6  | 5     | 2   | **Prep**: +2 on this model's die roll next turn |
+| Medic    | small (1)  | 3     | 5   | 4  | 3     | 1   | **Heal**: adjacent damaged ally heals ⌊die/2⌋ (up to max) |
+| Sniper   | small (1)  | 2     | 5   | 4  | 10    | 4   | **Spot**: mark a visible enemy; your next attack on it gets +2 |
+| Scout    | small (1)  | 4     | 7   | 3  | 3     | 2   | **Dash**: move ⌊die/3⌋ extra hexes (can move after acting) |
+| Heavy    | large (3)  | 2     | 6   | 12 | 3     | 4   | **Brace**: +2 defense until your next turn |
 
 Army (both players): 2 Infantry, Medic, Sniper, Scout, Heavy.
 
@@ -53,12 +53,13 @@ rounds, Player 2 in even rounds (so the player going second in one round also go
 **Movement.** Terrain and enemy models block movement. You can move through friendly models but not stop on them.
 
 **Attacks.** Need range (hex distance) and line of sight. Hit if die + modifiers ≥ target defense. A hit deals the
-attacker's fixed damage; a model at 0 health is removed. The only modifiers are Brace (+2 defense) and Spot (+2 to hit).
+attacker's fixed damage; a model at 0 health is removed. The only modifiers are Brace (+2 defense), Spot (+2 to hit) and Prep (+2 to the die itself, so it also boosts the next turn's action whatever it is).
 Because dice are rolled up front, the panel shows whether an attack will hit before you confirm it.
 
-**Specials.** Brace, Spot and Shove always succeed; Heal and Dash scale with the die. A special that would do nothing
-(Heal on a full-health ally, Dash or Heal for 0, Shove into a wall, a model or off the board) isn't allowed, so dice aren't wasted by accident.
-Brace lasts until the start of your next turn. A Spot mark lasts until it is used by an attack (hit or miss) or the
+**Specials.** Brace, Prep and Spot always succeed; Heal and Dash scale with the die. A special that would do nothing
+(Heal on a full-health ally, Dash or Heal for 0) isn't allowed, so dice aren't wasted by accident.
+Brace lasts until the start of your next turn. Prep adds +2 to that model's die roll at the start of your next turn
+(the die can then show 13 or 14; a green die badge means it includes a Prep bonus). A Spot mark lasts until it is used by an attack (hit or miss) or the
 start of your next turn. Spot has no range limit, only line of sight.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).
@@ -94,7 +95,7 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
   pathfinding.ts BFS movement range / paths
   queries.ts     read-only questions about a state (who's where, can X see Y, move range)
   combat.ts      attack preview + resolution
-  specials.ts    Brace / Heal / Spot / Dash / Shove
+  specials.ts    Brace / Prep / Heal / Spot / Dash / Shove (Shove is unused for now, kept for future factions)
   game.ts        newGame + applyAction(state, action) -> { state, events }
 src/data/config.ts   unit stats, army, game settings
 src/ui/          SVG board, pan/zoom camera, HUD, overlays, controller

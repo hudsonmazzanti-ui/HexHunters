@@ -201,6 +201,7 @@ export class BoardView {
 
     n.die.style.display = unit.die === null ? 'none' : '';
     n.die.classList.toggle('used', unit.acted);
+    n.die.classList.toggle('boosted', unit.dieBonus > 0);
     if (!this.rolling.has(unit.id)) n.dieText.textContent = unit.die === null ? '' : String(unit.die);
 
     n.hpText.textContent = String(unit.hp);

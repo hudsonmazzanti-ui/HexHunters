@@ -5,15 +5,30 @@ import { getUnit } from '../src/core/queries';
 import { specialBlockedReason, specialTargets } from '../src/core/specials';
 import { addUnit, makeState } from './helpers';
 
+/** No army uses Shove right now, so give the Heavy Shove to keep the mechanic tested. */
+function withShove(s: ReturnType<typeof makeState>) {
+  const units = { ...s.config.units, heavy: { ...s.config.units.heavy, special: 'shove' as const } };
+  s.config = { ...s.config, units };
+  return s;
+}
+
 const special = (s: ReturnType<typeof makeState>, unitId: string, targetId?: string) =>
   applyAction(s, { type: 'special', unitId, targetId }).state;
 
 describe('special actions', () => {
   it('Brace sets the braced flag and uses the die', () => {
     const s = makeState();
-    const u = addUnit(s, 'infantry', 0, hex(0, 0));
+    const u = addUnit(s, 'heavy', 0, hex(0, 0));
     const next = special(s, u.id);
     expect(getUnit(next, u.id)).toMatchObject({ braced: true, acted: true, movesLeft: 0 });
+  });
+
+  it('Prep sets the prepped flag and uses the die', () => {
+    const s = makeState();
+    const u = addUnit(s, 'infantry', 0, hex(0, 0));
+    const next = special(s, u.id);
+    expect(getUnit(next, u.id)).toMatchObject({ prepped: true, acted: true, movesLeft: 0 });
+    expect(specialBlockedReason(s, { ...u, prepped: true })).toBe('Already prepped');
   });
 
   it('Heal restores floor(die/2) to an adjacent damaged ally, capped at max', () => {
@@ -68,14 +83,14 @@ describe('special actions', () => {
   });
 
   it('Shove pushes an adjacent enemy one hex directly away', () => {
-    const s = makeState();
+    const s = withShove(makeState());
     const heavy = addUnit(s, 'heavy', 0, hex(0, 0));
     const enemy = addUnit(s, 'infantry', 1, hex(0, 1));
     expect(getUnit(special(s, heavy.id, enemy.id), enemy.id)!.pos).toEqual(hex(0, 2));
   });
 
   it('Shove fails into terrain, models, or off the board', () => {
-    const s = makeState({ terrain: [[hex(2, 0), 1]] });
+    const s = withShove(makeState({ terrain: [[hex(2, 0), 1]] }));
     const heavy = addUnit(s, 'heavy', 0, hex(0, 0));
     const intoWall = addUnit(s, 'infantry', 1, hex(1, 0));
     const intoModel = addUnit(s, 'infantry', 1, hex(-1, 0));
@@ -83,7 +98,7 @@ describe('special actions', () => {
     expect(specialBlockedReason(s, heavy, intoWall)).toBe('Nowhere to push');
     expect(specialBlockedReason(s, heavy, intoModel)).toBe('Nowhere to push');
 
-    const edge = makeState();
+    const edge = withShove(makeState());
     const h2 = addUnit(edge, 'heavy', 0, hex(6, 0));
     const e2 = addUnit(edge, 'infantry', 1, hex(7, 0));
     expect(specialBlockedReason(edge, h2, e2)).toBe('Nowhere to push');

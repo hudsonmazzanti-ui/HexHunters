@@ -331,6 +331,9 @@ button.danger {
   fill: #111;
   font-size: 13px;
 }
+.die.boosted rect {
+  fill: #bbf7d0;
+}
 .die.used rect {
   fill: #6b7280;
 }
