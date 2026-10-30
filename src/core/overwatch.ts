@@ -10,7 +10,7 @@
  */
 import { dealDamage } from './combat';
 import { type Hex, hexDistance, hexEquals, hexagon } from './hex';
-import { canSeeHex, effectiveDefense, livingUnits, other, terrainHeight, unitDef } from './queries';
+import { attackDamage, canSeeHex, effectiveDefense, livingUnits, other, terrainHeight, unitDef } from './queries';
 import type { GameState, PlayerId, Unit } from './types';
 
 /** Hexes a unit would watch from where it stands now. */
@@ -62,7 +62,7 @@ export function resolveOverwatch(state: GameState, endedPlayer: PlayerId): Overw
     const bonus = spotBonus + (unitDef(state, sentinel).hitBonus ?? 0);
     const defense = effectiveDefense(state, target);
     const hit = watch.die + bonus >= defense;
-    const damage = hit ? unitDef(state, sentinel).damage : 0;
+    const damage = hit ? attackDamage(state, sentinel) : 0;
     const killed = hit && dealDamage(state, target, damage);
     shots.push({ unitId: sentinel.id, targetId: target.id, roll: watch.die, bonus, defense, hit, damage, killed });
   }

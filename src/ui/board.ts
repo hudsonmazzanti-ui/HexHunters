@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { unitDef } from '../core/queries';
+import { maxHealth, unitDef } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -237,7 +237,7 @@ export class BoardView {
     if (!this.rolling.has(unit.id)) n.dieText.textContent = unit.die === null ? '' : String(unit.die);
 
     n.hpText.textContent = String(unit.hp);
-    n.hp.classList.toggle('low', unit.hp <= Math.ceil(def.health / 3));
+    n.hp.classList.toggle('low', unit.hp <= Math.ceil(maxHealth(state, unit) / 3));
   }
 
   /** Walks a unit along a path one hex at a time. */

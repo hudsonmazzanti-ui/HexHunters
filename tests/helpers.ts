@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG } from '../src/data/config';
 import { type Hex, hexKey } from '../src/core/hex';
 import { controlPointHexes, deployZones } from '../src/core/mapgen';
+import { maxHealth } from '../src/core/queries';
 import type { GameState, PlayerId, TerrainHeight, Unit } from '../src/core/types';
 
 /** A hand-built state in the play phase: an empty board plus whatever terrain/units a test needs. */
@@ -52,6 +53,7 @@ export function addUnit(
     dieBonus: 0,
     movesLeft: owner === state.current ? def.speed : 0,
     acted: false,
+    specialUsed: false,
     turnStartPos: pos,
     braced: false,
     prepped: false,
@@ -61,7 +63,8 @@ export function addUnit(
     ...extra,
   };
   state.units.push(unit);
-  // A hero brings its aura with it, as when an army is chosen.
+  // A hero brings its aura with it, as when an army is chosen (add heroes before the units they buff).
   if (def.hero) state.auras[owner].push(def.hero.aura);
+  if (extra.hp === undefined) unit.hp = maxHealth(state, unit);
   return unit;
 }

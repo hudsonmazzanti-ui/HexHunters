@@ -42,6 +42,8 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Field Marshal | 7    | medium (2) | 3     | 6   | 9  | 4            | 3   | Your Infantry get +2 on their roll every turn (stacks with Prep) |
 | Siege Master  | 8    | medium (2) | 2     | 5   | 8  | 4 (indirect) | 2   | Your Artillery never needs to Load |
 | Warlord       | 6    | large (3)  | 3     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
+| Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
+| Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
 
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
@@ -56,9 +58,9 @@ are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
 **Adding a hero:** add a unit with `hero: { aura: '<id>' }` and no `special`, write the aura in `src/core/auras/`
-(which units it affects and its effects: roll bonus, speed bonus or no-loading), add the id to `AuraId` in
+(which units it affects and its effects: roll, speed, defense, damage or health bonus, no-loading, or double action), add the id to `AuraId` in
 `src/core/types.ts` and list it in `src/core/auras/index.ts`. The hero limit is `maxHeroesPerArmy`; aura numbers
-(`marshalRollBonus`, `warlordSpeedBonus`) are under `specials`.
+(`marshalRollBonus`, `warlordSpeedBonus`, `warden*`) are under `specials`.
 **Adding a special:** write a module in `src/core/specials/` (see `types.ts` for the `SpecialDef` interface), add its
 id to `SpecialId` in `src/core/types.ts`, and list it in `src/core/specials/index.ts`. Targeting, validation, area
 previews and the UI flow are handled generically.
@@ -109,7 +111,7 @@ start of your next turn. Spot has no range limit, only line of sight.
   itself). The arc ignores normal line of sight but is blocked by any hex in between with height-2 terrain or a model of
   size 2+ (friendly or not), using the same edge rule as line of sight. Walls don't block splash.
 - **Torch** (Flamer): pick a direction. Hits every model in the next 2 hexes. The Flamer's die is compared to each
-  model's **base** defense separately: armor bonuses (Brace) are ignored and Spot doesn't apply. Friendly fire applies.
+  model's **base** defense separately: defense bonuses (Brace, Warden) are ignored and Spot doesn't apply. Friendly fire applies.
   A wall stops the flame (nothing on or beyond it is hit); models don't.
 - **Sweep** (Monster): no target needed. This turn's die is compared to the defense of every adjacent enemy separately
   (Brace counts; Spot and the Monster's +1 to hit don't apply). Each one it beats takes 3 damage. Allies are never hit.
@@ -138,7 +140,11 @@ start of your next turn. Spot has no range limit, only line of sight.
 **Heroes.** At most one per army (the builder blocks confirming two). A hero has no special action; instead its
 passive rule applies to its own army for the **whole game**, even after the hero dies. Field Marshal: your Infantry
 get +2 on every roll, on top of any Prep (+4 with both). Siege Master: your Artillery can Fire without loading (Load
-is greyed out as not needed, and firing doesn't use a shell). Warlord: your large models move 1 extra hex. Heroes wear
+is greyed out as not needed, and firing doesn't use a shell). Warlord: your large models move 1 extra hex. Warden:
+Medics +1 defense and +1 attack damage; Sentinels +1 defense and +2 max health, starting the game at 10 (Heal can
+restore them to 10). Master Ninja: your Assassins and Scouts can use their special and then attack in the same turn,
+with the same die; they can move before, between and (after Dash/Vault) after the special, but attacking ends their
+turn, so the attack must come last. The panel shows which of the two actions has been used. Heroes wear
 a gold crown, and units under a hero's aura glow gold, for both players to see.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).

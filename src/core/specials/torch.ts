@@ -1,7 +1,7 @@
 /**
  * Torch: a 2-hex line of flame in one of the 6 directions. The Flamer's die is
- * compared against each model's base defense separately (armor bonuses such as
- * Brace are ignored, and Spot doesn't apply). Friendly fire applies. Terrain
+ * compared against each model's base defense separately (defense bonuses such as
+ * Brace and the Warden's aura are ignored, and Spot doesn't apply). Friendly fire applies. Terrain
  * stops the flame: nothing beyond a wall hex is hit.
  */
 import { dealDamage } from '../combat';
@@ -29,7 +29,7 @@ function flames(state: GameState, unit: Unit, dir: number): SpecialPreview {
   for (const h of line) {
     const target = unitAt(state, h);
     if (!target) continue;
-    const defense = unitDef(state, target).defense; // ignores Brace
+    const defense = unitDef(state, target).defense; // base defense: ignores Brace and aura bonuses (Warden)
     const hit = roll >= defense;
     effects.push({ unitId: target.id, roll, defense, hit, damage: hit ? damage : 0, killed: hit && target.hp <= damage });
   }
@@ -40,9 +40,9 @@ export const torch: SpecialDef = {
   name: 'Torch',
   describe: (r) =>
     `Flame the next ${r.torchLength} hexes in one direction. Rolls this model's die against EACH model's defense ` +
-    'there, IGNORING armor bonuses (Brace). Friendly fire! Terrain stops the flame.',
+    'there, IGNORING defense bonuses (Brace, Warden). Friendly fire! Terrain stops the flame.',
   targeting: 'direction',
-  tags: ['Ignores armor (Brace)', 'Friendly fire', 'Stopped by walls'],
+  tags: ['Ignores defense bonuses', 'Friendly fire', 'Stopped by walls'],
   checkChoice: (state, unit, { dir }) => {
     if (torchLine(state, unit.pos!, dir!).length === 0) return 'Flame blocked';
     return flames(state, unit, dir!).effects.length ? null : 'No models in the flame';

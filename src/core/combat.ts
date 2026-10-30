@@ -1,6 +1,6 @@
 /** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
 import { hexDistance } from './hex';
-import { canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
+import { attackDamage, canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
 import type { GameState, Unit } from './types';
 
 export interface AttackPreview {
@@ -32,7 +32,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit): A
   else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
 
   const hit = roll + bonus >= defense;
-  return { blockedReason, roll, bonus, hitBonus, spotBonus, defense, hit, damage: def.damage };
+  return { blockedReason, roll, bonus, hitBonus, spotBonus, defense, hit, damage: attackDamage(state, attacker) };
 }
 
 export interface AttackResult {
@@ -49,6 +49,7 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
   const p = previewAttack(state, attacker, target);
   if (p.blockedReason) throw new Error(p.blockedReason);
 
+  // Attacking ends the unit's turn: no more moving or specials (even with Master Ninja).
   attacker.acted = true;
   attacker.movesLeft = 0;
   // Firing uses the shell (with the Siege Master's aura, no shell is needed or used).

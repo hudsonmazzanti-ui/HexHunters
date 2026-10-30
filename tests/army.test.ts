@@ -21,6 +21,8 @@ describe('army building', () => {
       marshal: 7,
       siegemaster: 8,
       warlord: 6,
+      warden: 6,
+      masterninja: 7,
     });
   });
 
