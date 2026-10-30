@@ -23,7 +23,7 @@ export type SpecialId =
   | 'hook';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
-export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja';
+export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard';
 
 export interface UnitDef {
   name: string;
@@ -101,6 +101,10 @@ export interface SpecialRules {
   wardenDefenseBonus: number;
   wardenMedicDamageBonus: number;
   wardenSentinelHealthBonus: number;
+  /** Standard Bearer aura: added to the die when a model acts while on the control point. */
+  standardRollBonus: number;
+  /** Standard Bearer aura: points scored for winning the control point at the end of a round. */
+  standardHoldPoints: number;
 }
 
 export interface Terrain {

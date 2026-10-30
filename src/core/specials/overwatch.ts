@@ -1,4 +1,5 @@
 /** Overwatch special: see src/core/overwatch.ts for when and how it fires. */
+import { actionDie } from '../queries';
 import { watchArea } from '../overwatch';
 import type { SpecialDef } from './types';
 
@@ -15,7 +16,8 @@ export const overwatch: SpecialDef = {
     effects: [],
   }),
   apply: (state, unit) => {
-    unit.overwatch = { die: unit.die!, hexes: watchArea(state, unit) };
+    // Locked now, including any bonus for acting on the control point.
+    unit.overwatch = { die: actionDie(state, unit), hexes: watchArea(state, unit) };
     return {};
   },
 };

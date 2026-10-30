@@ -16,6 +16,8 @@ export interface AuraEffects {
   healthBonus?: number;
   /** May use its special AND then its attack in one turn (same die). The attack must come last. */
   doubleAction?: boolean;
+  /** Added to the die when the unit acts (attack or special) while this aura affects it. */
+  actionRollBonus?: number;
 }
 
 /**
@@ -31,4 +33,6 @@ export interface AuraDef {
   affects(state: GameState, unit: Unit): boolean;
   /** What it grants a given affected unit type. */
   effects(rules: SpecialRules, unit: UnitDef): AuraEffects;
+  /** Army-wide: points scored for winning the control point at the end of a round (default 1). */
+  holdPoints?(rules: SpecialRules): number;
 }

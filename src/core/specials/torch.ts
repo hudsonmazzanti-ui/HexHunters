@@ -6,7 +6,7 @@
  */
 import { dealDamage } from '../combat';
 import { type Hex, direction, hexAdd, hexScale } from '../hex';
-import { onBoard, terrainHeight, unitAt, unitDef } from '../queries';
+import { actionDie, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -23,7 +23,7 @@ export function torchLine(state: GameState, from: Hex, dir: number): Hex[] {
 
 function flames(state: GameState, unit: Unit, dir: number): SpecialPreview {
   const line = torchLine(state, unit.pos!, dir);
-  const roll = unit.die!;
+  const roll = actionDie(state, unit);
   const damage = unitDef(state, unit).damage;
   const effects: Effect[] = [];
   for (const h of line) {

@@ -7,6 +7,8 @@ import { previewAttack } from '../core/combat';
 import { type Action, type GameEvent, RuleError, applyAction, canUndoMove, isInDeployZone, newGame, unplacedUnits } from '../core/game';
 import { type Hex, type Point, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
+  actionBonus,
+  actionDie,
   attackDamage,
   baseDefense,
   canAct,
@@ -294,7 +296,7 @@ export class Controller {
       lines.push(
         scored.scorer === null
           ? `Round ${scored.round}: no points (${a}–${b} on the control point).`
-          : `Round ${scored.round}: ${PLAYER_NAMES[scored.scorer]} scores! (${a}–${b} on the control point)`,
+          : `Round ${scored.round}: ${PLAYER_NAMES[scored.scorer]} holds the point: +${scored.points}${this.holdSource(scored.scorer, scored.points)} (${a}–${b} on the control point)`,
       );
       lines.push(`Score: ${this.state.scores[0]} – ${this.state.scores[1]}`);
     }
@@ -335,6 +337,13 @@ export class Controller {
         { label: 'Restart (same map)', onClick: () => void this.start(this.state.seed) },
       ],
     });
+  }
+
+  /** " (Standard Bearer)" when a hero aura made a held point worth more than 1. */
+  private holdSource(player: PlayerId, points: number): string {
+    if (points <= 1) return '';
+    const aura = this.state.auras[player].find((id) => AURAS[id].holdPoints);
+    return aura ? ` (${heroName(this.state.config, aura)})` : '';
   }
 
   // ---------- Input ----------
@@ -597,7 +606,9 @@ export class Controller {
       }
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
       if (sel.die !== null) {
-        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '';
+        const point = sel.acted ? 0 : actionBonus(s, sel);
+        const prep =
+          (sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '') + (point ? ` (+${point} on point)` : '');
         stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
       }
       // Master Ninja: show which of the two actions have been used this turn.
@@ -707,7 +718,7 @@ export class Controller {
         let detail = '';
         if (id === 'heal') {
           const t = getUnit(s, choice.targetId!)!;
-          detail = ` +${Math.min(healAmount(s, unit.die!), maxHealth(s, t) - t.hp)} HP`;
+          detail = ` +${Math.min(healAmount(s, actionDie(s, unit)), maxHealth(s, t) - t.hp)} HP`;
         }
         if (targetsUnit(sp.targeting)) {
           detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
@@ -730,7 +741,7 @@ export class Controller {
         } else if (id === 'overwatch') {
           const n = preview?.area.length ?? 0;
           model.preview = {
-            text: `Watch ${n} hexes with a locked ${unit.die}. At the end of the opponent's turn, fire at an enemy still in the area.`,
+            text: `Watch ${n} hexes with a locked ${actionDie(s, unit)}. At the end of the opponent's turn, fire at an enemy still in the area.`,
             good: true,
           };
         }
@@ -760,7 +771,9 @@ export class Controller {
     const pending = this.ui.pendingTargetId ? getUnit(s, this.ui.pendingTargetId) : undefined;
     if (pending) {
       const p = previewAttack(s, unit, pending);
-      const mods = `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}`;
+      const mods =
+        `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}` +
+        `${p.pointBonus ? ` +${p.pointBonus} point` : ''}`;
       model.preview = {
         text: `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
@@ -801,8 +814,8 @@ export class Controller {
       if (unit.specialUsed) label += ' ✓';
       else if (reason) label += ` (${reason})`;
       else if (noTargets) label += ' (no targets)';
-      else if (id === 'dash') label += ` (+${dashAmount(s, unit.die!)})`;
-      else if (id === 'heal') label += ` (+${healAmount(s, unit.die!)})`;
+      else if (id === 'dash') label += ` (+${dashAmount(s, actionDie(s, unit))})`;
+      else if (id === 'heal') label += ` (+${healAmount(s, actionDie(s, unit))})`;
       actions.push({
         label,
         disabled: !!reason || noTargets,

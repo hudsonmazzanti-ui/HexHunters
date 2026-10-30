@@ -23,6 +23,7 @@ describe('army building', () => {
       warlord: 6,
       warden: 6,
       masterninja: 7,
+      standardbearer: 6,
     });
   });
 

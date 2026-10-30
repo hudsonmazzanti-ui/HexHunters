@@ -105,3 +105,9 @@ export const needsLoading = (state: GameState, unit: Unit): boolean =>
   !!unitDef(state, unit).needsLoading && !auraEffects(state, unit).noLoading;
 
 export const isHero = (state: GameState, unit: Unit): boolean => !!unitDef(state, unit).hero;
+
+/** Die bonus a unit gets when it acts right now (Standard Bearer: +2 while on the control point). */
+export const actionBonus = (state: GameState, unit: Unit): number => auraEffects(state, unit).actionRollBonus ?? 0;
+
+/** The die value used when the unit acts now: its rolled die (incl. Prep/Marshal) plus any action bonus. */
+export const actionDie = (state: GameState, unit: Unit): number => (unit.die ?? 0) + actionBonus(state, unit);

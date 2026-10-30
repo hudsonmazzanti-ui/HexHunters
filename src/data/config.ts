@@ -228,6 +228,18 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 4,
     hero: { aura: 'ninja' },
   },
+  standardbearer: {
+    name: 'Standard Bearer',
+    label: 'SB',
+    cost: 6,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 10,
+    range: 3,
+    damage: 3,
+    hero: { aura: 'standard' },
+  },
 };
 
 /** Display name of the hero that grants an aura (e.g. "Warlord"). */
@@ -265,5 +277,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     wardenDefenseBonus: 1,
     wardenMedicDamageBonus: 1,
     wardenSentinelHealthBonus: 2,
+    standardRollBonus: 2,
+    standardHoldPoints: 2,
   },
 };

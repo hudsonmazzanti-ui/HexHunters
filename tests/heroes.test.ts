@@ -4,7 +4,7 @@ import { previewAttack } from '../src/core/combat';
 import { type Action, type GameEvent, applyAction, canUndoMove, newGame } from '../src/core/game';
 import { hex } from '../src/core/hex';
 import { aurasOn } from '../src/core/auras';
-import { attackDamage, baseDefense, canSeeUnit, getUnit, maxHealth, moveReach, needsLoading, unitSpeed } from '../src/core/queries';
+import { actionDie, attackDamage, baseDefense, canSeeUnit, getUnit, maxHealth, moveReach, needsLoading, unitSpeed } from '../src/core/queries';
 import { previewSpecial, specialBlockedReason } from '../src/core/specials';
 import type { GameState } from '../src/core/types';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
@@ -342,5 +342,117 @@ describe('Master Ninja', () => {
     expect(validateArmy(DEFAULT_CONFIG, ['masterninja', 'warden'])).toBe('Only one hero per army (you have 2)');
     expect(validateArmy(DEFAULT_CONFIG, ['masterninja', 'assassin', 'scout', 'scout'])).toBeNull();
     expect(validateArmy(DEFAULT_CONFIG, ['warden', 'medic', 'sentinel', 'sentinel'])).toBeNull();
+  });
+});
+
+describe('Standard Bearer', () => {
+  // The control point is the center hex (0,0) and its 6 neighbours.
+  it('has the agreed stats and is a hero', () => {
+    expect(UNITS.standardbearer).toMatchObject({ cost: 6, size: 2, speed: 3, defense: 6, health: 10, range: 3, damage: 3 });
+    expect(UNITS.standardbearer.hero).toEqual({ aura: 'standard' });
+    expect(validateArmy(DEFAULT_CONFIG, ['standardbearer', 'warlord'])).toBe('Only one hero per army (you have 2)');
+    expect(validateArmy(DEFAULT_CONFIG, ['standardbearer', 'infantry', 'infantry'])).toBeNull();
+  });
+
+  it('gives +2 only to your models on the control point, at the moment they act', () => {
+    const s = makeState();
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    const onPoint = addUnit(s, 'infantry', 0, hex(1, 0), { die: 5 });
+    const offPoint = addUnit(s, 'infantry', 0, hex(0, 3), { die: 5 });
+    const enemy = addUnit(s, 'infantry', 1, hex(1, -3)); // defense 6
+    const enemyOnPoint = addUnit(s, 'infantry', 1, hex(-1, 0));
+    expect(actionDie(s, onPoint)).toBe(7);
+    expect(actionDie(s, offPoint)).toBe(5);
+    expect(previewAttack(s, onPoint, enemy)).toMatchObject({ roll: 5, pointBonus: 2, bonus: 2, hit: true });
+    expect(previewAttack(s, offPoint, enemy)).toMatchObject({ pointBonus: 0, hit: false });
+    expect(aurasOn(s, onPoint)).toEqual(['standard']);
+    expect(aurasOn(s, offPoint)).toEqual([]);
+    expect(aurasOn(s, enemyOnPoint)).toEqual([]); // the enemy has no Standard Bearer
+
+    // Moving onto the point and then attacking counts.
+    const moved = run(s, { type: 'move', unitId: offPoint.id, to: hex(0, 1) }).state;
+    const { events } = run(moved, { type: 'attack', unitId: offPoint.id, targetId: enemy.id });
+    expect(events[0]).toMatchObject({ type: 'attack', roll: 5, bonus: 2, hit: true });
+  });
+
+  it('turns Grenade (10+) and Hook (7+) on with a lower roll while on the point', () => {
+    const s = makeState();
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    const gOff = addUnit(s, 'grenadier', 0, hex(0, 3), { die: 8 });
+    const gOn = addUnit(s, 'grenadier', 0, hex(0, 1), { die: 8 });
+    const hookOn = addUnit(s, 'grappler', 0, hex(1, 0), { die: 5 });
+    const hookOff = addUnit(s, 'grappler', 0, hex(2, 2), { die: 5 });
+    addUnit(s, 'infantry', 1, hex(1, -3));
+    expect(specialBlockedReason(s, gOff)).toBe('needs 10+');
+    expect(specialBlockedReason(s, gOn)).toBeNull();
+    expect(specialBlockedReason(s, hookOn)).toBeNull();
+    expect(specialBlockedReason(s, hookOff)).toBe('needs 7+');
+  });
+
+  it('boosts die-based specials: Dash distance, Heal amount, Sweep and Torch rolls', () => {
+    const s = makeState();
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    const scout = addUnit(s, 'scout', 0, hex(0, 0), { die: 7 }); // 7 -> 9: dash 3 instead of 2
+    const medic = addUnit(s, 'medic', 0, hex(1, -1), { die: 5 }); // 5 -> 7: heal 3 instead of 2
+    const hurt = addUnit(s, 'heavy', 0, hex(1, 0), { hp: 4 });
+    const monster = addUnit(s, 'monster', 0, hex(-1, 1), { die: 5 }); // 7 vs Scout def 7: hit
+    const enemyScout = addUnit(s, 'scout', 1, hex(-2, 1));
+    const flamer = addUnit(s, 'flamer', 0, hex(0, -1), { die: 5 });
+    const enemyInf = addUnit(s, 'infantry', 1, hex(0, -2)); // Torch north-west: 7 vs 6
+    expect(getUnit(run(s, { type: 'special', unitId: scout.id }).state, scout.id)!.movesLeft).toBe(4 + 3);
+    expect(getUnit(run(s, { type: 'special', unitId: medic.id, targetId: hurt.id }).state, hurt.id)!.hp).toBe(7);
+    expect(previewSpecial(s, monster, {})!.effects.find((e) => e.unitId === enemyScout.id)).toMatchObject({ roll: 7, hit: true });
+    expect(previewSpecial(s, flamer, { dir: 2 })!.effects.find((e) => e.unitId === enemyInf.id)).toMatchObject({ roll: 7, hit: true });
+  });
+
+  it('a Sentinel locks in the bonus if it goes on overwatch while on the point', () => {
+    const s = makeState();
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    const sentinel = addUnit(s, 'sentinel', 0, hex(0, 1), { die: 6 });
+    addUnit(s, 'infantry', 1, hex(0, -6));
+    const state = run(s, { type: 'special', unitId: sentinel.id }).state;
+    expect(getUnit(state, sentinel.id)!.overwatch!.die).toBe(8);
+  });
+
+  it('winning the control point scores 2 instead of 1', () => {
+    const s = makeState();
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    addUnit(s, 'infantry', 0, hex(0, 0));
+    addUnit(s, 'infantry', 1, hex(0, -6));
+    const { state, events } = run(s, END, END);
+    expect(state.scores).toEqual([2, 0]);
+    expect(events).toContainEqual({ type: 'roundScored', round: 1, counts: [1, 0], scorer: 0, points: 2 });
+
+    // The opponent without a Standard Bearer still scores 1; a tie scores nothing.
+    const t = makeState();
+    addUnit(t, 'standardbearer', 0, hex(-5, 5));
+    addUnit(t, 'infantry', 1, hex(0, 0));
+    addUnit(t, 'infantry', 0, hex(0, 6));
+    expect(run(t, END, END).state.scores).toEqual([0, 1]);
+    const tie = makeState();
+    addUnit(tie, 'standardbearer', 0, hex(-5, 5));
+    addUnit(tie, 'infantry', 0, hex(0, 0));
+    addUnit(tie, 'infantry', 1, hex(1, 0));
+    expect(run(tie, END, END).state.scores).toEqual([0, 0]);
+  });
+
+  it('2-point rounds count toward the points needed to win', () => {
+    const s = makeState();
+    s.scores = [3, 0];
+    addUnit(s, 'standardbearer', 0, hex(-5, 5));
+    addUnit(s, 'infantry', 0, hex(0, 0));
+    addUnit(s, 'infantry', 1, hex(0, -6));
+    const { state } = run(s, END, END);
+    expect(state).toMatchObject({ phase: 'over', winner: 0, winReason: 'points', scores: [5, 0] });
+  });
+
+  it('keeps working after the Standard Bearer dies', () => {
+    const s = makeState();
+    const sb = addUnit(s, 'standardbearer', 0, hex(0, 1));
+    const inf = addUnit(s, 'infantry', 0, hex(0, 0), { die: 5 });
+    addUnit(s, 'infantry', 1, hex(0, -6));
+    const after = kill(s, sb.id);
+    expect(actionDie(after, getUnit(after, inf.id)!)).toBe(7);
+    expect(run(after, END, END).state.scores).toEqual([2, 0]);
   });
 });

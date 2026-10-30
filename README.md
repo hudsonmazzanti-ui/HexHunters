@@ -44,6 +44,7 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Warlord       | 6    | large (3)  | 3     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
 | Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
+| Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1 |
 
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
@@ -58,9 +59,10 @@ are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
 **Adding a hero:** add a unit with `hero: { aura: '<id>' }` and no `special`, write the aura in `src/core/auras/`
-(which units it affects and its effects: roll, speed, defense, damage or health bonus, no-loading, or double action), add the id to `AuraId` in
+(which units it affects and its effects: roll, speed, defense, damage or health bonus, action-roll bonus, no-loading,
+double action, or extra points for holding the control point), add the id to `AuraId` in
 `src/core/types.ts` and list it in `src/core/auras/index.ts`. The hero limit is `maxHeroesPerArmy`; aura numbers
-(`marshalRollBonus`, `warlordSpeedBonus`, `warden*`) are under `specials`.
+(`marshalRollBonus`, `warlordSpeedBonus`, `warden*`, `standard*`) are under `specials`.
 **Adding a special:** write a module in `src/core/specials/` (see `types.ts` for the `SpecialDef` interface), add its
 id to `SpecialId` in `src/core/types.ts`, and list it in `src/core/specials/index.ts`. Targeting, validation, area
 previews and the UI flow are handled generically.
@@ -144,10 +146,16 @@ is greyed out as not needed, and firing doesn't use a shell). Warlord: your larg
 Medics +1 defense and +1 attack damage; Sentinels +1 defense and +2 max health, starting the game at 10 (Heal can
 restore them to 10). Master Ninja: your Assassins and Scouts can use their special and then attack in the same turn,
 with the same die; they can move before, between and (after Dash/Vault) after the special, but attacking ends their
-turn, so the attack must come last. The panel shows which of the two actions has been used. Heroes wear
+turn, so the attack must come last. The panel shows which of the two actions has been used. Standard Bearer: any of
+your models standing on the control point gets +2 on its die when it attacks or uses a special, checked at the moment
+it acts (move on, then act, counts). This applies to every die check: hit rolls, Grenade 10+ and Hook 7+, Heal and
+Dash amounts, Sweep and Torch rolls, and the die a Sentinel locks for overwatch. The die badge shows e.g. "8+2" and
+those models glow gold while on the point. Winning the control point at the end of a round scores 2 points instead
+of 1 (shown as "Player 1 holds the point: +2 (Standard Bearer)"). Heroes wear
 a gold crown, and units under a hero's aura glow gold, for both players to see.
 
-**Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).
+**Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
+Standard Bearer (ties score nothing).
 First to 5 points wins, or eliminate every enemy model to win immediately. If one action (Grenade or Torch) wipes out
 the last models on both sides at once, the game is a draw.
 

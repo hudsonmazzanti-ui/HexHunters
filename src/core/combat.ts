@@ -1,16 +1,18 @@
 /** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
 import { hexDistance } from './hex';
-import { attackDamage, canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
+import { actionBonus, attackDamage, canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
 import type { GameState, Unit } from './types';
 
 export interface AttackPreview {
   /** Why the attack isn't allowed, or null if it is. */
   blockedReason: string | null;
   roll: number;
-  /** Total modifiers: the attacker's hitBonus plus any Spot bonus. */
+  /** Total modifiers: hitBonus + Spot bonus + action bonus (Standard Bearer). */
   bonus: number;
   hitBonus: number;
   spotBonus: number;
+  /** Standard Bearer: +2 while the attacker stands on the control point. */
+  pointBonus: number;
   defense: number;
   hit: boolean;
   damage: number;
@@ -21,7 +23,8 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit): A
   const roll = attacker.die ?? 0;
   const hitBonus = def.hitBonus ?? 0;
   const spotBonus = target.spottedBy === attacker.owner ? state.config.specials.spotAttackBonus : 0;
-  const bonus = hitBonus + spotBonus;
+  const pointBonus = actionBonus(state, attacker);
+  const bonus = hitBonus + spotBonus + pointBonus;
   const defense = effectiveDefense(state, target);
 
   let blockedReason: string | null = null;
@@ -32,7 +35,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit): A
   else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
 
   const hit = roll + bonus >= defense;
-  return { blockedReason, roll, bonus, hitBonus, spotBonus, defense, hit, damage: attackDamage(state, attacker) };
+  return { blockedReason, roll, bonus, hitBonus, spotBonus, pointBonus, defense, hit, damage: attackDamage(state, attacker) };
 }
 
 export interface AttackResult {

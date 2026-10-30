@@ -5,7 +5,7 @@
  */
 import { dealDamage } from '../combat';
 import { neighbors } from '../hex';
-import { effectiveDefense, onBoard, unitAt } from '../queries';
+import { actionDie, effectiveDefense, onBoard, unitAt } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -15,7 +15,7 @@ const adjacentEnemies = (state: GameState, unit: Unit): Unit[] =>
     .filter((u): u is Unit => !!u && u.owner !== unit.owner);
 
 function swing(state: GameState, unit: Unit): SpecialPreview {
-  const roll = unit.die!;
+  const roll = actionDie(state, unit);
   const damage = state.config.specials.sweepDamage;
   const effects: Effect[] = adjacentEnemies(state, unit).map((target) => {
     const defense = effectiveDefense(state, target);

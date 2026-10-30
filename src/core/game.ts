@@ -7,7 +7,7 @@
 import { type Hex, hexEquals } from './hex';
 import { validateArmy } from './army';
 import { type AttackResult, resolveAttack } from './combat';
-import { auraEffects } from './auras';
+import { auraEffects, holdPoints } from './auras';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
 import { getUnit, livingUnits, maxHealth, movePath, other, unitAt, unitSpeed, unitsOnControlPoint } from './queries';
@@ -34,7 +34,8 @@ export type GameEvent =
   | ({ type: 'special'; unitId: string } & SpecialResult)
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
   | ({ type: 'overwatch' } & OverwatchShot)
-  | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null }
+  /** `points` is what the scorer got (Standard Bearer: 2), 0 on a tie. */
+  | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null; points: number }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
@@ -299,8 +300,9 @@ function endTurn(state: GameState, events: GameEvent[]): void {
 function scoreRound(state: GameState, events: GameEvent[]): void {
   const counts: [number, number] = [unitsOnControlPoint(state, 0).length, unitsOnControlPoint(state, 1).length];
   const scorer: PlayerId | null = counts[0] > counts[1] ? 0 : counts[1] > counts[0] ? 1 : null;
-  if (scorer !== null) state.scores[scorer] += 1;
-  events.push({ type: 'roundScored', round: state.round, counts, scorer });
+  const points = scorer === null ? 0 : holdPoints(state, scorer);
+  if (scorer !== null) state.scores[scorer] += points;
+  events.push({ type: 'roundScored', round: state.round, counts, scorer, points });
   if (scorer !== null && state.scores[scorer] >= state.config.pointsToWin) endGame(state, events, scorer, 'points');
 }
 
