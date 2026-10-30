@@ -28,7 +28,7 @@ describe('special actions', () => {
     const u = addUnit(s, 'infantry', 0, hex(0, 0));
     const next = special(s, u.id);
     expect(getUnit(next, u.id)).toMatchObject({ prepped: true, acted: true, movesLeft: 0 });
-    expect(specialBlockedReason(s, { ...u, prepped: true })).toBe('Already prepped');
+    expect(specialBlockedReason(s, { ...u, prepped: true })).toBe('already prepped');
   });
 
   it('Heal restores floor(die/2) to an adjacent damaged ally, capped at max', () => {
@@ -47,13 +47,13 @@ describe('special actions', () => {
     const far = addUnit(s, 'heavy', 0, hex(2, 0), { hp: 5 });
     const full = addUnit(s, 'heavy', 0, hex(0, 1));
     const enemy = addUnit(s, 'heavy', 1, hex(-1, 0), { hp: 5 });
-    expect(specialBlockedReason(s, medic, far)).toBe('Must be adjacent');
-    expect(specialBlockedReason(s, medic, full)).toBe('Already at full health');
-    expect(specialBlockedReason(s, medic, enemy)).toBe('Choose an ally');
-    expect(specialBlockedReason(s, medic, medic)).toBe('Choose an ally');
+    expect(specialBlockedReason(s, medic, { targetId: far.id })).toBe('Must be adjacent');
+    expect(specialBlockedReason(s, medic, { targetId: full.id })).toBe('Already at full health');
+    expect(specialBlockedReason(s, medic, { targetId: enemy.id })).toBe('Choose an ally');
+    expect(specialBlockedReason(s, medic, { targetId: medic.id })).toBe('Choose an ally');
     const hurt = addUnit(s, 'infantry', 0, hex(0, -1), { hp: 1 });
     medic.die = 1;
-    expect(specialBlockedReason(s, medic, hurt)).toBe('Die too low to heal');
+    expect(specialBlockedReason(s, medic, { targetId: hurt.id })).toBe('die too low');
   });
 
   it('Spot marks a visible enemy for the spotting side', () => {
@@ -62,13 +62,14 @@ describe('special actions', () => {
     const seen = addUnit(s, 'scout', 1, hex(6, 0)); // beyond nothing; range is irrelevant for Spot
     const hidden = addUnit(s, 'scout', 1, hex(0, 2));
     expect(specialTargets(s, sniper).map((u) => u.id)).toEqual([seen.id]);
-    expect(specialBlockedReason(s, sniper, hidden)).toBe('No line of sight');
+    expect(specialBlockedReason(s, sniper, { targetId: hidden.id })).toBe('No line of sight');
     expect(getUnit(special(s, sniper.id, seen.id), seen.id)!.spottedBy).toBe(0);
   });
 
   it('Dash adds floor(die/3) hexes on top of remaining movement, even after acting', () => {
     const s = makeState();
     const scout = addUnit(s, 'scout', 0, hex(0, 0), { die: 11, movesLeft: 1 });
+    addUnit(s, 'scout', 1, hex(0, -6)); // an enemy, so the game isn't over
     const next = special(s, scout.id);
     expect(getUnit(next, scout.id)).toMatchObject({ acted: true, movesLeft: 1 + 3 });
     // and it can actually move afterwards
@@ -79,7 +80,7 @@ describe('special actions', () => {
   it('Dash is not allowed for 0 hexes', () => {
     const s = makeState();
     const scout = addUnit(s, 'scout', 0, hex(0, 0), { die: 2 });
-    expect(specialBlockedReason(s, scout)).toBe('Die too low to dash');
+    expect(specialBlockedReason(s, scout)).toBe('die too low');
   });
 
   it('Shove pushes an adjacent enemy one hex directly away', () => {
@@ -95,13 +96,13 @@ describe('special actions', () => {
     const intoWall = addUnit(s, 'infantry', 1, hex(1, 0));
     const intoModel = addUnit(s, 'infantry', 1, hex(-1, 0));
     addUnit(s, 'medic', 0, hex(-2, 0));
-    expect(specialBlockedReason(s, heavy, intoWall)).toBe('Nowhere to push');
-    expect(specialBlockedReason(s, heavy, intoModel)).toBe('Nowhere to push');
+    expect(specialBlockedReason(s, heavy, { targetId: intoWall.id })).toBe('Nowhere to push');
+    expect(specialBlockedReason(s, heavy, { targetId: intoModel.id })).toBe('Nowhere to push');
 
     const edge = withShove(makeState());
     const h2 = addUnit(edge, 'heavy', 0, hex(6, 0));
     const e2 = addUnit(edge, 'infantry', 1, hex(7, 0));
-    expect(specialBlockedReason(edge, h2, e2)).toBe('Nowhere to push');
+    expect(specialBlockedReason(edge, h2, { targetId: e2.id })).toBe('Nowhere to push');
   });
 
   it('only one action per turn', () => {

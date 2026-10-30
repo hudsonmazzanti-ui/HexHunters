@@ -7,10 +7,12 @@ export type Size = 1 | 2 | 3;
 
 export type TerrainHeight = 1 | 2;
 
-export type SpecialId = 'brace' | 'prep' | 'heal' | 'spot' | 'dash' | 'shove';
+export type SpecialId = 'brace' | 'prep' | 'heal' | 'spot' | 'dash' | 'shove' | 'vault' | 'grenade' | 'torch';
 
 export interface UnitDef {
   name: string;
+  /** Army-building cost in points. Any positive integer. */
+  cost: number;
   /** 1–2 letter label drawn on the model. */
   label: string;
   size: Size;
@@ -34,8 +36,8 @@ export interface GameConfig {
   deployRows: number;
   dieSides: number;
   pointsToWin: number;
-  /** Unit type ids (keys of the unit table) making up each player's army. */
-  army: string[];
+  /** Maximum total cost of each player's army. */
+  armyPointLimit: number;
   units: Record<string, UnitDef>;
   specials: SpecialRules;
 }
@@ -49,6 +51,12 @@ export interface SpecialRules {
   healDivisor: number;
   /** Dash extra hexes = floor(die / dashDivisor). */
   dashDivisor: number;
+  /** Grenade needs a die of at least this. */
+  grenadeMinDie: number;
+  grenadeImpactDamage: number;
+  grenadeSplashDamage: number;
+  /** How many hexes Torch reaches. */
+  torchLength: number;
 }
 
 export interface Terrain {
@@ -92,7 +100,9 @@ export interface Unit {
   spottedBy: PlayerId | null;
 }
 
-export type Phase = 'deploy' | 'play' | 'over';
+export type WinReason = 'points' | 'elimination' | 'draw';
+
+export type Phase = 'build' | 'deploy' | 'play' | 'over';
 
 export interface GameState {
   config: GameConfig;
@@ -105,7 +115,8 @@ export interface GameState {
   /** 0 for the first turn of a round, 1 for the second. */
   turnInRound: 0 | 1;
   scores: [number, number];
+  /** null with phase 'over' means a draw. */
   winner: PlayerId | null;
-  winReason: 'points' | 'elimination' | null;
+  winReason: WinReason | null;
   rngState: number;
 }
