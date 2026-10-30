@@ -233,7 +233,7 @@ describe('scoring and winning', () => {
     addUnit(s, 'infantry', 1, hex(-1, 0));
     const { state, events } = run(s, { type: 'endTurn' }, { type: 'endTurn' });
     expect(state.scores).toEqual([1, 0]);
-    expect(events).toContainEqual({ type: 'roundScored', round: 1, counts: [2, 1], scorer: 0 });
+    expect(events).toContainEqual({ type: 'roundScored', round: 1, counts: [2, 1], scorer: 0, points: 1 });
   });
 
   it('only scores at the end of a full round', () => {

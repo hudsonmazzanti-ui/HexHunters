@@ -7,11 +7,17 @@ import { previewAttack } from '../core/combat';
 import { type Action, type GameEvent, RuleError, applyAction, canUndoMove, isInDeployZone, newGame, unplacedUnits } from '../core/game';
 import { type Hex, type Point, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
+  actionBonus,
+  actionDie,
+  attackDamage,
+  baseDefense,
   canAct,
   canSeeHex,
   effectiveDefense,
   getUnit,
+  hasDoubleAction,
   livingUnits,
+  maxHealth,
   moveReach,
   needsLoading,
   onBoard,
@@ -290,7 +296,7 @@ export class Controller {
       lines.push(
         scored.scorer === null
           ? `Round ${scored.round}: no points (${a}–${b} on the control point).`
-          : `Round ${scored.round}: ${PLAYER_NAMES[scored.scorer]} scores! (${a}–${b} on the control point)`,
+          : `Round ${scored.round}: ${PLAYER_NAMES[scored.scorer]} holds the point: +${scored.points}${this.holdSource(scored.scorer, scored.points)} (${a}–${b} on the control point)`,
       );
       lines.push(`Score: ${this.state.scores[0]} – ${this.state.scores[1]}`);
     }
@@ -331,6 +337,13 @@ export class Controller {
         { label: 'Restart (same map)', onClick: () => void this.start(this.state.seed) },
       ],
     });
+  }
+
+  /** " (Standard Bearer)" when a hero aura made a held point worth more than 1. */
+  private holdSource(player: PlayerId, points: number): string {
+    if (points <= 1) return '';
+    const aura = this.state.auras[player].find((id) => AURAS[id].holdPoints);
+    return aura ? ` (${heroName(this.state.config, aura)})` : '';
   }
 
   // ---------- Input ----------
@@ -561,7 +574,7 @@ export class Controller {
           owner: u.owner,
           die: u.die,
           hp: u.hp,
-          maxHp: def.health,
+          maxHp: maxHealth(s, u),
           spent: s.phase === 'play' && u.acted && u.movesLeft === 0,
           selected: u.id === this.ui.selectedId,
           note: s.phase === 'deploy' ? def.name : undefined,
@@ -571,28 +584,40 @@ export class Controller {
 
     if (sel) {
       const def = unitDef(s, sel);
+      const sp = specialOf(s, sel);
       const defense = effectiveDefense(s, sel);
       const ownTurn = s.phase === 'play' && sel.owner === s.current;
+      const defNotes = [
+        ...(baseDefense(s, sel) > def.defense ? [`+${baseDefense(s, sel) - def.defense} aura`] : []),
+        ...(sel.braced ? ['braced'] : []),
+      ];
+      const damage = attackDamage(s, sel);
       const stats: [string, string][] = [
-        ['HP', `${sel.hp}/${def.health}`],
-        ['Def', defense === def.defense ? `${defense}` : `${defense} (braced)`],
+        ['HP', `${sel.hp}/${maxHealth(s, sel)}`],
+        ['Def', defNotes.length ? `${defense} (${defNotes.join(', ')})` : `${defense}`],
         ['Range', def.range === 1 ? '1 (melee)' : def.indirectFire ? `${def.range} (indirect)` : `${def.range}`],
-        ['Dmg', `${def.damage}`],
+        ['Dmg', damage > def.damage ? `${damage} (+${damage - def.damage} aura)` : `${damage}`],
         ['Move', `${ownTurn ? `${sel.movesLeft}/` : ''}${unitSpeed(s, sel)} ${moveNote(s, sel)}`.trim()],
       ];
       if (def.hitBonus) stats.push(['Hit', `+${def.hitBonus}`]);
       if (def.needsLoading) stats.push(['Shell', needsLoading(s, sel) ? (sel.loaded ? 'LOADED' : 'empty') : 'no Load needed']);
       for (const aura of aurasOn(s, sel)) {
-        stats.push(['Aura', `${heroName(s.config, aura)} ${AURAS[aura].short(s.config.specials)}`]);
+        stats.push(['Aura', `${heroName(s.config, aura)} ${AURAS[aura].short(s.config.specials, def)}`]);
       }
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
       if (sel.die !== null) {
-        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '';
+        const point = sel.acted ? 0 : actionBonus(s, sel);
+        const prep =
+          (sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '') + (point ? ` (+${point} on point)` : '');
         stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
+      }
+      // Master Ninja: show which of the two actions have been used this turn.
+      if (ownTurn && sp && hasDoubleAction(s, sel)) {
+        const attacked = sel.acted;
+        stats.push(['Actions', `${sp.name} ${sel.specialUsed ? '✓' : '○'} · ${attackName(s, sel)} ${attacked ? '✓' : '○'}`]);
       }
       if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
-      const sp = specialOf(s, sel);
       model.info = {
         title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[def.size]})`,
         owner: sel.owner,
@@ -693,7 +718,7 @@ export class Controller {
         let detail = '';
         if (id === 'heal') {
           const t = getUnit(s, choice.targetId!)!;
-          detail = ` +${Math.min(healAmount(s, unit.die!), unitDef(s, t).health - t.hp)} HP`;
+          detail = ` +${Math.min(healAmount(s, actionDie(s, unit)), maxHealth(s, t) - t.hp)} HP`;
         }
         if (targetsUnit(sp.targeting)) {
           detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
@@ -716,7 +741,7 @@ export class Controller {
         } else if (id === 'overwatch') {
           const n = preview?.area.length ?? 0;
           model.preview = {
-            text: `Watch ${n} hexes with a locked ${unit.die}. At the end of the opponent's turn, fire at an enemy still in the area.`,
+            text: `Watch ${n} hexes with a locked ${actionDie(s, unit)}. At the end of the opponent's turn, fire at an enemy still in the area.`,
             good: true,
           };
         }
@@ -746,7 +771,9 @@ export class Controller {
     const pending = this.ui.pendingTargetId ? getUnit(s, this.ui.pendingTargetId) : undefined;
     if (pending) {
       const p = previewAttack(s, unit, pending);
-      const mods = `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}`;
+      const mods =
+        `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}` +
+        `${p.pointBonus ? ` +${p.pointBonus} point` : ''}`;
       model.preview = {
         text: `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
@@ -765,6 +792,16 @@ export class Controller {
     if (canAct(s, unit)) {
       if (needsLoading(s, unit) && !unit.loaded) {
         actions.push({ label: `${attackName(s, unit)} (load first)`, disabled: true, onClick: () => {} });
+      } else if (hasDoubleAction(s, unit)) {
+        // Master Ninja: the attack gets its own button so both actions stay visible.
+        hints.push(`tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()} (ends this model's turn)`);
+        actions.push({
+          label: attackName(s, unit),
+          onClick: () => {
+            this.ui.message = `Tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()}. Attacking ends this model's turn.`;
+            this.render();
+          },
+        });
       } else {
         hints.push(`tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()}`);
       }
@@ -774,10 +811,11 @@ export class Controller {
       const reason = specialBlockedReason(s, unit);
       const noTargets = sp.targeting !== 'none' && !reason && specialChoices(s, unit).length === 0;
       let label = sp.name;
-      if (reason) label += ` (${reason})`;
+      if (unit.specialUsed) label += ' ✓';
+      else if (reason) label += ` (${reason})`;
       else if (noTargets) label += ' (no targets)';
-      else if (id === 'dash') label += ` (+${dashAmount(s, unit.die!)})`;
-      else if (id === 'heal') label += ` (+${healAmount(s, unit.die!)})`;
+      else if (id === 'dash') label += ` (+${dashAmount(s, actionDie(s, unit))})`;
+      else if (id === 'heal') label += ` (+${healAmount(s, actionDie(s, unit))})`;
       actions.push({
         label,
         disabled: !!reason || noTargets,

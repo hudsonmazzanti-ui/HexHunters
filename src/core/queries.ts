@@ -21,10 +21,26 @@ export const terrainHeight = (state: GameState, h: Hex): number => state.map.hei
 export const livingUnits = (state: GameState, owner: PlayerId): Unit[] =>
   state.units.filter((u) => u.owner === owner && u.pos);
 
+/** Defense without temporary armor (Brace): base plus permanent aura bonuses (Warden). */
+export const baseDefense = (state: GameState, unit: Unit): number =>
+  unitDef(state, unit).defense + (auraEffects(state, unit).defenseBonus ?? 0);
+
+/** Defense against attacks: base, aura bonuses and Brace. */
 export function effectiveDefense(state: GameState, unit: Unit): number {
   const bonus = unit.braced ? state.config.specials.braceDefenseBonus : 0;
-  return unitDef(state, unit).defense + bonus;
+  return baseDefense(state, unit) + bonus;
 }
+
+/** Max health, including aura bonuses (Warden). */
+export const maxHealth = (state: GameState, unit: Unit): number =>
+  unitDef(state, unit).health + (auraEffects(state, unit).healthBonus ?? 0);
+
+/** Basic-attack damage, including aura bonuses (Warden). */
+export const attackDamage = (state: GameState, unit: Unit): number =>
+  unitDef(state, unit).damage + (auraEffects(state, unit).damageBonus ?? 0);
+
+/** May this unit attack after using its special this turn? (Master Ninja) */
+export const hasDoubleAction = (state: GameState, unit: Unit): boolean => !!auraEffects(state, unit).doubleAction;
 
 /**
  * Can `viewer` see a model of `targetSize` standing on `target`?
@@ -89,3 +105,9 @@ export const needsLoading = (state: GameState, unit: Unit): boolean =>
   !!unitDef(state, unit).needsLoading && !auraEffects(state, unit).noLoading;
 
 export const isHero = (state: GameState, unit: Unit): boolean => !!unitDef(state, unit).hero;
+
+/** Die bonus a unit gets when it acts right now (Standard Bearer: +2 while on the control point). */
+export const actionBonus = (state: GameState, unit: Unit): number => auraEffects(state, unit).actionRollBonus ?? 0;
+
+/** The die value used when the unit acts now: its rolled die (incl. Prep/Marshal) plus any action bonus. */
+export const actionDie = (state: GameState, unit: Unit): number => (unit.die ?? 0) + actionBonus(state, unit);

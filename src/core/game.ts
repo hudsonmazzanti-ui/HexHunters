@@ -7,10 +7,10 @@
 import { type Hex, hexEquals } from './hex';
 import { validateArmy } from './army';
 import { type AttackResult, resolveAttack } from './combat';
-import { auraEffects } from './auras';
+import { auraEffects, holdPoints } from './auras';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
-import { getUnit, livingUnits, movePath, other, unitAt, unitSpeed, unitsOnControlPoint } from './queries';
+import { getUnit, livingUnits, maxHealth, movePath, other, unitAt, unitSpeed, unitsOnControlPoint } from './queries';
 import { nextRandom } from './rng';
 import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
@@ -34,7 +34,8 @@ export type GameEvent =
   | ({ type: 'special'; unitId: string } & SpecialResult)
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
   | ({ type: 'overwatch' } & OverwatchShot)
-  | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null }
+  /** `points` is what the scorer got (Standard Bearer: 2), 0 on a tie. */
+  | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null; points: number }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
@@ -93,9 +94,13 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       const reason = validateArmy(state.config, action.units);
       if (reason) fail(reason);
       const player = state.current;
-      action.units.forEach((type, i) => state.units.push(newUnit(state.config, player, type, i)));
       // Hero auras belong to the army for the whole game, even if the hero later dies.
       state.auras[player] = action.units.flatMap((t) => state.config.units[t].hero?.aura ?? []);
+      action.units.forEach((type, i) => {
+        const unit = newUnit(state.config, player, type, i);
+        state.units.push(unit);
+        unit.hp = maxHealth(state, unit); // aura health bonuses (Warden) apply from the start
+      });
       if (player === 0) {
         state.current = 1;
       } else {
@@ -186,6 +191,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     dieBonus: 0,
     movesLeft: 0,
     acted: false,
+    specialUsed: false,
     turnStartPos: null,
     braced: false,
     prepped: false,
@@ -233,7 +239,7 @@ export function isInDeployZone(state: GameState, player: PlayerId, h: Hex): bool
 
 /** A move can be undone until the model uses its die, if its start hex is still free. */
 export function canUndoMove(state: GameState, unit: Unit): boolean {
-  if (state.phase !== 'play' || unit.owner !== state.current || unit.acted) return false;
+  if (state.phase !== 'play' || unit.owner !== state.current || unit.acted || unit.specialUsed) return false;
   if (!unit.pos || !unit.turnStartPos || hexEquals(unit.pos, unit.turnStartPos)) return false;
   return !unitAt(state, unit.turnStartPos);
 }
@@ -254,6 +260,7 @@ function startTurn(state: GameState, events: GameEvent[]): void {
     unit.die = rollDie(state) + unit.dieBonus;
     unit.movesLeft = unitSpeed(state, unit);
     unit.acted = false;
+    unit.specialUsed = false;
     unit.turnStartPos = unit.pos;
     unit.braced = false; // Brace lasts "until your next turn"
     dice[unit.id] = unit.die;
@@ -293,8 +300,9 @@ function endTurn(state: GameState, events: GameEvent[]): void {
 function scoreRound(state: GameState, events: GameEvent[]): void {
   const counts: [number, number] = [unitsOnControlPoint(state, 0).length, unitsOnControlPoint(state, 1).length];
   const scorer: PlayerId | null = counts[0] > counts[1] ? 0 : counts[1] > counts[0] ? 1 : null;
-  if (scorer !== null) state.scores[scorer] += 1;
-  events.push({ type: 'roundScored', round: state.round, counts, scorer });
+  const points = scorer === null ? 0 : holdPoints(state, scorer);
+  if (scorer !== null) state.scores[scorer] += points;
+  events.push({ type: 'roundScored', round: state.round, counts, scorer, points });
   if (scorer !== null && state.scores[scorer] >= state.config.pointsToWin) endGame(state, events, scorer, 'points');
 }
 

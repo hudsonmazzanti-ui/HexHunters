@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { unitDef } from '../core/queries';
+import { actionBonus, maxHealth, unitDef } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -52,6 +52,7 @@ interface UnitNodes {
   g: SVGGElement;
   die: SVGGElement;
   dieText: SVGTextElement;
+  dieRect: SVGRectElement;
   owText: SVGTextElement;
   hp: SVGGElement;
   hpText: SVGTextElement;
@@ -184,7 +185,7 @@ export class BoardView {
     // The pop animation uses a CSS transform, so position the badge with a wrapper group.
     const dieWrap = el('g', { transform: `translate(${r * 0.8 + 3} ${-r * 0.8 - 3})` }, g);
     const die = el('g', { class: 'badge die' }, dieWrap);
-    el('rect', { x: -9, y: -9, width: 18, height: 18, rx: 4 }, die);
+    const dieRect = el('rect', { x: -9, y: -9, width: 18, height: 18, rx: 4 }, die);
     const dieText = el('text', {}, die);
 
     // Overwatch: eye + locked die at the upper left (visible to both players).
@@ -202,7 +203,7 @@ export class BoardView {
     el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
     const hpText = el('text', {}, hp);
 
-    const nodes = { g, die, dieText, owText, hp, hpText };
+    const nodes = { g, die, dieText, dieRect, owText, hp, hpText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -233,11 +234,19 @@ export class BoardView {
 
     n.die.style.display = unit.die === null ? 'none' : '';
     n.die.classList.toggle('used', unit.acted);
-    n.die.classList.toggle('boosted', unit.dieBonus > 0);
-    if (!this.rolling.has(unit.id)) n.dieText.textContent = unit.die === null ? '' : String(unit.die);
+    if (!this.rolling.has(unit.id)) {
+      // Standard Bearer: show "8+2" while the model would get a bonus for acting here.
+      const bonus = unit.die !== null && !unit.acted ? actionBonus(state, unit) : 0;
+      const text = unit.die === null ? '' : bonus ? `${unit.die}+${bonus}` : String(unit.die);
+      n.dieText.textContent = text;
+      const width = text.length > 2 ? 28 : 18;
+      n.dieRect.setAttribute('width', String(width));
+      n.dieRect.setAttribute('x', String(-width / 2));
+      n.die.classList.toggle('boosted', unit.dieBonus > 0 || bonus > 0);
+    }
 
     n.hpText.textContent = String(unit.hp);
-    n.hp.classList.toggle('low', unit.hp <= Math.ceil(def.health / 3));
+    n.hp.classList.toggle('low', unit.hp <= Math.ceil(maxHealth(state, unit) / 3));
   }
 
   /** Walks a unit along a path one hex at a time. */

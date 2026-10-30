@@ -23,7 +23,7 @@ export type SpecialId =
   | 'hook';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
-export type AuraId = 'marshal' | 'siege' | 'warlord';
+export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard';
 
 export interface UnitDef {
   name: string;
@@ -97,6 +97,14 @@ export interface SpecialRules {
   marshalRollBonus: number;
   /** Warlord aura: extra movement for large models. */
   warlordSpeedBonus: number;
+  /** Warden aura: defense for Medics and Sentinels, damage for Medics, max health for Sentinels. */
+  wardenDefenseBonus: number;
+  wardenMedicDamageBonus: number;
+  wardenSentinelHealthBonus: number;
+  /** Standard Bearer aura: added to the die when a model acts while on the control point. */
+  standardRollBonus: number;
+  /** Standard Bearer aura: points scored for winning the control point at the end of a round. */
+  standardHoldPoints: number;
 }
 
 export interface Terrain {
@@ -128,8 +136,10 @@ export interface Unit {
   /** How much of `die` came from Prep, for display. */
   dieBonus: number;
   movesLeft: number;
-  /** True once the unit has used its die (attack or special). */
+  /** True once the unit has no actions left this turn (it used its die). */
   acted: boolean;
+  /** Used its special this turn. Normally that also sets `acted`; with Master Ninja it may still attack. */
+  specialUsed: boolean;
   /** Where the unit started this turn; used to undo a move. */
   turnStartPos: Hex | null;
   /** Brace bonus active until the owner's next turn starts. */

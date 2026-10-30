@@ -10,7 +10,7 @@
 import { dealDamage } from '../combat';
 import { type Hex, hexDistance, neighbors } from '../hex';
 import { hasLineOfSight } from '../los';
-import { onBoard, terrainHeight, unitAt, unitDef } from '../queries';
+import { actionDie, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -50,7 +50,7 @@ export const grenade: SpecialDef = {
   tags: ['Needs die 10+', 'Always hits', 'Friendly fire'],
   usable: (state, unit) => {
     const min = state.config.specials.grenadeMinDie;
-    return unit.die! < min ? `needs ${min}+` : null;
+    return actionDie(state, unit) < min ? `needs ${min}+` : null;
   },
   checkChoice: (state, unit, { hex }) => {
     const d = hexDistance(unit.pos!, hex!);

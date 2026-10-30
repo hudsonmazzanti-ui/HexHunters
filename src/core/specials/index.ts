@@ -7,7 +7,7 @@
  * is not allowed, so a die is never wasted by accident.
  */
 import { DIRECTIONS, hexagon } from '../hex';
-import { canAct, getUnit } from '../queries';
+import { canAct, getUnit, hasDoubleAction } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
 import { dash } from './dash';
@@ -85,6 +85,7 @@ export function specialBlockedReason(state: GameState, unit: Unit, choice?: Spec
   if (!canAct(state, unit)) return 'This model cannot act';
   const sp = specialOf(state, unit);
   if (!sp) return 'No special action';
+  if (unit.specialUsed) return 'already used';
   const general = sp.usable?.(state, unit);
   if (general) return general;
   if (!choice) return null;
@@ -136,7 +137,9 @@ export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice
   if (reason) throw new Error(reason);
   const sp = specialOf(state, unit)!; // a unit without a special was rejected above
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
-  unit.acted = true;
+  unit.specialUsed = true;
+  // Normally the special uses up the die. With Master Ninja's aura the unit may still attack afterwards.
+  unit.acted = !hasDoubleAction(state, unit);
   // Using the die ends movement, unless the special says otherwise (Dash, Vault).
   if (!sp.keepsMovement) unit.movesLeft = 0;
   return { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };

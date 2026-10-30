@@ -15,7 +15,7 @@
  */
 import { dealDamage } from '../combat';
 import { type Hex, hexDistance, hexLine } from '../hex';
-import { canSeeUnit, terrainHeight, unitAt } from '../queries';
+import { actionDie, canSeeUnit, terrainHeight, unitAt } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { SpecialDef, SpecialPreview } from './types';
 
@@ -52,7 +52,7 @@ export const hook: SpecialDef = {
   tags: ['Needs die 7+', 'Always hits', 'Hits allies too'],
   usable: (state, unit) => {
     const min = state.config.specials.hookMinDie;
-    return unit.die! < min ? `needs ${min}+` : null;
+    return actionDie(state, unit) < min ? `needs ${min}+` : null;
   },
   checkChoice: (state, unit, { target }) => {
     if (hexDistance(unit.pos!, target!.pos!) > state.config.specials.hookRange) return 'Out of range';

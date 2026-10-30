@@ -204,6 +204,42 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 4,
     hero: { aura: 'warlord' },
   },
+  warden: {
+    name: 'Warden',
+    label: 'Wd',
+    cost: 6,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 10,
+    range: 4,
+    damage: 3,
+    hero: { aura: 'warden' },
+  },
+  masterninja: {
+    name: 'Master Ninja',
+    label: 'MN',
+    cost: 7,
+    size: 1, // small
+    speed: SPEED.fast,
+    defense: 5,
+    health: 7,
+    range: 1, // melee only
+    damage: 4,
+    hero: { aura: 'ninja' },
+  },
+  standardbearer: {
+    name: 'Standard Bearer',
+    label: 'SB',
+    cost: 6,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 10,
+    range: 3,
+    damage: 3,
+    hero: { aura: 'standard' },
+  },
 };
 
 /** Display name of the hero that grants an aura (e.g. "Warlord"). */
@@ -238,5 +274,10 @@ export const DEFAULT_CONFIG: GameConfig = {
     hookDamage: 1,
     marshalRollBonus: 2,
     warlordSpeedBonus: 1,
+    wardenDefenseBonus: 1,
+    wardenMedicDamageBonus: 1,
+    wardenSentinelHealthBonus: 2,
+    standardRollBonus: 2,
+    standardHoldPoints: 2,
   },
 };
