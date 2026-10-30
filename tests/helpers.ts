@@ -48,10 +48,12 @@ export function addUnit(
     pos,
     hp: def.health,
     die: owner === state.current ? 6 : null,
+    dieBonus: 0,
     movesLeft: owner === state.current ? def.speed : 0,
     acted: false,
     turnStartPos: pos,
     braced: false,
+    prepped: false,
     spottedBy: null,
     ...extra,
   };

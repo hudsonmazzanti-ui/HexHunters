@@ -61,20 +61,24 @@ export function renderTopBar(state: GameState): void {
   const label = h('div', 'turn-label');
   const who = h('div', 'who');
   const sub = h('div', 'round');
-  if (state.phase === 'deploy') {
+  if (state.phase === 'build') {
+    who.textContent = `${PLAYER_NAMES[state.current]} builds`;
+    sub.textContent = 'Army building';
+  } else if (state.phase === 'deploy') {
     who.textContent = `${PLAYER_NAMES[state.current]} deploys`;
     sub.textContent = 'Setup';
   } else if (state.phase === 'over') {
-    who.textContent = `${PLAYER_NAMES[state.winner!]} wins!`;
+    who.textContent = state.winner === null ? 'Draw!' : `${PLAYER_NAMES[state.winner]} wins!`;
     sub.textContent = `Round ${state.round}`;
   } else {
     who.textContent = `${PLAYER_NAMES[state.current]}'s turn`;
     sub.textContent = `Round ${state.round} · turn ${state.turnInRound + 1}/2`;
   }
-  who.style.color = PLAYER_COLORS[state.phase === 'over' ? state.winner! : state.current];
+  const color = state.phase === 'over' ? (state.winner === null ? '#9aa4b6' : PLAYER_COLORS[state.winner]) : PLAYER_COLORS[state.current];
+  who.style.color = color;
   label.append(who, sub);
 
-  bar.style.setProperty('--turn-color', PLAYER_COLORS[state.phase === 'over' ? state.winner! : state.current]);
+  bar.style.setProperty('--turn-color', color);
   bar.replaceChildren(score(0), label, score(1));
 }
 

@@ -47,13 +47,14 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
   // Spot is used up by the attack, hit or miss.
   if (p.bonus > 0) target.spottedBy = null;
 
-  let killed = false;
-  if (p.hit) {
-    target.hp = Math.max(0, target.hp - p.damage);
-    if (target.hp === 0) {
-      killed = true;
-      state.units = state.units.filter((u) => u.id !== target.id);
-    }
-  }
+  const killed = p.hit && dealDamage(state, target, p.damage);
   return { roll: p.roll, bonus: p.bonus, defense: p.defense, hit: p.hit, damage: p.hit ? p.damage : 0, killed };
+}
+
+/** Applies damage, removing the model at 0 health. Returns true if it was killed. */
+export function dealDamage(state: GameState, target: Unit, amount: number): boolean {
+  target.hp = Math.max(0, target.hp - amount);
+  if (target.hp > 0) return false;
+  state.units = state.units.filter((u) => u.id !== target.id);
+  return true;
 }

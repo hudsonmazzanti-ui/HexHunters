@@ -1,29 +1,33 @@
 /**
  * All balance numbers live here. Tweak freely; no game logic needs to change.
+ * To add a unit, add an entry to UNITS (stats, cost, special id). Special action
+ * logic and descriptions live in src/core/specials/.
  *
  * Attacks hit when (d12 + modifiers) >= target defense, so on a plain roll:
- *   defense 6 -> 58% hit, 7 -> 50%, 8 -> 42%, 9 -> 33%.
+ *   defense 5 -> 67% hit, 6 -> 58%, 7 -> 50%, 8 -> 42%.
  */
-import type { GameConfig, SpecialId, UnitDef } from '../core/types';
+import type { GameConfig, UnitDef } from '../core/types';
 
 export const UNITS: Record<string, UnitDef> = {
   infantry: {
     name: 'Infantry',
     label: 'I',
+    cost: 3,
     size: 2, // medium
     speed: 3, // normal
-    defense: 7,
+    defense: 6,
     health: 6,
     range: 5,
     damage: 2,
-    special: 'brace',
+    special: 'prep',
   },
   medic: {
     name: 'Medic',
     label: 'M',
+    cost: 3,
     size: 1, // small
     speed: 3, // normal
-    defense: 6,
+    defense: 5,
     health: 4,
     range: 3,
     damage: 1,
@@ -32,9 +36,10 @@ export const UNITS: Record<string, UnitDef> = {
   sniper: {
     name: 'Sniper',
     label: 'Sn',
+    cost: 3,
     size: 1, // small
     speed: 2, // slow
-    defense: 6,
+    defense: 5,
     health: 4,
     range: 10,
     damage: 4,
@@ -43,9 +48,10 @@ export const UNITS: Record<string, UnitDef> = {
   scout: {
     name: 'Scout',
     label: 'Sc',
+    cost: 2,
     size: 1, // small
     speed: 4, // fast
-    defense: 8,
+    defense: 7,
     health: 3,
     range: 3,
     damage: 2,
@@ -54,22 +60,51 @@ export const UNITS: Record<string, UnitDef> = {
   heavy: {
     name: 'Heavy',
     label: 'H',
+    cost: 4,
     size: 3, // large
     speed: 2, // slow
     defense: 6,
     health: 12,
     range: 3,
     damage: 4,
-    special: 'shove',
+    special: 'brace',
   },
-};
-
-export const SPECIAL_INFO: Record<SpecialId, { name: string; text: string }> = {
-  brace: { name: 'Brace', text: '+2 defense until your next turn.' },
-  heal: { name: 'Heal', text: 'Heal an adjacent ally for half the die (rounded down).' },
-  spot: { name: 'Spot', text: 'Mark a visible enemy: your next attack on it gets +2.' },
-  dash: { name: 'Dash', text: 'Move extra hexes equal to die / 3 (rounded down).' },
-  shove: { name: 'Shove', text: 'Push an adjacent enemy 1 hex directly away.' },
+  assassin: {
+    name: 'Assassin',
+    label: 'A',
+    cost: 2,
+    size: 1, // small
+    speed: 4, // fast
+    defense: 5,
+    health: 3,
+    range: 1, // melee only
+    damage: 4,
+    special: 'vault',
+  },
+  grenadier: {
+    name: 'Grenadier',
+    label: 'G',
+    cost: 3,
+    size: 2, // medium
+    speed: 3, // normal
+    defense: 6,
+    health: 5,
+    range: 4,
+    damage: 2,
+    special: 'grenade',
+  },
+  flamer: {
+    name: 'Flamer',
+    label: 'F',
+    cost: 4,
+    size: 2, // medium
+    speed: 2, // slow
+    defense: 6,
+    health: 9,
+    range: 3,
+    damage: 3,
+    special: 'torch',
+  },
 };
 
 export const DEFAULT_CONFIG: GameConfig = {
@@ -80,12 +115,17 @@ export const DEFAULT_CONFIG: GameConfig = {
   deployRows: 2,
   dieSides: 12,
   pointsToWin: 5,
-  army: ['infantry', 'infantry', 'medic', 'sniper', 'scout', 'heavy'],
+  armyPointLimit: 16,
   units: UNITS,
   specials: {
     braceDefenseBonus: 2,
+    prepRollBonus: 2,
     spotAttackBonus: 2,
     healDivisor: 2,
     dashDivisor: 3,
+    grenadeMinDie: 10,
+    grenadeImpactDamage: 2,
+    grenadeSplashDamage: 1,
+    torchLength: 2,
   },
 };

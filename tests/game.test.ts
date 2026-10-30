@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../src/data/config';
-import { type Action, type GameEvent, applyAction, newGame } from '../src/core/game';
-import { hex } from '../src/core/hex';
+import { type Action, type GameEvent, applyAction, newGame, unplacedUnits } from '../src/core/game';
+import { hex, hexEquals } from '../src/core/hex';
 import { getUnit, livingUnits } from '../src/core/queries';
 import type { GameState } from '../src/core/types';
 import { addUnit, makeState } from './helpers';
@@ -16,37 +16,75 @@ function run(state: GameState, ...actions: Action[]): { state: GameState; events
   return { state, events };
 }
 
-const deployBoth = (s: GameState) =>
-  run(s, { type: 'autoDeploy' }, { type: 'finishDeploy' }, { type: 'autoDeploy' }, { type: 'finishDeploy' });
+const ARMY = ['infantry', 'infantry', 'medic', 'sniper', 'scout']; // 14 points
+
+/** Builds both armies, then deploys by always placing the first unplaced model on the first free hex. */
+function deployAll(state: GameState): { state: GameState; events: GameEvent[] } {
+  const events: GameEvent[] = [];
+  while (state.phase === 'deploy') {
+    const unit = unplacedUnits(state, state.current)[0];
+    const hex = state.map.deployZones[state.current].find((h) => !state.units.some((u) => u.pos && hexEquals(u.pos, h)))!;
+    const r = applyAction(state, { type: 'place', unitId: unit.id, hex });
+    state = r.state;
+    events.push(...r.events);
+  }
+  return { state, events };
+}
+
+const buildBoth = (s: GameState, a = ARMY, b = ARMY) =>
+  run(s, { type: 'chooseArmy', units: a }, { type: 'chooseArmy', units: b }).state;
+
+const deployBoth = (s: GameState) => deployAll(buildBoth(s));
+
+describe('army building', () => {
+  it('starts in the build phase with no models', () => {
+    const s = newGame(DEFAULT_CONFIG, 1);
+    expect(s).toMatchObject({ phase: 'build', current: 0, units: [] });
+  });
+
+  it('player 1 builds, then player 2, then deployment starts with player 1', () => {
+    const s = newGame(DEFAULT_CONFIG, 1);
+    const p2 = run(s, { type: 'chooseArmy', units: ['heavy', 'heavy'] }).state;
+    expect(p2).toMatchObject({ phase: 'build', current: 1 });
+    expect(p2.units.map((u) => [u.owner, u.type])).toEqual([[0, 'heavy'], [0, 'heavy']]);
+    const { state, events } = run(p2, { type: 'chooseArmy', units: ['scout'] });
+    expect(state).toMatchObject({ phase: 'deploy', current: 0 });
+    expect(state.units.filter((u) => u.owner === 1)).toHaveLength(1);
+    expect(events).toEqual([{ type: 'armyChosen', player: 1, next: null }]);
+  });
+
+  it('rejects an army over the point limit', () => {
+    const s = newGame(DEFAULT_CONFIG, 1);
+    expect(() => applyAction(s, { type: 'chooseArmy', units: ['heavy', 'heavy', 'heavy', 'heavy', 'scout'] })).toThrow('limit');
+  });
+});
 
 describe('deployment', () => {
-  it('starts in deployment with every model off the board', () => {
-    const s = newGame(DEFAULT_CONFIG, 1);
-    expect(s.phase).toBe('deploy');
-    expect(s.units).toHaveLength(DEFAULT_CONFIG.army.length * 2);
-    expect(s.units.every((u) => u.pos === null)).toBe(true);
-  });
-
-  it('only allows placing in your own zone, on free hexes', () => {
-    const s = newGame(DEFAULT_CONFIG, 1);
-    const [a, b] = s.units.filter((u) => u.owner === 0);
-    const zone = s.map.deployZones[0];
+  it('only allows placing unplaced models in your own zone, on free hexes', () => {
+    const s = buildBoth(newGame(DEFAULT_CONFIG, 1));
+    const [a] = s.units.filter((u) => u.owner === 0);
+    const zone0 = s.map.deployZones[0];
     expect(() => applyAction(s, { type: 'place', unitId: a.id, hex: hex(0, 0) })).toThrow('Outside');
     expect(() => applyAction(s, { type: 'place', unitId: a.id, hex: s.map.deployZones[1][0] })).toThrow('Outside');
-    const placed = applyAction(s, { type: 'place', unitId: a.id, hex: zone[0] }).state;
-    expect(() => applyAction(placed, { type: 'place', unitId: b.id, hex: zone[0] })).toThrow('occupied');
     const enemy = s.units.find((u) => u.owner === 1)!;
-    expect(() => applyAction(s, { type: 'place', unitId: enemy.id, hex: zone[0] })).toThrow('Not your model');
+    expect(() => applyAction(s, { type: 'place', unitId: enemy.id, hex: zone0[0] })).toThrow('Not your model');
+    const placed = applyAction(s, { type: 'place', unitId: a.id, hex: zone0[0] }).state;
+    // Player 2's turn to place now; then back to player 1, who can't stack or re-place.
+    const p2unit = placed.units.find((u) => u.owner === 1)!;
+    const back = applyAction(placed, { type: 'place', unitId: p2unit.id, hex: placed.map.deployZones[1][0] }).state;
+    const b = back.units.filter((u) => u.owner === 0)[1];
+    expect(() => applyAction(back, { type: 'place', unitId: b.id, hex: zone0[0] })).toThrow('occupied');
+    expect(() => applyAction(back, { type: 'place', unitId: a.id, hex: zone0[1] })).toThrow('Already placed');
   });
 
-  it('requires all models placed, then hands over to player 2, then starts round 1', () => {
-    const s = newGame(DEFAULT_CONFIG, 1);
-    expect(() => applyAction(s, { type: 'finishDeploy' })).toThrow();
-    const p2 = run(s, { type: 'autoDeploy' }, { type: 'finishDeploy' }).state;
-    expect(p2.current).toBe(1);
-    const { state, events } = run(p2, { type: 'autoDeploy' }, { type: 'finishDeploy' });
-    expect(state.phase).toBe('play');
-    expect(state.current).toBe(0);
+  it('alternates one model at a time; the bigger army finishes alone; then round 1 starts', () => {
+    const s = buildBoth(newGame(DEFAULT_CONFIG, 1), ['scout', 'scout', 'scout'], ['heavy']);
+    const { state, events } = deployAll(s);
+    const order = events.filter((e) => e.type === 'placed').map((e) => (e.type === 'placed' ? e.unitId.slice(0, 2) : ''));
+    expect(order).toEqual(['p0', 'p1', 'p0', 'p0']);
+    const nexts = events.filter((e) => e.type === 'placed').map((e) => (e.type === 'placed' ? e.next : -1));
+    expect(nexts).toEqual([1, 0, 0, null]);
+    expect(state).toMatchObject({ phase: 'play', current: 0, round: 1 });
     expect(events.at(-1)).toMatchObject({ type: 'turnStart', player: 0, round: 1 });
   });
 });
@@ -120,7 +158,7 @@ describe('turn flow', () => {
 
   it('Brace and Spot expire at the start of the owner’s next turn', () => {
     const s = makeState();
-    const inf = addUnit(s, 'infantry', 0, hex(0, 3));
+    const inf = addUnit(s, 'heavy', 0, hex(0, 3));
     const sniper = addUnit(s, 'sniper', 0, hex(2, 3));
     const enemy = addUnit(s, 'infantry', 1, hex(0, -3));
     let state = run(s, { type: 'special', unitId: inf.id }, { type: 'special', unitId: sniper.id, targetId: enemy.id }).state;
@@ -131,6 +169,29 @@ describe('turn flow', () => {
     state = run(state, { type: 'endTurn' }).state; // player 1's turn
     expect(getUnit(state, inf.id)!.braced).toBe(false);
     expect(getUnit(state, enemy.id)!.spottedBy).toBeNull();
+  });
+
+  it('Prep adds +2 to the model’s die on its next turn only', () => {
+    const setup = () => {
+      const s = makeState();
+      const inf = addUnit(s, 'infantry', 0, hex(0, 3));
+      addUnit(s, 'infantry', 1, hex(0, -3));
+      return { s, inf };
+    };
+    // Same seed with and without Prep, so the underlying rolls are identical.
+    const a = setup();
+    const b = setup();
+    const toP1Turn: Action[] = [{ type: 'endTurn' }, { type: 'endTurn' }, { type: 'endTurn' }];
+    let prepped = run(a.s, { type: 'special', unitId: a.inf.id }, ...toP1Turn).state;
+    const plain = run(b.s, ...toP1Turn).state;
+    expect(prepped.current).toBe(0);
+    expect(getUnit(prepped, a.inf.id)).toMatchObject({ prepped: false, dieBonus: 2 });
+    expect(getUnit(prepped, a.inf.id)!.die).toBe(getUnit(plain, b.inf.id)!.die! + 2);
+
+    // The bonus doesn't carry over to the turn after.
+    prepped = run(prepped, { type: 'endTurn' }).state; // round 2 ends; P1 goes first in round 3
+    expect(prepped.current).toBe(0);
+    expect(getUnit(prepped, a.inf.id)!.dieBonus).toBe(0);
   });
 });
 

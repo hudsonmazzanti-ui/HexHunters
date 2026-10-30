@@ -7,10 +7,12 @@ export type Size = 1 | 2 | 3;
 
 export type TerrainHeight = 1 | 2;
 
-export type SpecialId = 'brace' | 'heal' | 'spot' | 'dash' | 'shove';
+export type SpecialId = 'brace' | 'prep' | 'heal' | 'spot' | 'dash' | 'shove' | 'vault' | 'grenade' | 'torch';
 
 export interface UnitDef {
   name: string;
+  /** Army-building cost in points. Any positive integer. */
+  cost: number;
   /** 1–2 letter label drawn on the model. */
   label: string;
   size: Size;
@@ -34,19 +36,27 @@ export interface GameConfig {
   deployRows: number;
   dieSides: number;
   pointsToWin: number;
-  /** Unit type ids (keys of the unit table) making up each player's army. */
-  army: string[];
+  /** Maximum total cost of each player's army. */
+  armyPointLimit: number;
   units: Record<string, UnitDef>;
   specials: SpecialRules;
 }
 
 export interface SpecialRules {
   braceDefenseBonus: number;
+  /** Added to the model's die on its next turn after using Prep. */
+  prepRollBonus: number;
   spotAttackBonus: number;
   /** Heal amount = floor(die / healDivisor). */
   healDivisor: number;
   /** Dash extra hexes = floor(die / dashDivisor). */
   dashDivisor: number;
+  /** Grenade needs a die of at least this. */
+  grenadeMinDie: number;
+  grenadeImpactDamage: number;
+  grenadeSplashDamage: number;
+  /** How many hexes Torch reaches. */
+  torchLength: number;
 }
 
 export interface Terrain {
@@ -73,8 +83,10 @@ export interface Unit {
   /** null while still waiting to be deployed. */
   pos: Hex | null;
   hp: number;
-  /** This turn's d12 result; null when not this unit's turn. */
+  /** This turn's d12 result (including any Prep bonus); null when not this unit's turn. */
   die: number | null;
+  /** How much of `die` came from Prep, for display. */
+  dieBonus: number;
   movesLeft: number;
   /** True once the unit has used its die (attack or special). */
   acted: boolean;
@@ -82,11 +94,15 @@ export interface Unit {
   turnStartPos: Hex | null;
   /** Brace bonus active until the owner's next turn starts. */
   braced: boolean;
+  /** Prep used: the next roll gets a bonus. */
+  prepped: boolean;
   /** Set by an enemy Sniper's Spot; the spotter's side gets a bonus on its next attack. */
   spottedBy: PlayerId | null;
 }
 
-export type Phase = 'deploy' | 'play' | 'over';
+export type WinReason = 'points' | 'elimination' | 'draw';
+
+export type Phase = 'build' | 'deploy' | 'play' | 'over';
 
 export interface GameState {
   config: GameConfig;
@@ -99,7 +115,8 @@ export interface GameState {
   /** 0 for the first turn of a round, 1 for the second. */
   turnInRound: 0 | 1;
   scores: [number, number];
+  /** null with phase 'over' means a draw. */
   winner: PlayerId | null;
-  winReason: 'points' | 'elimination' | null;
+  winReason: WinReason | null;
   rngState: number;
 }

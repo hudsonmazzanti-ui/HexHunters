@@ -4,32 +4,35 @@
  * Everything a player can do is an Action, so AI or network play can later drive
  * the game by producing the same actions as the UI.
  */
-import { type Hex, hexEquals, hexKey } from './hex';
+import { type Hex, hexEquals } from './hex';
+import { validateArmy } from './army';
 import { type AttackResult, resolveAttack } from './combat';
 import { generateMap } from './mapgen';
 import { movePath, getUnit, livingUnits, other, unitAt, unitDef, unitsOnControlPoint } from './queries';
-import { Rng, nextRandom } from './rng';
-import { type SpecialResult, applySpecial } from './specials';
-import type { GameConfig, GameState, PlayerId, Unit } from './types';
+import { nextRandom } from './rng';
+import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
+import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
 
 export type Action =
+  | { type: 'chooseArmy'; units: string[] }
   | { type: 'place'; unitId: string; hex: Hex }
-  | { type: 'unplace'; unitId: string }
-  | { type: 'autoDeploy' }
-  | { type: 'finishDeploy' }
   | { type: 'move'; unitId: string; to: Hex }
   | { type: 'undoMove'; unitId: string }
   | { type: 'attack'; unitId: string; targetId: string }
-  | { type: 'special'; unitId: string; targetId?: string }
+  | ({ type: 'special'; unitId: string } & SpecialChoice)
   | { type: 'endTurn' };
 
 export type GameEvent =
+  | { type: 'armyChosen'; player: PlayerId; next: PlayerId | null }
+  /** `next` is who places next during deployment (null once everyone is placed). */
+  | { type: 'placed'; unitId: string; hex: Hex; next: PlayerId | null }
   | { type: 'turnStart'; player: PlayerId; round: number; dice: Record<string, number> }
   | { type: 'move'; unitId: string; path: Hex[] }
   | ({ type: 'attack'; unitId: string; targetId: string } & AttackResult)
   | ({ type: 'special'; unitId: string } & SpecialResult)
   | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null }
-  | { type: 'gameOver'; winner: PlayerId; reason: 'points' | 'elimination' };
+  /** winner null = draw. */
+  | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
 export interface ActionResult {
   state: GameState;
@@ -39,32 +42,14 @@ export interface ActionResult {
 /** Player 1 (id 0) goes first in odd rounds, player 2 (id 1) in even rounds. */
 export const firstPlayerOfRound = (round: number): PlayerId => (round % 2 === 1 ? 0 : 1);
 
+/** Starts in the army-building phase: player 1 builds, then player 2. */
 export function newGame(config: GameConfig, seed: number): GameState {
-  const units: Unit[] = [];
-  for (const owner of [0, 1] as const) {
-    config.army.forEach((type, i) => {
-      if (!config.units[type]) throw new Error(`Unknown unit type "${type}" in army`);
-      units.push({
-        id: `p${owner}-${type}-${i}`,
-        type,
-        owner,
-        pos: null,
-        hp: config.units[type].health,
-        die: null,
-        movesLeft: 0,
-        acted: false,
-        turnStartPos: null,
-        braced: false,
-        spottedBy: null,
-      });
-    });
-  }
   return {
     config,
     seed,
     map: generateMap(config, seed),
-    units,
-    phase: 'deploy',
+    units: [],
+    phase: 'build',
     current: 0,
     round: 1,
     turnInRound: 0,
@@ -93,41 +78,38 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
   };
 
   switch (action.type) {
+    case 'chooseArmy': {
+      if (state.phase !== 'build') fail('Not building armies');
+      const reason = validateArmy(state.config, action.units);
+      if (reason) fail(reason);
+      const player = state.current;
+      action.units.forEach((type, i) => state.units.push(newUnit(state.config, player, type, i)));
+      if (player === 0) {
+        state.current = 1;
+      } else {
+        state.phase = 'deploy';
+        state.current = 0;
+      }
+      events.push({ type: 'armyChosen', player, next: player === 0 ? 1 : null });
+      break;
+    }
     case 'place': {
       if (state.phase !== 'deploy') fail('Not deploying');
       const unit = ownUnit(action.unitId);
+      if (unit.pos) fail('Already placed');
       if (!isInDeployZone(state, state.current, action.hex)) fail('Outside your deployment zone');
-      const occupant = unitAt(state, action.hex);
-      if (occupant && occupant.id !== unit.id) fail('Hex occupied');
+      if (unitAt(state, action.hex)) fail('Hex occupied');
       unit.pos = action.hex;
-      break;
-    }
-    case 'unplace': {
-      if (state.phase !== 'deploy') fail('Not deploying');
-      ownUnit(action.unitId).pos = null;
-      break;
-    }
-    case 'autoDeploy': {
-      if (state.phase !== 'deploy') fail('Not deploying');
-      const rng = new Rng(state.rngState);
-      for (const unit of state.units.filter((u) => u.owner === state.current && !u.pos)) {
-        const free = state.map.deployZones[state.current].filter((h) => !unitAt(state, h));
-        unit.pos = rng.pick(free);
-      }
-      state.rngState = rng.state;
-      break;
-    }
-    case 'finishDeploy': {
-      if (state.phase !== 'deploy') fail('Not deploying');
-      if (state.units.some((u) => u.owner === state.current && !u.pos)) fail('Place all models first');
-      if (state.current === 0) {
-        state.current = 1;
-      } else {
+      const next = nextDeployer(state);
+      events.push({ type: 'placed', unitId: unit.id, hex: action.hex, next });
+      if (next === null) {
         state.phase = 'play';
         state.round = 1;
         state.turnInRound = 0;
         state.current = firstPlayerOfRound(1);
         startTurn(state, events);
+      } else {
+        state.current = next;
       }
       break;
     }
@@ -155,15 +137,16 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       const target = getUnit(state, action.targetId) ?? fail('No such target');
       const result = guard(() => resolveAttack(state, unit, target));
       events.push({ type: 'attack', unitId: unit.id, targetId: target.id, ...result });
-      if (livingUnits(state, target.owner).length === 0) endGame(state, events, unit.owner, 'elimination');
+      checkElimination(state, events);
       break;
     }
     case 'special': {
       if (state.phase !== 'play') fail('Not in play');
       const unit = ownUnit(action.unitId);
-      const target = action.targetId ? (getUnit(state, action.targetId) ?? fail('No such target')) : undefined;
-      const result = guard(() => applySpecial(state, unit, target));
+      const { targetId, hex, dir } = action;
+      const result = guard(() => applySpecial(state, unit, { targetId, hex, dir }));
       events.push({ type: 'special', unitId: unit.id, ...result });
+      checkElimination(state, events);
       break;
     }
     case 'endTurn': {
@@ -173,6 +156,46 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
     }
   }
   return { state, events };
+}
+
+function newUnit(config: GameConfig, owner: PlayerId, type: string, index: number): Unit {
+  return {
+    id: `p${owner}-${type}-${index}`,
+    type,
+    owner,
+    pos: null,
+    hp: config.units[type].health,
+    die: null,
+    dieBonus: 0,
+    movesLeft: 0,
+    acted: false,
+    turnStartPos: null,
+    braced: false,
+    prepped: false,
+    spottedBy: null,
+  };
+}
+
+export const unplacedUnits = (state: GameState, player: PlayerId): Unit[] =>
+  state.units.filter((u) => u.owner === player && !u.pos);
+
+/**
+ * Deployment alternates one model at a time, starting with player 1. When one
+ * player runs out, the other places the rest. null once everything is placed.
+ */
+function nextDeployer(state: GameState): PlayerId | null {
+  const otherPlayer = other(state.current);
+  if (unplacedUnits(state, otherPlayer).length) return otherPlayer;
+  if (unplacedUnits(state, state.current).length) return state.current;
+  return null;
+}
+
+/** Ends the game if a side has no models left; a draw if both were wiped out at once. */
+function checkElimination(state: GameState, events: GameEvent[]): void {
+  const alive = [livingUnits(state, 0).length, livingUnits(state, 1).length];
+  if (alive[0] && alive[1]) return;
+  if (!alive[0] && !alive[1]) endGame(state, events, null, 'draw');
+  else endGame(state, events, alive[0] ? 0 : 1, 'elimination');
 }
 
 /** Re-throw rule violations from helpers as RuleErrors. */
@@ -204,7 +227,9 @@ function rollDie(state: GameState): number {
 function startTurn(state: GameState, events: GameEvent[]): void {
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
-    unit.die = rollDie(state);
+    unit.dieBonus = unit.prepped ? state.config.specials.prepRollBonus : 0;
+    unit.prepped = false;
+    unit.die = rollDie(state) + unit.dieBonus;
     unit.movesLeft = unitDef(state, unit).speed;
     unit.acted = false;
     unit.turnStartPos = unit.pos;
@@ -219,6 +244,7 @@ function startTurn(state: GameState, events: GameEvent[]): void {
 function endTurn(state: GameState, events: GameEvent[]): void {
   for (const unit of livingUnits(state, state.current)) {
     unit.die = null;
+    unit.dieBonus = 0;
     unit.movesLeft = 0;
     unit.turnStartPos = null;
   }
@@ -246,14 +272,10 @@ function scoreRound(state: GameState, events: GameEvent[]): void {
   if (scorer !== null && state.scores[scorer] >= state.config.pointsToWin) endGame(state, events, scorer, 'points');
 }
 
-function endGame(state: GameState, events: GameEvent[], winner: PlayerId, reason: 'points' | 'elimination'): void {
+function endGame(state: GameState, events: GameEvent[], winner: PlayerId | null, reason: WinReason): void {
   state.phase = 'over';
   state.winner = winner;
   state.winReason = reason;
   for (const unit of state.units) unit.die = null;
   events.push({ type: 'gameOver', winner, reason });
 }
-
-/** Keys of the hexes in a player's deployment zone that are still free. */
-export const freeDeployHexes = (state: GameState, player: PlayerId): Set<string> =>
-  new Set(state.map.deployZones[player].filter((h) => !unitAt(state, h)).map(hexKey));

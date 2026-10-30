@@ -4,8 +4,8 @@
  * resulting events as animations, and re-renders.
  */
 import { previewAttack } from '../core/combat';
-import { type Action, type GameEvent, RuleError, applyAction, canUndoMove, isInDeployZone, newGame } from '../core/game';
-import { type Hex, type Point, hexDistance, hexKey, hexagon, pixelToHex } from '../core/hex';
+import { type Action, type GameEvent, RuleError, applyAction, canUndoMove, isInDeployZone, newGame, unplacedUnits } from '../core/game';
+import { type Hex, type Point, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
   canAct,
   canSeeHex,
@@ -14,28 +14,46 @@ import {
   livingUnits,
   moveReach,
   onBoard,
+  other,
   terrainHeight,
   unitAt,
   unitDef,
 } from '../core/queries';
-import { SPECIAL_TARGET, dashAmount, healAmount, specialBlockedReason, specialOf, specialTargets } from '../core/specials';
-import type { GameConfig, GameState, PlayerId, Unit } from '../core/types';
 import { randomSeed } from '../core/rng';
-import { SPECIAL_INFO } from '../data/config';
+import {
+  type Effect,
+  type SpecialChoice,
+  SPECIALS,
+  dashAmount,
+  healAmount,
+  previewSpecial,
+  specialBlockedReason,
+  specialChoices,
+  specialIdOf,
+  specialOf,
+  specialTargets,
+} from '../core/specials';
+import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
 import { BoardView, type BoardOverlay, HEX_SIZE } from './board';
+import { showBuilder } from './builder';
 import { Camera } from './camera';
 import { PLAYER_COLORS, PLAYER_NAMES, type PanelAction, type PanelModel, renderPanel, renderTopBar } from './hud';
 import { showOverlay } from './overlay';
 
-// Opaque, so the next player's freshly rolled dice aren't visible before the roll animation.
+// Opaque, so the next player's freshly rolled dice (or army) aren't visible during handoff.
 const HANDOFF_BG = ['#172e5c', '#5c1717'];
+const NEUTRAL_BG = '#2a2f3a';
+
+const SIZE_NAMES = ['', 'small', 'medium', 'large'];
 
 interface UiState {
   selectedId: string | null;
-  /** Enemy/ally chosen as the target of an attack or special, awaiting confirmation. */
+  /** Enemy chosen as the target of an attack, awaiting confirmation. */
   pendingTargetId: string | null;
   /** True while choosing a target for the selected unit's special action. */
   specialMode: boolean;
+  /** Target chosen for the special, previewed and awaiting confirmation. */
+  pendingChoice: SpecialChoice | null;
   /** Tap End Turn twice when models still have unused dice. */
   confirmEndTurn: boolean;
   message: string | null;
@@ -58,7 +76,14 @@ export class Controller {
   }
 
   private freshUi(): UiState {
-    return { selectedId: null, pendingTargetId: null, specialMode: false, confirmEndTurn: false, message: null };
+    return {
+      selectedId: null,
+      pendingTargetId: null,
+      specialMode: false,
+      pendingChoice: null,
+      confirmEndTurn: false,
+      message: null,
+    };
   }
 
   async start(seed: number): Promise<void> {
@@ -71,7 +96,7 @@ export class Controller {
     }
     this.camera.fit();
     this.render();
-    await this.deployHandoff();
+    await this.buildArmies();
   }
 
   // ---------- Dispatch & events ----------
@@ -90,6 +115,11 @@ export class Controller {
     this.state = result.state;
     this.ui.message = null;
     this.ui.confirmEndTurn = false;
+    if (action.type === 'attack' || action.type === 'special') {
+      this.ui.pendingTargetId = null;
+      this.ui.pendingChoice = null;
+      this.ui.specialMode = false;
+    }
     this.busy = true;
     try {
       await this.playEvents(before, result.events);
@@ -103,6 +133,16 @@ export class Controller {
   private async playEvents(before: GameState, events: GameEvent[]): Promise<void> {
     for (const ev of events) {
       switch (ev.type) {
+        case 'armyChosen':
+          if (ev.next === null) await this.deployHandoff(this.state.current);
+          break;
+        case 'placed': {
+          this.ui = this.freshUi();
+          this.render();
+          const placer = getUnit(this.state, ev.unitId)!.owner;
+          if (ev.next !== null && ev.next !== placer) await this.deployHandoff(ev.next);
+          break;
+        }
         case 'move':
           await this.board.animateMove(ev.unitId, ev.path);
           break;
@@ -118,25 +158,9 @@ export class Controller {
           this.render();
           break;
         }
-        case 'special': {
-          const unit = getUnit(before, ev.unitId)!;
-          const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
-          const name = SPECIAL_INFO[ev.special].name;
-          const texts: Record<string, string> = {
-            brace: 'BRACED',
-            dash: `DASH +${ev.amount}`,
-            heal: `+${ev.amount}`,
-            spot: 'SPOTTED',
-            shove: 'SHOVED',
-          };
-          this.board.floatText((target ?? unit).pos!, texts[ev.special], '#c4b5fd');
-          if (ev.special === 'shove') {
-            this.render();
-            await this.board.animateMove(ev.targetId!, [ev.to!]);
-          }
-          this.ui.message = `${unitDef(before, unit).name} used ${name}.`;
+        case 'special':
+          await this.playSpecial(before, ev);
           break;
-        }
         case 'roundScored':
           // Shown on the next handoff screen.
           break;
@@ -154,19 +178,79 @@ export class Controller {
     }
   }
 
+  private async playSpecial(before: GameState, ev: Extract<GameEvent, { type: 'special' }>): Promise<void> {
+    const unit = getUnit(before, ev.unitId)!;
+    const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
+    const sp = SPECIALS[ev.special];
+    const labels: Partial<Record<string, string>> = {
+      brace: 'BRACED',
+      prep: 'PREPPED',
+      dash: `DASH +${ev.amount}`,
+      heal: `+${ev.amount}`,
+      spot: 'SPOTTED',
+      shove: 'SHOVED',
+      vault: 'VAULT',
+    };
+    const label = labels[ev.special];
+    if (label) this.board.floatText((target ?? unit).pos!, label, '#c4b5fd');
+
+    if (ev.special === 'grenade' && ev.hex) {
+      this.board.shot(unit.pos!, ev.hex, '#f97316');
+      this.board.flash([ev.hex], 'flash-impact');
+      this.board.flash(neighbors(ev.hex), 'flash-splash');
+    }
+    if (ev.special === 'torch' && ev.dir !== undefined) {
+      const preview = previewSpecial(before, unit, { dir: ev.dir });
+      if (preview) this.board.flash(preview.area.map((a) => a.hex), 'flash-impact');
+    }
+    for (const e of ev.effects ?? []) {
+      const pos = getUnit(before, e.unitId)?.pos;
+      if (!pos) continue;
+      if (e.hit === false) this.board.floatText(pos, 'MISS', '#e5e7eb');
+      else this.board.floatText(pos, `-${e.damage}`, '#fca5a5');
+    }
+
+    if (ev.movedId && ev.to) {
+      this.render();
+      await this.board.animateMove(ev.movedId, [ev.to]);
+    }
+
+    const kills = (ev.effects ?? []).filter((e) => e.killed).length;
+    let message = `${unitDef(before, unit).name} used ${sp.name}.`;
+    if (ev.effects) message += ` ${this.effectsText(before, unit.owner, ev.effects, false)}`;
+    if (kills) message += ` ${kills} destroyed!`;
+    if (ev.special === 'vault' && getUnit(this.state, unit.id)?.movesLeft) message += ' It can keep moving.';
+    this.ui.message = message;
+  }
+
   // ---------- Overlays ----------
 
-  private async deployHandoff(): Promise<void> {
-    const p = this.state.current;
+  private async buildArmies(): Promise<void> {
+    const limit = this.state.config.armyPointLimit;
+    for (const p of [0, 1] as const) {
+      await showOverlay({
+        title: `${PLAYER_NAMES[p]}: build your army`,
+        lines: [`Spend up to ${limit} points.`, `${PLAYER_NAMES[other(p)]}, look away!`],
+        color: HANDOFF_BG[p],
+        tapText: 'Tap to start',
+      });
+      const units = await showBuilder(this.state.config, p);
+      await this.dispatch({ type: 'chooseArmy', units });
+    }
+  }
+
+  private async deployHandoff(p: PlayerId): Promise<void> {
+    const mine = unplacedUnits(this.state, p).length;
+    const theirs = unplacedUnits(this.state, other(p)).length;
     const rows = this.state.config.deployRows;
     await showOverlay({
-      title: `${PLAYER_NAMES[p]}: deploy`,
+      title: `${PLAYER_NAMES[p]}: place a model`,
       lines: [
-        `Place your models anywhere in the back ${rows} rows on your side (${p === 0 ? 'bottom' : 'top'}).`,
-        p === 1 ? 'Player 1, look away!' : 'Hand the device to Player 1.',
+        `Place one model in the back ${rows} rows on your side (${p === 0 ? 'bottom' : 'top'}).`,
+        `You have ${mine} left to place; ${PLAYER_NAMES[other(p)]} has ${theirs}.`,
       ],
       color: HANDOFF_BG[p],
-      tapText: 'Tap to start',
+      tapText: 'Tap to continue',
     });
   }
 
@@ -191,15 +275,16 @@ export class Controller {
     });
   }
 
-  private async gameOverScreen(winner: PlayerId, reason: 'points' | 'elimination'): Promise<void> {
+  private async gameOverScreen(winner: PlayerId | null, reason: WinReason): Promise<void> {
+    const reasons: Record<WinReason, string> = {
+      points: `Reached ${this.state.config.pointsToWin} points (${this.state.scores[0]} – ${this.state.scores[1]}).`,
+      elimination: 'Every enemy model was eliminated.',
+      draw: 'Both armies were wiped out at the same time.',
+    };
     await showOverlay({
-      title: `${PLAYER_NAMES[winner]} wins!`,
-      lines: [
-        reason === 'points'
-          ? `Reached ${this.state.config.pointsToWin} points (${this.state.scores[0]} – ${this.state.scores[1]}).`
-          : 'Every enemy model was eliminated.',
-      ],
-      color: HANDOFF_BG[winner],
+      title: winner === null ? 'Draw!' : `${PLAYER_NAMES[winner]} wins!`,
+      lines: [reasons[reason]],
+      color: winner === null ? NEUTRAL_BG : HANDOFF_BG[winner],
       buttons: [
         { label: 'New game', className: 'primary', onClick: () => void this.start(randomSeed()) },
         { label: 'View board', onClick: () => this.render() },
@@ -240,17 +325,14 @@ export class Controller {
   }
 
   private clearSelection(): void {
-    this.ui.selectedId = null;
-    this.ui.pendingTargetId = null;
-    this.ui.specialMode = false;
-    this.ui.message = null;
-    this.render();
+    this.selectUnit(null);
   }
 
   private selectUnit(id: string | null): void {
     this.ui.selectedId = id;
     this.ui.pendingTargetId = null;
     this.ui.specialMode = false;
+    this.ui.pendingChoice = null;
     this.ui.message = null;
     this.render();
   }
@@ -261,24 +343,18 @@ export class Controller {
 
   private onDeployTap(hex: Hex): void {
     const s = this.state;
-    const occupant = unitAt(s, hex);
-    if (occupant) {
-      this.selectUnit(occupant.owner === s.current ? occupant.id : null);
+    if (unitAt(s, hex)) {
+      this.selectUnit(unitAt(s, hex)!.id);
       return;
     }
     if (!isInDeployZone(s, s.current, hex)) {
-      this.ui.message = 'Place models in your highlighted zone.';
+      this.ui.message = 'Place your model in your highlighted zone.';
       this.render();
       return;
     }
-    const unit = this.selected() ?? s.units.find((u) => u.owner === s.current && !u.pos);
-    if (!unit || unit.owner !== s.current) return;
-    void this.dispatch({ type: 'place', unitId: unit.id, hex }).then((ok) => {
-      if (!ok) return;
-      // Move on to the next model that still needs placing.
-      const next = this.state.units.find((u) => u.owner === this.state.current && !u.pos);
-      this.selectUnit(next?.id ?? null);
-    });
+    const sel = this.selected();
+    const unit = sel && sel.owner === s.current && !sel.pos ? sel : unplacedUnits(s, s.current)[0];
+    if (unit) void this.dispatch({ type: 'place', unitId: unit.id, hex });
   }
 
   private async onPlayTap(hex: Hex): Promise<void> {
@@ -288,20 +364,25 @@ export class Controller {
     const mine = sel && sel.owner === s.current ? sel : undefined;
 
     if (this.ui.specialMode && mine) {
-      if (occupant && specialTargets(s, mine).some((t) => t.id === occupant.id)) {
-        this.ui.pendingTargetId = occupant.id;
+      const choice = this.choiceAt(mine, hex);
+      if (choice) {
+        this.ui.pendingChoice = choice;
+        this.ui.message = null;
         this.render();
         return;
       }
-      if (!occupant) {
-        this.ui.specialMode = false;
-        this.ui.pendingTargetId = null;
-        this.render();
+      if (occupant && occupant.owner === s.current) {
+        this.selectUnit(occupant.id);
         return;
       }
+      // Tapped elsewhere: leave targeting mode but keep the model selected.
+      this.ui.specialMode = false;
+      this.ui.pendingChoice = null;
+      this.render();
+      return;
     }
 
-    if (mine && occupant && occupant.owner !== s.current && canAct(s, mine) && !this.ui.specialMode) {
+    if (mine && occupant && occupant.owner !== s.current && canAct(s, mine)) {
       const p = previewAttack(s, mine, occupant);
       if (!p.blockedReason) {
         this.ui.pendingTargetId = occupant.id;
@@ -324,6 +405,26 @@ export class Controller {
     this.clearSelection();
   }
 
+  /** The valid special choice a tap on `hex` selects, if any. */
+  private choiceAt(unit: Unit, hex: Hex): SpecialChoice | undefined {
+    const s = this.state;
+    const choices = specialChoices(s, unit);
+    switch (specialOf(s, unit).targeting) {
+      case 'ally':
+      case 'enemy': {
+        const occupant = unitAt(s, hex);
+        return occupant && choices.find((c) => c.targetId === occupant.id);
+      }
+      case 'hex':
+        return choices.find((c) => hexEquals(c.hex!, hex));
+      case 'direction':
+        // Any hex the flame would reach picks that direction.
+        return choices.find((c) => previewSpecial(s, unit, c)?.area.some((a) => hexEquals(a.hex, hex)));
+      default:
+        return undefined;
+    }
+  }
+
   // ---------- Rendering ----------
 
   private render(): void {
@@ -340,7 +441,7 @@ export class Controller {
       selectedId: this.ui.selectedId,
       targetIds: new Set(),
       specialTargetIds: new Set(),
-      pendingTargetId: this.ui.pendingTargetId,
+      pendingTargetId: this.ui.pendingTargetId ?? this.ui.pendingChoice?.targetId ?? null,
     };
 
     if (s.phase === 'deploy') {
@@ -352,9 +453,14 @@ export class Controller {
 
     const sel = this.selected();
     if (!sel?.pos) return o;
-    const def = unitDef(s, sel);
+
+    if (s.phase === 'play' && sel.owner === s.current && this.ui.specialMode) {
+      this.specialOverlay(sel, o);
+      return o;
+    }
 
     // Shade by visibility: darker means even bigger models would be hidden there.
+    const def = unitDef(s, sel);
     for (const h of hexagon(s.map.radius)) {
       if (terrainHeight(s, h) > 0 || hexDistance(h, sel.pos) === 0) continue;
       const key = hexKey(h);
@@ -371,15 +477,30 @@ export class Controller {
 
     for (const key of moveReach(s, sel).costs.keys()) o.dots.add(key);
     if (canAct(s, sel)) {
-      if (this.ui.specialMode) {
-        for (const t of specialTargets(s, sel)) o.specialTargetIds.add(t.id);
-      } else {
-        for (const enemy of livingUnits(s, sel.owner === 0 ? 1 : 0)) {
-          if (!previewAttack(s, sel, enemy).blockedReason) o.targetIds.add(enemy.id);
-        }
+      for (const enemy of livingUnits(s, other(sel.owner))) {
+        if (!previewAttack(s, sel, enemy).blockedReason) o.targetIds.add(enemy.id);
       }
     }
     return o;
+  }
+
+  /** While choosing a special's target: highlight the options, then preview the chosen one's area. */
+  private specialOverlay(unit: Unit, o: BoardOverlay): void {
+    const s = this.state;
+    const sp = specialOf(s, unit);
+    const choices = specialChoices(s, unit);
+    if (sp.targeting === 'ally' || sp.targeting === 'enemy') {
+      for (const t of specialTargets(s, unit)) o.specialTargetIds.add(t.id);
+    } else if (sp.targeting === 'hex') {
+      for (const c of choices) o.shade.set(hexKey(c.hex!), 'option');
+    } else if (sp.targeting === 'direction') {
+      for (const c of choices) {
+        for (const a of previewSpecial(s, unit, c)?.area ?? []) o.shade.set(hexKey(a.hex), 'option');
+      }
+    }
+    if (this.ui.pendingChoice) {
+      for (const a of previewSpecial(s, unit, this.ui.pendingChoice)?.area ?? []) o.shade.set(hexKey(a.hex), a.kind);
+    }
   }
 
   private panelModel(): PanelModel {
@@ -387,10 +508,10 @@ export class Controller {
     const sel = this.selected();
     const model: PanelModel = { roster: [], hint: '', actions: [] };
 
-    // Roster: the active player's models (during play/deploy).
-    const rosterOwner = s.phase === 'over' ? null : s.current;
-    if (rosterOwner !== null) {
-      for (const u of s.units.filter((u) => u.owner === rosterOwner && (u.pos || s.phase === 'deploy'))) {
+    // Roster: the active player's models still to place (deploy) or on the board (play).
+    if (s.phase === 'deploy' || s.phase === 'play') {
+      const mine = s.units.filter((u) => u.owner === s.current && (s.phase === 'deploy' ? !u.pos : !!u.pos));
+      for (const u of mine) {
         const def = unitDef(s, u);
         model.roster.push({
           id: u.id,
@@ -399,9 +520,9 @@ export class Controller {
           die: u.die,
           hp: u.hp,
           maxHp: def.health,
-          spent: s.phase === 'deploy' ? !!u.pos : s.phase === 'play' && u.acted && u.movesLeft === 0,
+          spent: s.phase === 'play' && u.acted && u.movesLeft === 0,
           selected: u.id === this.ui.selectedId,
-          note: s.phase === 'deploy' ? (u.pos ? `${def.name} ✓` : def.name) : undefined,
+          note: s.phase === 'deploy' ? def.name : undefined,
         });
       }
     }
@@ -412,22 +533,29 @@ export class Controller {
       const stats: [string, string][] = [
         ['HP', `${sel.hp}/${def.health}`],
         ['Def', defense === def.defense ? `${defense}` : `${defense} (braced)`],
-        ['Range', `${def.range}`],
+        ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
         ['Dmg', `${def.damage}`],
         ['Move', s.phase === 'play' && sel.owner === s.current ? `${sel.movesLeft}/${def.speed}` : `${def.speed}`],
       ];
-      if (sel.die !== null) stats.unshift(['Die', `${sel.die}${sel.acted ? ' (used)' : ''}`]);
+      if (sel.die !== null) {
+        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} prep)` : '';
+        stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
+      }
+      if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
-      const sp = SPECIAL_INFO[def.special];
+      const sp = specialOf(s, sel);
       model.info = {
-        title: `${PLAYER_NAMES[sel.owner]} ${def.name} (${['', 'small', 'medium', 'large'][def.size]})`,
-        owner: sel.owner, stats, special: `${sp.name}: ${sp.text}` };
+        title: `${PLAYER_NAMES[sel.owner]} ${def.name} (${SIZE_NAMES[def.size]})`,
+        owner: sel.owner,
+        stats,
+        special: `${sp.name}: ${sp.describe(s.config.specials)}`,
+      };
     }
 
     if (s.phase === 'deploy') this.deployPanel(model);
     else if (s.phase === 'play') this.playPanel(model);
-    else {
-      model.hint = `${PLAYER_NAMES[s.winner!]} won. Tap models to inspect.`;
+    else if (s.phase === 'over') {
+      model.hint = `${s.winner === null ? 'Draw' : `${PLAYER_NAMES[s.winner]} won`}. Tap models to inspect.`;
       model.actions.push({ label: 'New game', className: 'primary end-turn', onClick: () => void this.start(randomSeed()) });
     }
 
@@ -440,25 +568,17 @@ export class Controller {
 
   private deployPanel(model: PanelModel): void {
     const s = this.state;
-    const remaining = s.units.filter((u) => u.owner === s.current && !u.pos).length;
-    model.hint = remaining
-      ? `Tap a highlighted hex to place the selected model (${remaining} left). Tap a placed model, then a hex, to move it.`
-      : 'All models placed. Tap Done when ready.';
-    model.actions.push({ label: 'Auto-place', onClick: () => void this.dispatch({ type: 'autoDeploy' }) });
-    model.actions.push({
-      label: 'Done',
-      className: 'primary',
-      disabled: remaining > 0,
-      onClick: async () => {
-        const wasFirst = s.current === 0;
-        this.ui = this.freshUi();
-        if (wasFirst) {
-          if (await this.dispatch({ type: 'finishDeploy' })) await this.deployHandoff();
-        } else {
-          await this.dispatch({ type: 'finishDeploy' });
-        }
-      },
-    });
+    const mine = unplacedUnits(s, s.current).length;
+    const theirs = unplacedUnits(s, other(s.current)).length;
+    const sel = this.selected();
+    const next = sel && sel.owner === s.current && !sel.pos ? sel : unplacedUnits(s, s.current)[0];
+    model.hint =
+      `Tap a highlighted hex to place your ${next ? unitDef(s, next).name : 'model'} (or pick a different model above). ` +
+      `You have ${mine} left; ${PLAYER_NAMES[other(s.current)]} has ${theirs}.`;
+    if (!sel && next) {
+      const chip = model.roster.find((c) => c.id === next.id);
+      if (chip) chip.selected = true;
+    }
   }
 
   private playPanel(model: PanelModel): void {
@@ -489,51 +609,83 @@ export class Controller {
     });
   }
 
+  /** "Heavy −2, your Medic −1 (friendly!)" or, for Torch, "Infantry: HIT −3 (7 vs 6)". */
+  private effectsText(state: GameState, owner: PlayerId, effects: Effect[], predicted: boolean): string {
+    if (!effects.length) return 'No models affected.';
+    return effects
+      .map((e) => {
+        const u = getUnit(state, e.unitId);
+        const name = u ? `${u.owner === owner ? 'your ' : ''}${unitDef(state, u).name}` : 'model';
+        const friendly = u?.owner === owner ? ' (friendly!)' : '';
+        const dies = e.killed ? (predicted ? ', destroyed' : '') : '';
+        if (e.hit === undefined) return `${name} −${e.damage}${dies}${friendly}`;
+        const vs = `${e.roll} vs ${e.defense}`;
+        return e.hit ? `${name}: HIT −${e.damage} (${vs})${dies}${friendly}` : `${name}: miss (${vs})${friendly}`;
+      })
+      .join(' · ');
+  }
+
   private unitActions(unit: Unit, model: PanelModel): void {
     const s = this.state;
-    const special = specialOf(s, unit);
-    const sp = SPECIAL_INFO[special];
-    const targetKind = SPECIAL_TARGET[special];
-    const pending = this.ui.pendingTargetId ? getUnit(s, this.ui.pendingTargetId) : undefined;
+    const sp = specialOf(s, unit);
+    const id = specialIdOf(s, unit);
     const actions: PanelAction[] = [];
+    const cancel = { label: 'Cancel', onClick: () => this.selectUnit(unit.id) };
 
     if (this.ui.specialMode) {
-      if (pending) {
-        const reason = specialBlockedReason(s, unit, pending);
-        const pDef = unitDef(s, pending);
-        const detail =
-          special === 'heal' ? ` (+${Math.min(healAmount(s, unit.die!), pDef.health - pending.hp)} HP)` : '';
+      const choice = this.ui.pendingChoice;
+      if (choice) {
+        const preview = previewSpecial(s, unit, choice);
+        const effects = preview?.effects ?? [];
+        let detail = '';
+        if (id === 'heal') {
+          const t = getUnit(s, choice.targetId!)!;
+          detail = ` +${Math.min(healAmount(s, unit.die!), unitDef(s, t).health - t.hp)} HP`;
+        }
+        if (sp.targeting === 'ally' || sp.targeting === 'enemy') {
+          detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
+        }
+        if (id === 'grenade' || id === 'torch') {
+          const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
+          model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
+        } else if (id === 'vault') {
+          model.preview = { text: `Land here, then keep moving (${unit.movesLeft} left).`, good: true };
+        }
         actions.push({
-          label: `${sp.name} ${pDef.name}${detail}`,
+          label: `${sp.name}${detail}`,
           className: 'primary',
-          disabled: !!reason,
-          onClick: () => void this.dispatch({ type: 'special', unitId: unit.id, targetId: pending.id }),
+          onClick: () => void this.dispatch({ type: 'special', unitId: unit.id, ...choice }),
         });
-        model.hint = `Confirm ${sp.name} on ${pDef.name}, or tap another target.`;
+        // The preview line already explains the outcome; skip the hint to keep the panel compact.
+        if (!model.preview) model.hint = 'Confirm, or tap another target to compare.';
       } else {
-        const n = specialTargets(s, unit).length;
-        model.hint = n ? `Tap a purple-ringed model to ${sp.name}.` : `No valid ${sp.name} targets.`;
+        const n = specialChoices(s, unit).length;
+        const how: Record<string, string> = {
+          ally: `Tap a purple-ringed model to ${sp.name}.`,
+          enemy: `Tap a purple-ringed model to ${sp.name}.`,
+          hex: `Tap a purple hex to choose where to ${sp.name}.`,
+          direction: `Tap a purple hex to choose the ${sp.name} direction.`,
+        };
+        model.hint = n ? how[sp.targeting] : `No valid ${sp.name} targets.`;
         model.hintWarn = n === 0;
       }
-      actions.push({ label: 'Cancel', onClick: () => this.selectUnit(unit.id) });
-      model.actions.push(...actions);
+      model.actions.push(...actions, cancel);
       return;
     }
 
+    const pending = this.ui.pendingTargetId ? getUnit(s, this.ui.pendingTargetId) : undefined;
     if (pending) {
       const p = previewAttack(s, unit, pending);
-      const pDef = unitDef(s, pending);
       model.preview = {
         text: `Roll ${p.roll}${p.bonus ? ` +${p.bonus} spot` : ''} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
       };
       actions.push({
-        label: `Attack ${pDef.name}`,
+        label: `Attack ${unitDef(s, pending).name}`,
         className: 'primary',
         onClick: () => void this.dispatch({ type: 'attack', unitId: unit.id, targetId: pending.id }),
       });
-      actions.push({ label: 'Cancel', onClick: () => this.selectUnit(unit.id) });
-      model.actions.push(...actions);
+      model.actions.push(...actions, cancel);
       return;
     }
 
@@ -541,18 +693,22 @@ export class Controller {
     if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
     if (canAct(s, unit)) {
       hints.push('tap a red-ringed enemy to attack');
-      const reason = targetKind === 'none' ? specialBlockedReason(s, unit) : null;
+      const reason = specialBlockedReason(s, unit);
+      const noTargets = sp.targeting !== 'none' && !reason && specialChoices(s, unit).length === 0;
       let label = sp.name;
-      if (special === 'dash') label += ` (+${dashAmount(s, unit.die!)})`;
-      if (special === 'heal') label += ` (+${healAmount(s, unit.die!)})`;
+      if (reason) label += ` (${reason})`;
+      else if (noTargets) label += ' (no targets)';
+      else if (id === 'dash') label += ` (+${dashAmount(s, unit.die!)})`;
+      else if (id === 'heal') label += ` (+${healAmount(s, unit.die!)})`;
       actions.push({
         label,
-        disabled: !!reason || (targetKind !== 'none' && specialTargets(s, unit).length === 0),
+        disabled: !!reason || noTargets,
         onClick: () => {
-          if (targetKind === 'none') {
+          if (sp.targeting === 'none') {
             void this.dispatch({ type: 'special', unitId: unit.id });
           } else {
             this.ui.specialMode = true;
+            this.ui.pendingChoice = null;
             this.ui.pendingTargetId = null;
             this.render();
           }

@@ -8,10 +8,10 @@ import { addUnit, makeState } from './helpers';
 describe('attack resolution', () => {
   it('hits when die + modifiers >= defense (ties hit)', () => {
     const s = makeState();
-    const a = addUnit(s, 'infantry', 0, hex(0, 0), { die: 7 });
-    const t = addUnit(s, 'infantry', 1, hex(2, 0)); // defense 7
+    const a = addUnit(s, 'infantry', 0, hex(0, 0), { die: 6 });
+    const t = addUnit(s, 'infantry', 1, hex(2, 0)); // defense 6
     expect(previewAttack(s, a, t).hit).toBe(true);
-    a.die = 6;
+    a.die = 5;
     expect(previewAttack(s, a, t).hit).toBe(false);
   });
 
@@ -48,9 +48,9 @@ describe('attack resolution', () => {
 
   it('Brace adds +2 defense', () => {
     const s = makeState();
-    const a = addUnit(s, 'infantry', 0, hex(0, 0), { die: 8 });
-    const t = addUnit(s, 'infantry', 1, hex(2, 0), { braced: true });
-    expect(previewAttack(s, a, t)).toMatchObject({ defense: 9, hit: false });
+    const a = addUnit(s, 'infantry', 0, hex(0, 0), { die: 7 });
+    const t = addUnit(s, 'heavy', 1, hex(2, 0), { braced: true }); // defense 6
+    expect(previewAttack(s, a, t)).toMatchObject({ defense: 8, hit: false });
   });
 
   it('Spot adds +2 for the spotting side and is consumed', () => {

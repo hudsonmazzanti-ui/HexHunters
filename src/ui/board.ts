@@ -201,6 +201,7 @@ export class BoardView {
 
     n.die.style.display = unit.die === null ? 'none' : '';
     n.die.classList.toggle('used', unit.acted);
+    n.die.classList.toggle('boosted', unit.dieBonus > 0);
     if (!this.rolling.has(unit.id)) n.dieText.textContent = unit.die === null ? '' : String(unit.die);
 
     n.hpText.textContent = String(unit.hp);
@@ -225,6 +226,14 @@ export class BoardView {
     const line = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: 'shot', stroke: color }, this.layers.fx);
     line.style.stroke = color;
     setTimeout(() => line.remove(), 650);
+  }
+
+  /** Briefly highlights hexes (explosions, flames). */
+  flash(hexes: Hex[], className: string): void {
+    for (const h of hexes) {
+      const poly = el('polygon', { points: points(h), class: `flash ${className}` }, this.layers.fx);
+      setTimeout(() => poly.remove(), 700);
+    }
   }
 
   /** Text that floats up from a hex and fades out. */
