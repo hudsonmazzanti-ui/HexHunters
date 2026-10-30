@@ -47,6 +47,7 @@ export const grenade: SpecialDef = {
     `Needs a die of ${r.grenadeMinDie}+. Always hits a hex in range: ${r.grenadeImpactDamage} damage there, ` +
     `${r.grenadeSplashDamage} to every adjacent model (friendly fire!). Arcs over height-1 walls and small models.`,
   targeting: 'hex',
+  tags: ['Needs die 10+', 'Always hits', 'Friendly fire'],
   usable: (state, unit) => {
     const min = state.config.specials.grenadeMinDie;
     return unit.die! < min ? `needs ${min}+` : null;

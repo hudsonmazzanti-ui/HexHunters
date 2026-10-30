@@ -61,6 +61,8 @@ export interface SpecialDef {
   name: string;
   describe(rules: SpecialRules): string;
   targeting: Targeting;
+  /** Short callouts shown in the army builder, e.g. "Friendly fire". */
+  tags?: string[];
   /** Keep the model's unused movement after using this special (it may move on). */
   keepsMovement?: boolean;
   /** Why the special can't be used at all right now (before picking a target), or null. */

@@ -21,6 +21,7 @@ export const vault: SpecialDef = {
   describe: () =>
     'Leap over an adjacent wall (either height) to the empty hex directly beyond it, then keep moving.',
   targeting: 'hex',
+  tags: ['Keeps moving after'],
   keepsMovement: true,
   checkChoice: (state, unit, { hex }) => {
     const wall = vaultOver(unit.pos!, hex!);

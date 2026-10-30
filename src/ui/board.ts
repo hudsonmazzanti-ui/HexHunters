@@ -228,6 +228,14 @@ export class BoardView {
     setTimeout(() => line.remove(), 650);
   }
 
+  /** Briefly highlights hexes (explosions, flames). */
+  flash(hexes: Hex[], className: string): void {
+    for (const h of hexes) {
+      const poly = el('polygon', { points: points(h), class: `flash ${className}` }, this.layers.fx);
+      setTimeout(() => poly.remove(), 700);
+    }
+  }
+
   /** Text that floats up from a hex and fades out. */
   floatText(at: Hex, text: string, color: string): void {
     const p: Point = hexToPixel(at, HEX_SIZE);

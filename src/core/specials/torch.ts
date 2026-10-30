@@ -42,6 +42,7 @@ export const torch: SpecialDef = {
     `Flame the next ${r.torchLength} hexes in one direction. Rolls this model's die against EACH model's defense ` +
     'there, IGNORING armor bonuses (Brace). Friendly fire! Terrain stops the flame.',
   targeting: 'direction',
+  tags: ['Ignores armor (Brace)', 'Friendly fire', 'Stopped by walls'],
   checkChoice: (state, unit, { dir }) => {
     if (torchLine(state, unit.pos!, dir!).length === 0) return 'Flame blocked';
     return flames(state, unit, dir!).effects.length ? null : 'No models in the flame';
