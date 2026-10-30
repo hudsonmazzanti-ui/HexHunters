@@ -1,4 +1,5 @@
 /** Read-only helpers for asking questions about a GameState. */
+import { auraEffects } from './auras';
 import { type Hex, ORIGIN, hexDistance, hexEquals, hexKey } from './hex';
 import { blocksSight, hasLineOfSight } from './los';
 import { type Reach, pathTo, reachable } from './pathfinding';
@@ -78,3 +79,13 @@ export const unitsOnControlPoint = (state: GameState, player: PlayerId): Unit[] 
 /** Is it this unit's owner's turn and may it still use its die? */
 export const canAct = (state: GameState, unit: Unit): boolean =>
   state.phase === 'play' && unit.owner === state.current && !!unit.pos && !unit.acted && unit.die !== null;
+
+/** Hexes of movement per turn, including hero auras (Warlord). */
+export const unitSpeed = (state: GameState, unit: Unit): number =>
+  unitDef(state, unit).speed + (auraEffects(state, unit).speedBonus ?? 0);
+
+/** Must this unit be loaded to fire? (Artillery, unless the Siege Master's aura applies.) */
+export const needsLoading = (state: GameState, unit: Unit): boolean =>
+  !!unitDef(state, unit).needsLoading && !auraEffects(state, unit).noLoading;
+
+export const isHero = (state: GameState, unit: Unit): boolean => !!unitDef(state, unit).hero;

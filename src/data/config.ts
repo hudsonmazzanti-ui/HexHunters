@@ -1,12 +1,13 @@
 /**
  * All balance numbers live here. Tweak freely; no game logic needs to change.
  * To add a unit, add an entry to UNITS (stats, cost, special id). Special action
- * logic and descriptions live in src/core/specials/.
+ * logic and descriptions live in src/core/specials/. A hero has `hero: { aura }`
+ * instead of a special; aura rules live in src/core/auras/.
  *
  * Attacks hit when (d12 + modifiers) >= target defense, so on a plain roll:
  *   defense 5 -> 67% hit, 6 -> 58%, 7 -> 50%, 8 -> 42%.
  */
-import type { GameConfig, UnitDef } from '../core/types';
+import type { AuraId, GameConfig, UnitDef } from '../core/types';
 
 /** Named movement speeds, in hexes per turn. */
 export const SPEED = { crawl: 1, slow: 2, normal: 3, fast: 4 } as const;
@@ -164,7 +165,50 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 3,
     special: 'hook',
   },
+
+  // ---- Heroes: max one per army, no special; grant a permanent army-wide aura ----
+  marshal: {
+    name: 'Field Marshal',
+    label: 'FM',
+    cost: 7,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 9,
+    range: 4,
+    damage: 3,
+    hero: { aura: 'marshal' },
+  },
+  siegemaster: {
+    name: 'Siege Master',
+    label: 'SM',
+    cost: 8,
+    size: 2, // medium
+    speed: SPEED.slow,
+    defense: 5,
+    health: 8,
+    range: 4,
+    damage: 2,
+    indirectFire: true,
+    hero: { aura: 'siege' },
+  },
+  warlord: {
+    name: 'Warlord',
+    label: 'WL',
+    cost: 6,
+    size: 3, // large
+    speed: SPEED.normal,
+    defense: 6,
+    health: 12,
+    range: 1, // melee only
+    damage: 4,
+    hero: { aura: 'warlord' },
+  },
 };
+
+/** Display name of the hero that grants an aura (e.g. "Warlord"). */
+export const heroName = (config: GameConfig, aura: AuraId): string =>
+  Object.values(config.units).find((u) => u.hero?.aura === aura)?.name ?? aura;
 
 export const DEFAULT_CONFIG: GameConfig = {
   boardRadius: 7,
@@ -175,6 +219,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   dieSides: 12,
   pointsToWin: 5,
   armyPointLimit: 16,
+  maxHeroesPerArmy: 1,
   firstPlayerSwapEvery: 2,
   units: UNITS,
   specials: {
@@ -191,5 +236,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     hookMinDie: 7,
     hookRange: 3,
     hookDamage: 1,
+    marshalRollBonus: 2,
+    warlordSpeedBonus: 1,
   },
 };

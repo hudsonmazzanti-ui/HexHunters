@@ -13,11 +13,13 @@ import {
   getUnit,
   livingUnits,
   moveReach,
+  needsLoading,
   onBoard,
   other,
   terrainHeight,
   unitAt,
   unitDef,
+  unitSpeed,
 } from '../core/queries';
 import { randomSeed } from '../core/rng';
 import {
@@ -36,7 +38,8 @@ import {
   targetsUnit,
 } from '../core/specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
-import { speedName } from '../data/config';
+import { heroName, speedName } from '../data/config';
+import { AURAS, aurasOn } from '../core/auras';
 import { BoardView, type BoardOverlay, HEX_SIZE } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
@@ -434,7 +437,7 @@ export class Controller {
   private choiceAt(unit: Unit, hex: Hex): SpecialChoice | undefined {
     const s = this.state;
     const choices = specialChoices(s, unit);
-    switch (specialOf(s, unit).targeting) {
+    switch (specialOf(s, unit)?.targeting) {
       case 'ally':
       case 'enemy':
       case 'model': {
@@ -522,6 +525,7 @@ export class Controller {
   private specialOverlay(unit: Unit, o: BoardOverlay): void {
     const s = this.state;
     const sp = specialOf(s, unit);
+    if (!sp) return;
     const choices = specialChoices(s, unit);
     if (targetsUnit(sp.targeting)) {
       for (const t of specialTargets(s, unit)) o.specialTargetIds.add(t.id);
@@ -574,23 +578,30 @@ export class Controller {
         ['Def', defense === def.defense ? `${defense}` : `${defense} (braced)`],
         ['Range', def.range === 1 ? '1 (melee)' : def.indirectFire ? `${def.range} (indirect)` : `${def.range}`],
         ['Dmg', `${def.damage}`],
-        ['Move', `${ownTurn ? `${sel.movesLeft}/` : ''}${def.speed} ${speedName(def.speed)}`.trim()],
+        ['Move', `${ownTurn ? `${sel.movesLeft}/` : ''}${unitSpeed(s, sel)} ${moveNote(s, sel)}`.trim()],
       ];
       if (def.hitBonus) stats.push(['Hit', `+${def.hitBonus}`]);
-      if (def.needsLoading) stats.push(['Shell', sel.loaded ? 'LOADED' : 'empty']);
+      if (def.needsLoading) stats.push(['Shell', needsLoading(s, sel) ? (sel.loaded ? 'LOADED' : 'empty') : 'no Load needed']);
+      for (const aura of aurasOn(s, sel)) {
+        stats.push(['Aura', `${heroName(s.config, aura)} ${AURAS[aura].short(s.config.specials)}`]);
+      }
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
       if (sel.die !== null) {
-        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} prep)` : '';
+        const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '';
         stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
       }
       if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
       const sp = specialOf(s, sel);
       model.info = {
-        title: `${PLAYER_NAMES[sel.owner]} ${def.name} (${SIZE_NAMES[def.size]})`,
+        title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[def.size]})`,
         owner: sel.owner,
         stats,
-        special: `${sp.name}: ${sp.describe(s.config.specials)}`,
+        special: def.hero
+          ? `Hero aura (lasts all game): ${AURAS[def.hero.aura].describe(s.config.specials)}`
+          : sp
+            ? `${sp.name}: ${sp.describe(s.config.specials)}`
+            : '',
       };
     }
 
@@ -674,7 +685,7 @@ export class Controller {
     const actions: PanelAction[] = [];
     const cancel = { label: 'Cancel', onClick: () => this.selectUnit(unit.id) };
 
-    if (this.ui.specialMode) {
+    if (this.ui.specialMode && sp) {
       const choice = this.ui.pendingChoice;
       if (choice) {
         const preview = previewSpecial(s, unit, choice);
@@ -752,12 +763,14 @@ export class Controller {
     const hints: string[] = [];
     if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
     if (canAct(s, unit)) {
-      const def = unitDef(s, unit);
-      if (def.needsLoading && !unit.loaded) {
+      if (needsLoading(s, unit) && !unit.loaded) {
         actions.push({ label: `${attackName(s, unit)} (load first)`, disabled: true, onClick: () => {} });
       } else {
         hints.push(`tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()}`);
       }
+    }
+    // Heroes have no special: their die is only for attacking.
+    if (canAct(s, unit) && sp) {
       const reason = specialBlockedReason(s, unit);
       const noTargets = sp.targeting !== 'none' && !reason && specialChoices(s, unit).length === 0;
       let label = sp.name;
@@ -781,7 +794,8 @@ export class Controller {
           }
         },
       });
-    } else if (unit.acted) {
+    }
+    if (!canAct(s, unit) && unit.acted) {
       hints.push(unit.movesLeft > 0 ? 'die used' : 'This model is done for the turn');
     }
     if (canUndoMove(s, unit)) {
@@ -804,4 +818,11 @@ function overwatchText(state: GameState, ev: Extract<GameEvent, { type: 'overwat
   const roll = `${ev.roll}${ev.bonus ? `+${ev.bonus}` : ''} vs def ${ev.defense}`;
   const result = ev.hit ? `hit ${name} for ${ev.damage}${ev.killed ? ' (destroyed!)' : ''}` : `missed ${name}`;
   return `Sentinel overwatch: ${roll}, ${result}.`;
+}
+
+/** "normal", or "(slow +1)" when an aura adds movement. */
+function moveNote(state: GameState, unit: Unit): string {
+  const base = unitDef(state, unit).speed;
+  const bonus = unitSpeed(state, unit) - base;
+  return bonus ? `(${speedName(base)} +${bonus})` : speedName(base);
 }

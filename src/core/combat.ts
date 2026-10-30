@@ -1,6 +1,6 @@
 /** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
 import { hexDistance } from './hex';
-import { canAct, canSeeUnit, effectiveDefense, unitDef } from './queries';
+import { canAct, canSeeUnit, effectiveDefense, needsLoading, unitDef } from './queries';
 import type { GameState, Unit } from './types';
 
 export interface AttackPreview {
@@ -26,7 +26,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit): A
 
   let blockedReason: string | null = null;
   if (!canAct(state, attacker)) blockedReason = 'This model cannot act';
-  else if (def.needsLoading && !attacker.loaded) blockedReason = 'Not loaded';
+  else if (needsLoading(state, attacker) && !attacker.loaded) blockedReason = 'Not loaded';
   else if (!target.pos || target.owner === attacker.owner) blockedReason = 'Not an enemy';
   else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
   else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
@@ -51,7 +51,8 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
 
   attacker.acted = true;
   attacker.movesLeft = 0;
-  if (unitDef(state, attacker).needsLoading) attacker.loaded = false;
+  // Firing uses the shell (with the Siege Master's aura, no shell is needed or used).
+  if (needsLoading(state, attacker)) attacker.loaded = false;
   // Spot is used up by the attack, hit or miss.
   if (p.spotBonus > 0) target.spottedBy = null;
 

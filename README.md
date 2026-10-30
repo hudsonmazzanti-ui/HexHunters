@@ -35,6 +35,14 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 
+**Heroes** (max one per army, optional; no special, their die is only for attacking):
+
+| Hero          | Cost | Size       | Speed | Def | HP | Range        | Dmg | Passive (whole army, all game) |
+|---------------|------|------------|-------|-----|----|--------------|-----|--------------------------------|
+| Field Marshal | 7    | medium (2) | 3     | 6   | 9  | 4            | 3   | Your Infantry get +2 on their roll every turn (stacks with Prep) |
+| Siege Master  | 8    | medium (2) | 2     | 5   | 8  | 4 (indirect) | 2   | Your Artillery never needs to Load |
+| Warlord       | 6    | large (3)  | 3     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
+
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
 
@@ -47,6 +55,10 @@ numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade threshold and damage
 are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
+**Adding a hero:** add a unit with `hero: { aura: '<id>' }` and no `special`, write the aura in `src/core/auras/`
+(which units it affects and its effects: roll bonus, speed bonus or no-loading), add the id to `AuraId` in
+`src/core/types.ts` and list it in `src/core/auras/index.ts`. The hero limit is `maxHeroesPerArmy`; aura numbers
+(`marshalRollBonus`, `warlordSpeedBonus`) are under `specials`.
 **Adding a special:** write a module in `src/core/specials/` (see `types.ts` for the `SpecialDef` interface), add its
 id to `SpecialId` in `src/core/types.ts`, and list it in `src/core/specials/index.ts`. Targeting, validation, area
 previews and the UI flow are handled generically.
@@ -123,6 +135,12 @@ start of your next turn. Spot has no range limit, only line of sight.
   Sentinel loses its overwatch. Any size can be hooked. Selecting Hook rings valid targets and marks where each would
   land.
 
+**Heroes.** At most one per army (the builder blocks confirming two). A hero has no special action; instead its
+passive rule applies to its own army for the **whole game**, even after the hero dies. Field Marshal: your Infantry
+get +2 on every roll, on top of any Prep (+4 with both). Siege Master: your Artillery can Fire without loading (Load
+is greyed out as not needed, and firing doesn't use a shell). Warlord: your large models move 1 extra hex. Heroes wear
+a gold crown, and units under a hero's aura glow gold, for both players to see.
+
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).
 First to 5 points wins, or eliminate every enemy model to win immediately. If one action (Grenade or Torch) wipes out
 the last models on both sides at once, the game is a draw.
@@ -159,6 +177,7 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
   combat.ts      attack preview + resolution, shared damage
   army.ts        army cost + validation
   overwatch.ts   overwatch area, target choice and end-of-turn shots
+  auras/         hero aura rules, one module each + registry
   specials/      one module per special (Shove is unused for now, kept for future factions) + registry
   game.ts        newGame + applyAction(state, action) -> { state, events }
 src/data/config.ts   unit stats, costs, game settings

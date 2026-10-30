@@ -24,6 +24,7 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
     round: 1,
     turnInRound: 0,
     scores: [0, 0],
+    auras: [[], []],
     winner: null,
     winReason: null,
     rngState: 42,
@@ -60,5 +61,7 @@ export function addUnit(
     ...extra,
   };
   state.units.push(unit);
+  // A hero brings its aura with it, as when an army is chosen.
+  if (def.hero) state.auras[owner].push(def.hero.aura);
   return unit;
 }
