@@ -1,8 +1,7 @@
 import type { Hex } from '../hex';
 import type { GameState, SpecialId, SpecialRules, Unit } from '../types';
 
-/** What a special is aimed at. */
-/** 'model' = any model except the user itself, friend or foe. */
+/** What a special is aimed at. 'model' = any model except the user itself, friend or foe. */
 export type Targeting = 'none' | 'ally' | 'enemy' | 'model' | 'hex' | 'direction';
 
 export const targetsUnit = (t: Targeting): boolean => t === 'ally' || t === 'enemy' || t === 'model';
