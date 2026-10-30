@@ -8,13 +8,20 @@
  */
 import type { GameConfig, UnitDef } from '../core/types';
 
+/** Named movement speeds, in hexes per turn. */
+export const SPEED = { crawl: 1, slow: 2, normal: 3, fast: 4 } as const;
+
+/** "crawl", "slow"... for a speed value, or '' if it isn't one of the named speeds. */
+export const speedName = (speed: number): string =>
+  (Object.keys(SPEED) as (keyof typeof SPEED)[]).find((k) => SPEED[k] === speed) ?? '';
+
 export const UNITS: Record<string, UnitDef> = {
   infantry: {
     name: 'Infantry',
     label: 'I',
     cost: 3,
     size: 2, // medium
-    speed: 3, // normal
+    speed: SPEED.normal,
     defense: 6,
     health: 6,
     range: 5,
@@ -26,7 +33,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'M',
     cost: 3,
     size: 1, // small
-    speed: 3, // normal
+    speed: SPEED.normal,
     defense: 5,
     health: 4,
     range: 3,
@@ -38,7 +45,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Sn',
     cost: 3,
     size: 1, // small
-    speed: 2, // slow
+    speed: SPEED.slow,
     defense: 5,
     health: 4,
     range: 10,
@@ -50,7 +57,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Sc',
     cost: 2,
     size: 1, // small
-    speed: 4, // fast
+    speed: SPEED.fast,
     defense: 7,
     health: 3,
     range: 3,
@@ -62,7 +69,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'H',
     cost: 4,
     size: 3, // large
-    speed: 2, // slow
+    speed: SPEED.slow,
     defense: 6,
     health: 12,
     range: 3,
@@ -74,7 +81,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'A',
     cost: 2,
     size: 1, // small
-    speed: 4, // fast
+    speed: SPEED.fast,
     defense: 5,
     health: 3,
     range: 1, // melee only
@@ -86,7 +93,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'G',
     cost: 3,
     size: 2, // medium
-    speed: 3, // normal
+    speed: SPEED.normal,
     defense: 6,
     health: 5,
     range: 4,
@@ -98,12 +105,52 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'F',
     cost: 4,
     size: 2, // medium
-    speed: 2, // slow
+    speed: SPEED.slow,
     defense: 6,
     health: 9,
     range: 3,
     damage: 3,
     special: 'torch',
+  },
+  monster: {
+    name: 'Monster',
+    label: 'Mo',
+    cost: 5,
+    size: 3, // large
+    speed: SPEED.normal,
+    defense: 3,
+    health: 18,
+    range: 1, // melee only
+    damage: 5,
+    hitBonus: 1,
+    special: 'sweep',
+  },
+  artillery: {
+    name: 'Artillery',
+    label: 'Ar',
+    cost: 3,
+    size: 2, // medium
+    speed: SPEED.crawl,
+    defense: 4,
+    health: 8,
+    range: 10,
+    damage: 4,
+    attackName: 'Fire',
+    needsLoading: true,
+    indirectFire: true,
+    special: 'load',
+  },
+  sentinel: {
+    name: 'Sentinel',
+    label: 'Se',
+    cost: 3,
+    size: 2, // medium
+    speed: SPEED.slow,
+    defense: 6,
+    health: 8,
+    range: 3,
+    damage: 2,
+    special: 'overwatch',
   },
 };
 
@@ -116,6 +163,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   dieSides: 12,
   pointsToWin: 5,
   armyPointLimit: 16,
+  firstPlayerSwapEvery: 2,
   units: UNITS,
   specials: {
     braceDefenseBonus: 2,
@@ -127,5 +175,6 @@ export const DEFAULT_CONFIG: GameConfig = {
     grenadeImpactDamage: 2,
     grenadeSplashDamage: 1,
     torchLength: 2,
+    sweepDamage: 3,
   },
 };

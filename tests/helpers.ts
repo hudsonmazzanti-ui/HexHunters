@@ -55,6 +55,8 @@ export function addUnit(
     braced: false,
     prepped: false,
     spottedBy: null,
+    loaded: false,
+    overwatch: null,
     ...extra,
   };
   state.units.push(unit);

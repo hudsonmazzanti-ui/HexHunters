@@ -850,3 +850,68 @@ button.danger {
   color: var(--bad);
   font-weight: 700;
 }
+
+/* ---------- Overwatch, loaded shells ---------- */
+
+.watch {
+  fill: none;
+  stroke: none;
+  pointer-events: none;
+}
+.watch.on {
+  stroke-width: 2.5;
+  stroke-dasharray: 5 4;
+}
+.watch-0 {
+  fill: rgba(34, 211, 238, 0.18);
+  stroke: rgba(14, 116, 144, 0.9);
+}
+.watch-1 {
+  fill: rgba(244, 114, 182, 0.2);
+  stroke: rgba(157, 23, 77, 0.9);
+}
+.shade.watch {
+  fill: rgba(34, 211, 238, 0.45);
+}
+
+.unit .ow,
+.unit .shell {
+  display: none;
+}
+.unit.overwatching .ow,
+.unit.loaded .shell {
+  display: block;
+}
+.ow rect {
+  fill: #22d3ee;
+}
+.ow .eye {
+  fill: #fff;
+  stroke: #111;
+  stroke-width: 1.2;
+}
+.ow .pupil {
+  fill: #111;
+}
+.ow text {
+  fill: #111;
+  font-size: 11px;
+}
+.shell path {
+  fill: #f59e0b;
+  stroke: #111;
+  stroke-width: 1.5;
+}
+
+.topbar-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.order-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}

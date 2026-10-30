@@ -30,12 +30,20 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Grenadier | 3    | medium (2) | 3     | 6   | 5  | 4         | 2   | **Grenade** (die 10+): 2 damage on impact, 1 to each neighbor |
 | Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 4   | **Brace**: +2 defense until your next turn |
 | Flamer    | 4    | medium (2) | 2     | 6   | 9  | 3         | 3   | **Torch**: die vs each model in a 2-hex line, ignores Brace |
+| Monster   | 5    | large (3)  | 3     | 3   | 18 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy. Basic attack +1 to hit |
+| Artillery | 3    | medium (2) | 1     | 4   | 8  | 10        | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
+| Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 
-Assassin, Grenadier and Flamer stats are placeholders.
+Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
+defense values are placeholders.
+
+Optional unit fields: `hitBonus` (added to basic attacks), `attackName` (e.g. "Fire"), `needsLoading` (attack only
+while loaded; firing unloads), `indirectFire` (attack ignores line of sight).
 
 Game settings: army point limit 16, board radius 7 (15 hexes across), 3 mirrored terrain pairs of length 2–4,
-2 deployment rows, d12, first to 5 points. Special-action numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade
-threshold and damage, Torch length) are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
+2 deployment rows, d12, first to 5 points, first player flips every 2 rounds (`firstPlayerSwapEvery`). Special-action
+numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade threshold and damage, Torch length, Sweep damage) are under
+`specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
 **Adding a special:** write a module in `src/core/specials/` (see `types.ts` for the `SpecialDef` interface), add its
@@ -55,8 +63,9 @@ same without seeing Player 1's choices. Duplicates are allowed; the total cost m
 placements. Player 1 places in the bottom two rows, Player 2 in the top two. Tapping a hex places the model. If one player
 runs out of models, the other places the rest.
 
-**Rounds.** Each round both players take one turn. The first player alternates: Player 1 goes first in odd
-rounds, Player 2 in even rounds (so the player going second in one round also goes first in the next).
+**Rounds.** Each round both players take one turn. Who goes first flips every two rounds: Player 1 in rounds 1–2,
+Player 2 in rounds 3–4, Player 1 in 5–6, and so on. Where the order flips (between rounds 2–3, 4–5, ...) the same player
+takes two turns in a row; the handoff screen says so. The top bar shows who goes first this round and next.
 
 **A turn.**
 1. Every one of your models rolls a d12. Dice stay with their model.
@@ -73,8 +82,8 @@ Because dice are rolled up front, the panel shows whether an attack will hit bef
 
 **Specials.** Brace, Prep, Spot and Vault always succeed; Heal and Dash scale with the die; Grenade needs a 10+;
 Torch rolls against each model. A special that would do nothing (Heal on a full-health ally, Dash or Heal for 0,
-Torch at a line with no models) isn't allowed, so dice aren't wasted by accident. Targeted specials preview their
-effect (blast radius, flame line and predicted hits, vault landing) before you confirm.
+Torch at a line with no models, Sweep with no adjacent enemy) isn't allowed, so dice aren't wasted by accident. Specials
+with an area preview it before you confirm (blast radius, flame line, Sweep hits, vault landing, overwatch area).
 Brace lasts until the start of your next turn. Prep adds +2 to that model's die roll at the start of your next turn
 (the die can then show 13 or 14; a green die badge means it includes a Prep bonus). A Spot mark lasts until it is used by an attack (hit or miss) or the
 start of your next turn. Spot has no range limit, only line of sight.
@@ -89,6 +98,20 @@ start of your next turn. Spot has no range limit, only line of sight.
 - **Torch** (Flamer): pick a direction. Hits every model in the next 2 hexes. The Flamer's die is compared to each
   model's **base** defense separately: armor bonuses (Brace) are ignored and Spot doesn't apply. Friendly fire applies.
   A wall stops the flame (nothing on or beyond it is hit); models don't.
+- **Sweep** (Monster): no target needed. This turn's die is compared to the defense of every adjacent enemy separately
+  (Brace counts; Spot and the Monster's +1 to hit don't apply). Each one it beats takes 3 damage. Allies are never hit.
+- **Load / Fire** (Artillery): Load puts a shell in; it stays loaded through moves and turns until fired. Fire is the
+  Artillery's basic attack: only while loaded, range 10, no line of sight needed (arcs over all terrain and models),
+  normal hit roll (Brace and Spot apply), 4 damage, no splash. Firing unloads. Since each takes a turn's action, the
+  Artillery fires at most every other turn. A shell icon on the model shows it's loaded.
+- **Overwatch** (Sentinel): locks in this turn's die and fixes the watched area: every hex within range 3 where even a
+  small model would be visible. Both players see the area and the locked die (eye badge). At the end of the opponent's
+  next turn, if any enemy is standing in the area, the Sentinel fires once at the one with the lowest defense (ties:
+  lowest health; the rule is `chooseOverwatchTarget` in `src/core/overwatch.ts`): locked die + modifiers (Spot) vs
+  defense (Brace counts), 2 damage on a hit. Enemies that passed through but left aren't shot. Overwatch then ends,
+  fired or not. It also ends if the Sentinel dies, moves or uses its die. If the turn order flips right after you set
+  it, it survives your back-to-back turn and still gets the opponent's next turn. Overwatch shots resolve before
+  round scoring.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point (ties score nothing).
 First to 5 points wins, or eliminate every enemy model to win immediately. If one action (Grenade or Torch) wipes out
@@ -125,6 +148,7 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
   queries.ts     read-only questions about a state (who's where, can X see Y, move range)
   combat.ts      attack preview + resolution, shared damage
   army.ts        army cost + validation
+  overwatch.ts   overwatch area, target choice and end-of-turn shots
   specials/      one module per special (Shove is unused for now, kept for future factions) + registry
   game.ts        newGame + applyAction(state, action) -> { state, events }
 src/data/config.ts   unit stats, costs, game settings

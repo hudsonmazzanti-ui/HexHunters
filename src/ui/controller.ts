@@ -34,6 +34,7 @@ import {
   specialTargets,
 } from '../core/specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
+import { speedName } from '../data/config';
 import { BoardView, type BoardOverlay, HEX_SIZE } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
@@ -161,13 +162,23 @@ export class Controller {
         case 'special':
           await this.playSpecial(before, ev);
           break;
+        case 'overwatch': {
+          const sentinel = getUnit(before, ev.unitId)!;
+          const target = getUnit(before, ev.targetId)!;
+          this.board.shot(sentinel.pos!, target.pos!, '#22d3ee');
+          this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? '#fca5a5' : '#e5e7eb');
+          this.ui.message = overwatchText(before, ev);
+          this.render();
+          await sleep(700);
+          break;
+        }
         case 'roundScored':
           // Shown on the next handoff screen.
           break;
         case 'turnStart':
           this.ui = this.freshUi();
           this.render();
-          await this.turnHandoff(ev.player, ev.round, events);
+          await this.turnHandoff(ev.player, ev.round, events, before);
           await this.board.rollDice(ev.dice, this.state.config.dieSides);
           break;
         case 'gameOver':
@@ -254,8 +265,12 @@ export class Controller {
     });
   }
 
-  private async turnHandoff(player: PlayerId, round: number, events: GameEvent[]): Promise<void> {
+  private async turnHandoff(player: PlayerId, round: number, events: GameEvent[], before: GameState): Promise<void> {
     const lines: string[] = [];
+    for (const e of events) if (e.type === 'overwatch') lines.push(overwatchText(before, e));
+    if (before.phase === 'play' && before.current === player) {
+      lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
+    }
     const scored = events.find((e) => e.type === 'roundScored');
     if (scored && scored.type === 'roundScored') {
       const [a, b] = scored.counts;
@@ -442,7 +457,10 @@ export class Controller {
       targetIds: new Set(),
       specialTargetIds: new Set(),
       pendingTargetId: this.ui.pendingTargetId ?? this.ui.pendingChoice?.targetId ?? null,
+      watch: new Map(),
     };
+    // Overwatch areas are always shown, to both players.
+    for (const u of s.units) for (const h of u.overwatch?.hexes ?? []) o.watch.set(hexKey(h), u.owner);
 
     if (s.phase === 'deploy') {
       for (const h of s.map.deployZones[s.current]) {
@@ -460,10 +478,15 @@ export class Controller {
     }
 
     // Shade by visibility: darker means even bigger models would be hidden there.
+    // Indirect fire ignores line of sight, so just show its range.
     const def = unitDef(s, sel);
     for (const h of hexagon(s.map.radius)) {
       if (terrainHeight(s, h) > 0 || hexDistance(h, sel.pos) === 0) continue;
       const key = hexKey(h);
+      if (def.indirectFire) {
+        if (hexDistance(h, sel.pos) <= def.range) o.shade.set(key, 'range');
+        continue;
+      }
       let hiddenFor = 0;
       for (const size of [1, 2, 3]) {
         if (canSeeHex(s, sel, h, size)) break;
@@ -530,13 +553,17 @@ export class Controller {
     if (sel) {
       const def = unitDef(s, sel);
       const defense = effectiveDefense(s, sel);
+      const ownTurn = s.phase === 'play' && sel.owner === s.current;
       const stats: [string, string][] = [
         ['HP', `${sel.hp}/${def.health}`],
         ['Def', defense === def.defense ? `${defense}` : `${defense} (braced)`],
-        ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
+        ['Range', def.range === 1 ? '1 (melee)' : def.indirectFire ? `${def.range} (indirect)` : `${def.range}`],
         ['Dmg', `${def.damage}`],
-        ['Move', s.phase === 'play' && sel.owner === s.current ? `${sel.movesLeft}/${def.speed}` : `${def.speed}`],
+        ['Move', `${ownTurn ? `${sel.movesLeft}/` : ''}${def.speed} ${speedName(def.speed)}`.trim()],
       ];
+      if (def.hitBonus) stats.push(['Hit', `+${def.hitBonus}`]);
+      if (def.needsLoading) stats.push(['Shell', sel.loaded ? 'LOADED' : 'empty']);
+      if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
       if (sel.die !== null) {
         const prep = sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} prep)` : '';
         stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
@@ -645,11 +672,17 @@ export class Controller {
         if (sp.targeting === 'ally' || sp.targeting === 'enemy') {
           detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
         }
-        if (id === 'grenade' || id === 'torch') {
+        if (id === 'grenade' || id === 'torch' || id === 'sweep') {
           const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
           model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
         } else if (id === 'vault') {
           model.preview = { text: `Land here, then keep moving (${unit.movesLeft} left).`, good: true };
+        } else if (id === 'overwatch') {
+          const n = preview?.area.length ?? 0;
+          model.preview = {
+            text: `Watch ${n} hexes with a locked ${unit.die}. At the end of the opponent's turn, fire at an enemy still in the area.`,
+            good: true,
+          };
         }
         actions.push({
           label: `${sp.name}${detail}`,
@@ -676,12 +709,13 @@ export class Controller {
     const pending = this.ui.pendingTargetId ? getUnit(s, this.ui.pendingTargetId) : undefined;
     if (pending) {
       const p = previewAttack(s, unit, pending);
+      const mods = `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}`;
       model.preview = {
-        text: `Roll ${p.roll}${p.bonus ? ` +${p.bonus} spot` : ''} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
+        text: `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
       };
       actions.push({
-        label: `Attack ${unitDef(s, pending).name}`,
+        label: `${attackName(s, unit)} ${unitDef(s, pending).name}`,
         className: 'primary',
         onClick: () => void this.dispatch({ type: 'attack', unitId: unit.id, targetId: pending.id }),
       });
@@ -692,7 +726,12 @@ export class Controller {
     const hints: string[] = [];
     if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
     if (canAct(s, unit)) {
-      hints.push('tap a red-ringed enemy to attack');
+      const def = unitDef(s, unit);
+      if (def.needsLoading && !unit.loaded) {
+        actions.push({ label: `${attackName(s, unit)} (load first)`, disabled: true, onClick: () => {} });
+      } else {
+        hints.push(`tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()}`);
+      }
       const reason = specialBlockedReason(s, unit);
       const noTargets = sp.targeting !== 'none' && !reason && specialChoices(s, unit).length === 0;
       let label = sp.name;
@@ -704,11 +743,13 @@ export class Controller {
         label,
         disabled: !!reason || noTargets,
         onClick: () => {
-          if (sp.targeting === 'none') {
+          if (sp.targeting === 'none' && !sp.preview) {
             void this.dispatch({ type: 'special', unitId: unit.id });
           } else {
+            // Targeted specials pick a target first; untargeted ones with an area (Sweep,
+            // Overwatch) go straight to their preview and wait for Confirm.
             this.ui.specialMode = true;
-            this.ui.pendingChoice = null;
+            this.ui.pendingChoice = sp.targeting === 'none' ? {} : null;
             this.ui.pendingTargetId = null;
             this.render();
           }
@@ -724,4 +765,17 @@ export class Controller {
     model.hint = model.hint.charAt(0).toUpperCase() + model.hint.slice(1);
     model.actions.push(...actions);
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const attackName = (state: GameState, unit: Unit): string => unitDef(state, unit).attackName ?? 'Attack';
+
+/** "Sentinel overwatch: 9 vs def 5, hit for 2". */
+function overwatchText(state: GameState, ev: Extract<GameEvent, { type: 'overwatch' }>): string {
+  const target = getUnit(state, ev.targetId);
+  const name = target ? unitDef(state, target).name : 'target';
+  const roll = `${ev.roll}${ev.bonus ? `+${ev.bonus}` : ''} vs def ${ev.defense}`;
+  const result = ev.hit ? `hit ${name} for ${ev.damage}${ev.killed ? ' (destroyed!)' : ''}` : `missed ${name}`;
+  return `Sentinel overwatch: ${roll}, ${result}.`;
 }

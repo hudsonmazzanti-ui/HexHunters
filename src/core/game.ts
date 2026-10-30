@@ -8,6 +8,7 @@ import { type Hex, hexEquals } from './hex';
 import { validateArmy } from './army';
 import { type AttackResult, resolveAttack } from './combat';
 import { generateMap } from './mapgen';
+import { type OverwatchShot, resolveOverwatch } from './overwatch';
 import { movePath, getUnit, livingUnits, other, unitAt, unitDef, unitsOnControlPoint } from './queries';
 import { nextRandom } from './rng';
 import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
@@ -30,6 +31,8 @@ export type GameEvent =
   | { type: 'move'; unitId: string; path: Hex[] }
   | ({ type: 'attack'; unitId: string; targetId: string } & AttackResult)
   | ({ type: 'special'; unitId: string } & SpecialResult)
+  /** A Sentinel's overwatch shot at the end of the opponent's turn. */
+  | ({ type: 'overwatch' } & OverwatchShot)
   | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
@@ -39,8 +42,13 @@ export interface ActionResult {
   events: GameEvent[];
 }
 
-/** Player 1 (id 0) goes first in odd rounds, player 2 (id 1) in even rounds. */
-export const firstPlayerOfRound = (round: number): PlayerId => (round % 2 === 1 ? 0 : 1);
+/**
+ * Who goes first in a round. The order flips every `swapEvery` rounds; with 2:
+ * rounds 1–2 player 1 first, rounds 3–4 player 2 first, 5–6 player 1, and so on.
+ * Where it flips, the same player takes two turns in a row.
+ */
+export const firstPlayerOfRound = (round: number, swapEvery: number): PlayerId =>
+  Math.floor((round - 1) / swapEvery) % 2 === 0 ? 0 : 1;
 
 /** Starts in the army-building phase: player 1 builds, then player 2. */
 export function newGame(config: GameConfig, seed: number): GameState {
@@ -106,7 +114,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
         state.phase = 'play';
         state.round = 1;
         state.turnInRound = 0;
-        state.current = firstPlayerOfRound(1);
+        state.current = firstPlayerOfRound(1, state.config.firstPlayerSwapEvery);
         startTurn(state, events);
       } else {
         state.current = next;
@@ -117,6 +125,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (state.phase !== 'play') fail('Not in play');
       const unit = ownUnit(action.unitId);
       const path = movePath(state, unit, action.to) ?? fail('Cannot reach that hex');
+      unit.overwatch = null; // the watched area belongs to where it stood
       unit.pos = action.to;
       unit.movesLeft -= path.length;
       events.push({ type: 'move', unitId: unit.id, path });
@@ -136,6 +145,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       const unit = ownUnit(action.unitId);
       const target = getUnit(state, action.targetId) ?? fail('No such target');
       const result = guard(() => resolveAttack(state, unit, target));
+      unit.overwatch = null;
       events.push({ type: 'attack', unitId: unit.id, targetId: target.id, ...result });
       checkElimination(state, events);
       break;
@@ -144,6 +154,9 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (state.phase !== 'play') fail('Not in play');
       const unit = ownUnit(action.unitId);
       const { targetId, hex, dir } = action;
+      // Using the die ends any earlier overwatch (Overwatch itself sets a new one).
+      // If the special is illegal, applyAction throws and this cloned state is discarded.
+      unit.overwatch = null;
       const result = guard(() => applySpecial(state, unit, { targetId, hex, dir }));
       events.push({ type: 'special', unitId: unit.id, ...result });
       checkElimination(state, events);
@@ -173,6 +186,8 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     braced: false,
     prepped: false,
     spottedBy: null,
+    loaded: false,
+    overwatch: null,
   };
 }
 
@@ -190,12 +205,13 @@ function nextDeployer(state: GameState): PlayerId | null {
   return null;
 }
 
-/** Ends the game if a side has no models left; a draw if both were wiped out at once. */
-function checkElimination(state: GameState, events: GameEvent[]): void {
+/** Ends the game if a side has no models left (a draw if both were wiped out at once). Returns true if it ended. */
+function checkElimination(state: GameState, events: GameEvent[]): boolean {
   const alive = [livingUnits(state, 0).length, livingUnits(state, 1).length];
-  if (alive[0] && alive[1]) return;
+  if (alive[0] && alive[1]) return false;
   if (!alive[0] && !alive[1]) endGame(state, events, null, 'draw');
   else endGame(state, events, alive[0] ? 0 : 1, 'elimination');
+  return true;
 }
 
 /** Re-throw rule violations from helpers as RuleErrors. */
@@ -249,6 +265,10 @@ function endTurn(state: GameState, events: GameEvent[]): void {
     unit.turnStartPos = null;
   }
 
+  // The opponent's Sentinels on overwatch fire at enemies still in their area.
+  for (const shot of resolveOverwatch(state, state.current)) events.push({ type: 'overwatch', ...shot });
+  if (checkElimination(state, events)) return;
+
   if (state.turnInRound === 0) {
     state.turnInRound = 1;
     state.current = other(state.current);
@@ -260,7 +280,7 @@ function endTurn(state: GameState, events: GameEvent[]): void {
   if (state.phase === 'over') return;
   state.round += 1;
   state.turnInRound = 0;
-  state.current = firstPlayerOfRound(state.round);
+  state.current = firstPlayerOfRound(state.round, state.config.firstPlayerSwapEvery);
   startTurn(state, events);
 }
 

@@ -7,7 +7,10 @@ export interface AttackPreview {
   /** Why the attack isn't allowed, or null if it is. */
   blockedReason: string | null;
   roll: number;
+  /** Total modifiers: the attacker's hitBonus plus any Spot bonus. */
   bonus: number;
+  hitBonus: number;
+  spotBonus: number;
   defense: number;
   hit: boolean;
   damage: number;
@@ -16,16 +19,20 @@ export interface AttackPreview {
 export function previewAttack(state: GameState, attacker: Unit, target: Unit): AttackPreview {
   const def = unitDef(state, attacker);
   const roll = attacker.die ?? 0;
-  const bonus = target.spottedBy === attacker.owner ? state.config.specials.spotAttackBonus : 0;
+  const hitBonus = def.hitBonus ?? 0;
+  const spotBonus = target.spottedBy === attacker.owner ? state.config.specials.spotAttackBonus : 0;
+  const bonus = hitBonus + spotBonus;
   const defense = effectiveDefense(state, target);
 
   let blockedReason: string | null = null;
   if (!canAct(state, attacker)) blockedReason = 'This model cannot act';
+  else if (def.needsLoading && !attacker.loaded) blockedReason = 'Not loaded';
   else if (!target.pos || target.owner === attacker.owner) blockedReason = 'Not an enemy';
   else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
-  else if (!canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
+  else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
 
-  return { blockedReason, roll, bonus, defense, hit: roll + bonus >= defense, damage: def.damage };
+  const hit = roll + bonus >= defense;
+  return { blockedReason, roll, bonus, hitBonus, spotBonus, defense, hit, damage: def.damage };
 }
 
 export interface AttackResult {
@@ -44,8 +51,9 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
 
   attacker.acted = true;
   attacker.movesLeft = 0;
+  if (unitDef(state, attacker).needsLoading) attacker.loaded = false;
   // Spot is used up by the attack, hit or miss.
-  if (p.bonus > 0) target.spottedBy = null;
+  if (p.spotBonus > 0) target.spottedBy = null;
 
   const killed = p.hit && dealDamage(state, target, p.damage);
   return { roll: p.roll, bonus: p.bonus, defense: p.defense, hit: p.hit, damage: p.hit ? p.damage : 0, killed };
