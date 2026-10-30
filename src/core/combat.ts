@@ -1,0 +1,59 @@
+/** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
+import { hexDistance } from './hex';
+import { canAct, canSeeUnit, effectiveDefense, unitDef } from './queries';
+import type { GameState, Unit } from './types';
+
+export interface AttackPreview {
+  /** Why the attack isn't allowed, or null if it is. */
+  blockedReason: string | null;
+  roll: number;
+  bonus: number;
+  defense: number;
+  hit: boolean;
+  damage: number;
+}
+
+export function previewAttack(state: GameState, attacker: Unit, target: Unit): AttackPreview {
+  const def = unitDef(state, attacker);
+  const roll = attacker.die ?? 0;
+  const bonus = target.spottedBy === attacker.owner ? state.config.specials.spotAttackBonus : 0;
+  const defense = effectiveDefense(state, target);
+
+  let blockedReason: string | null = null;
+  if (!canAct(state, attacker)) blockedReason = 'This model cannot act';
+  else if (!target.pos || target.owner === attacker.owner) blockedReason = 'Not an enemy';
+  else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
+  else if (!canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
+
+  return { blockedReason, roll, bonus, defense, hit: roll + bonus >= defense, damage: def.damage };
+}
+
+export interface AttackResult {
+  roll: number;
+  bonus: number;
+  defense: number;
+  hit: boolean;
+  damage: number;
+  killed: boolean;
+}
+
+/** Resolves an attack, mutating `state`. Throws if the attack isn't legal. */
+export function resolveAttack(state: GameState, attacker: Unit, target: Unit): AttackResult {
+  const p = previewAttack(state, attacker, target);
+  if (p.blockedReason) throw new Error(p.blockedReason);
+
+  attacker.acted = true;
+  attacker.movesLeft = 0;
+  // Spot is used up by the attack, hit or miss.
+  if (p.bonus > 0) target.spottedBy = null;
+
+  let killed = false;
+  if (p.hit) {
+    target.hp = Math.max(0, target.hp - p.damage);
+    if (target.hp === 0) {
+      killed = true;
+      state.units = state.units.filter((u) => u.id !== target.id);
+    }
+  }
+  return { roll: p.roll, bonus: p.bonus, defense: p.defense, hit: p.hit, damage: p.hit ? p.damage : 0, killed };
+}
