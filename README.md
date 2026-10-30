@@ -49,6 +49,13 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1 |
 | Pyromancer    | 6    | medium (2) | 3     | 7   | 10 | 3            | 2   | Burn: its attacks, Flamer Torch and Grenadier Grenade set every model they hit burning |
 
+**The Twins** (hero, 10 pts, bought as one entry that adds both models; no passive rule; both have **Swap**):
+
+| Model          | Size      | Speed | Def | HP | Range     | Dmg |
+|----------------|-----------|-------|-----|----|-----------|-----|
+| Twin (Tank)    | large (3) | 2     | 7   | 12 | 1 (melee) | 3   |
+| Twin (Shooter) | small (1) | 3     | 5   | 5  | Infantry's (5) | Infantry's (2) |
+
 Speeds: crawl 1, slow 2, normal 3, fast 4 (`SPEED` in the config). Assassin, Grenadier, Flamer, Artillery and Sentinel
 defense values are placeholders.
 
@@ -63,6 +70,8 @@ numbers (Brace/Prep/Spot bonus, Heal/Dash divisors, Grenade threshold and damage
 are under `specials`. Hit chance on a plain roll: defense 5 → 67%, 6 → 58%, 7 → 50%.
 
 **Adding a unit:** add an entry to `UNITS` (stats, `cost`, `special`). Costs can be any positive integer.
+**Adding a squad** (several models bought together): add its members to `UNITS` with `squadOnly: '<squad id>'` and an
+entry to `SQUADS` (name, cost, `hero`, `members`); two-member squads are linked as partners.
 **Adding a hero:** add a unit with `hero: { aura: '<id>' }` and no `special`, write the aura in `src/core/auras/`
 (which units it affects and its effects: roll, speed, defense, damage or health bonus, action-roll bonus, no-loading,
 double action, or extra points for holding the control point), add the id to `AuraId` in
@@ -173,6 +182,14 @@ the Grenadier's Grenade (impact and splash) set every model they hit and don't k
 Flamer's and Grenadier's basic attacks don't burn. At the start of the burning model's owner's next turn it takes 1
 damage (this can kill, end the game, and make a Zombie crawl), then stops burning. Burn doesn't stack. Burning models
 show a flame icon, and the handoff screen logs the damage.
+
+**The Twins.** One builder entry (`SQUADS` in the config) adds both models for 10 points and counts as the army's one
+hero; the twins can't be bought separately. When you place a twin during deployment, you place both in the same step:
+first one, then the other on a free hex of your zone next to it (refused if there is none), then the handoff. **Swap**
+uses the activating twin's die (and ends its movement): the twins trade places from anywhere on the map, no range or
+line of sight needed. The other twin keeps its die and, if it hasn't acted, can still move and act; it can't undo the
+swap. Once either twin dies, Swap is greyed out for the rest of the game. Both twins carry a purple link badge, and
+selecting one outlines the other.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).

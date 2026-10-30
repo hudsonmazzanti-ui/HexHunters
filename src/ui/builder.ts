@@ -3,7 +3,7 @@
  * stats and special. Tap + / − to add or remove; Confirm is blocked while the
  * army is empty or over the point limit. Resolves with the chosen unit type ids.
  */
-import { armyCost, validateArmy } from '../core/army';
+import { armyCost, entryModels, entryName, validateArmy } from '../core/army';
 import { AURAS } from '../core/auras';
 import { SPECIALS } from '../core/specials';
 import type { GameConfig, PlayerId } from '../core/types';
@@ -22,7 +22,9 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
 export function showBuilder(config: GameConfig, player: PlayerId): Promise<string[]> {
   const army: string[] = [];
   // Heroes first (their own section), then regular units; each by cost, then name.
-  const types = Object.keys(config.units).sort(
+  const types = Object.keys(config.units)
+    .filter((t) => !config.units[t].squadOnly) // squad members are bought through their squad card
+    .sort(
     (a, b) =>
       Number(!!config.units[b].hero) - Number(!!config.units[a].hero) ||
       config.units[a].cost - config.units[b].cost ||
@@ -34,6 +36,66 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
   document.body.append(root);
 
   return new Promise((resolve) => {
+    /** One card for a squad (the Twins): both models' stats and their shared special. */
+    const squadCard = (id: string): HTMLElement => {
+      const squad = config.squads[id];
+      const count = army.filter((x) => x === id).length;
+      const card = h('div', `unit-card hero${count ? ' picked' : ''}`);
+      const top = h('div', 'unit-card-top');
+      top.append(
+        h('span', 'unit-tag', 'TT'),
+        h('span', 'unit-name', squad.name),
+        ...(squad.hero ? [h('span', 'hero-badge', 'HERO')] : []),
+        h('span', 'unit-cost', `${squad.cost} pts`),
+      );
+      card.append(top, h('div', 'unit-special', `Adds ${squad.members.length} linked models. They can't be bought separately.`));
+      const specials = new Set<string>();
+      for (const m of squad.members) {
+        const def = config.units[m];
+        const stats = h('div', 'unit-stats');
+        stats.append(h('b', '', `${def.name}: `));
+        const list: [string, string][] = [
+          ['Size', SIZE_NAMES[def.size]],
+          ['Move', `${def.speed}`],
+          ['Def', `${def.defense}`],
+          ['HP', `${def.health}`],
+          ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
+          ['Dmg', `${def.damage}`],
+        ];
+        for (const [k, v] of list) {
+          const sEl = h('span', '', `${k} `);
+          sEl.append(h('b', '', v));
+          stats.append(sEl);
+        }
+        card.append(stats);
+        if (def.special) specials.add(def.special);
+      }
+      for (const sid of specials) {
+        const sp = SPECIALS[sid as keyof typeof SPECIALS];
+        const special = h('div', 'unit-special');
+        special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
+        card.append(special);
+        const tags = h('div', 'unit-tags');
+        for (const t of ['No passive rule', ...(sp.tags ?? [])]) tags.append(h('span', 'unit-pill', t));
+        card.append(tags);
+      }
+      const controls = h('div', 'unit-controls');
+      const minus = h('button', 'step', '−');
+      minus.disabled = count === 0;
+      minus.onclick = () => {
+        army.splice(army.lastIndexOf(id), 1);
+        render();
+      };
+      const plus = h('button', 'step', '+');
+      plus.onclick = () => {
+        army.push(id);
+        render();
+      };
+      controls.append(minus, h('span', 'unit-count', String(count)), plus);
+      card.append(controls);
+      return card;
+    };
+
     const render = () => {
       const cost = armyCost(config, army);
       const limit = config.armyPointLimit;
@@ -50,7 +112,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       const summary = h('div', 'builder-summary');
       if (!army.length) summary.append(h('span', 'builder-empty', 'No units yet: tap + to add.'));
       army.forEach((t, i) => {
-        const chip = h('button', 'builder-chip', `${config.units[t].name} ✕`);
+        const chip = h('button', 'builder-chip', `${entryName(config, t)} ✕`);
         chip.onclick = () => {
           army.splice(i, 1);
           render();
@@ -71,6 +133,10 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
           section = kind;
           const max = config.maxHeroesPerArmy;
           list.append(h('div', 'builder-section', kind === 'hero' ? `Heroes (max ${max} per army, optional)` : 'Units'));
+          // Squads that count as a hero (the Twins) go first in the Heroes section.
+          if (kind === 'hero') {
+            for (const id of Object.keys(config.squads)) if (config.squads[id].hero) list.append(squadCard(id));
+          }
         }
 
         const card = h('div', `unit-card${count ? ' picked' : ''}${def.hero ? ' hero' : ''}`);
@@ -99,7 +165,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         }
 
         const special = h('div', 'unit-special');
-        if (def.hero) {
+        if (def.hero?.aura) {
           const aura = AURAS[def.hero.aura].describe(config.specials);
           special.append(h('b', '', 'Passive (whole army): '), document.createTextNode(aura));
         } else if (sp) {
@@ -139,7 +205,8 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       }
 
       const footer = h('div', 'builder-footer');
-      const msg = h('div', `builder-msg${over ? ' over' : ''}`, reason ?? `${army.length} model${army.length === 1 ? '' : 's'} ready.`);
+      const models = army.reduce((n, t) => n + entryModels(config, t).length, 0);
+      const msg = h('div', `builder-msg${over ? ' over' : ''}`, reason ?? `${models} model${models === 1 ? '' : 's'} ready.`);
       const clear = h('button', '', 'Clear');
       clear.disabled = army.length === 0;
       clear.onclick = () => {

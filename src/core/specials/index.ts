@@ -21,6 +21,7 @@ import { prep } from './prep';
 import { shove } from './shove';
 import { spot } from './spot';
 import { sweep } from './sweep';
+import { swap } from './swap';
 import { torch } from './torch';
 import type { ResolvedChoice, SpecialChoice, SpecialDef, SpecialPreview, SpecialResult } from './types';
 import { vault } from './vault';
@@ -34,6 +35,7 @@ export { grenadeArcClear } from './grenade';
 export { torchLine } from './torch';
 export { hookPath } from './hook';
 export { eatHeal } from './eat';
+export { partnerOf } from './swap';
 
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   brace,
@@ -50,6 +52,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   overwatch,
   hook,
   eat,
+  swap,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */

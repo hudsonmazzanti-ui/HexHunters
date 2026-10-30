@@ -7,7 +7,7 @@
  * Attacks hit when (d12 + modifiers) >= target defense, so on a plain roll:
  *   defense 5 -> 67% hit, 6 -> 58%, 7 -> 50%, 8 -> 42%.
  */
-import type { AuraId, GameConfig, UnitDef } from '../core/types';
+import type { AuraId, GameConfig, SquadDef, UnitDef } from '../core/types';
 
 /** Named movement speeds, in hexes per turn. */
 export const SPEED = { crawl: 1, slow: 2, normal: 3, fast: 4 } as const;
@@ -16,19 +16,21 @@ export const SPEED = { crawl: 1, slow: 2, normal: 3, fast: 4 } as const;
 export const speedName = (speed: number): string =>
   (Object.keys(SPEED) as (keyof typeof SPEED)[]).find((k) => SPEED[k] === speed) ?? '';
 
+const infantry: UnitDef = {
+  name: 'Infantry',
+  label: 'I',
+  cost: 3,
+  size: 2, // medium
+  speed: SPEED.normal,
+  defense: 6,
+  health: 6,
+  range: 5,
+  damage: 2,
+  special: 'prep',
+};
+
 export const UNITS: Record<string, UnitDef> = {
-  infantry: {
-    name: 'Infantry',
-    label: 'I',
-    cost: 3,
-    size: 2, // medium
-    speed: SPEED.normal,
-    defense: 6,
-    health: 6,
-    range: 5,
-    damage: 2,
-    special: 'prep',
-  },
+  infantry,
   medic: {
     name: 'Medic',
     label: 'M',
@@ -277,6 +279,42 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 2,
     hero: { aura: 'pyro' },
   },
+
+  // ---- The Twins: bought together as one hero (see SQUADS), never on their own ----
+  twintank: {
+    name: 'Twin (Tank)',
+    label: 'T1',
+    cost: 0,
+    size: 3, // large
+    speed: SPEED.slow,
+    defense: 7,
+    health: 12,
+    range: 1, // melee only
+    damage: 3,
+    special: 'swap',
+    hero: {},
+    squadOnly: 'twins',
+  },
+  twinshooter: {
+    name: 'Twin (Shooter)',
+    label: 'T2',
+    cost: 0,
+    size: 1, // small
+    speed: SPEED.normal,
+    defense: 5,
+    health: 5,
+    // Same basic attack as the Infantry.
+    range: infantry.range,
+    damage: infantry.damage,
+    special: 'swap',
+    hero: {},
+    squadOnly: 'twins',
+  },
+};
+
+/** Army-builder entries that add several linked models at once. */
+export const SQUADS: Record<string, SquadDef> = {
+  twins: { name: 'The Twins', cost: 10, hero: true, members: ['twintank', 'twinshooter'] },
 };
 
 /** Display name of the hero that grants an aura (e.g. "Warlord"). */
@@ -295,6 +333,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   maxHeroesPerArmy: 1,
   firstPlayerSwapEvery: 2,
   units: UNITS,
+  squads: SQUADS,
   specials: {
     braceDefenseBonus: 2,
     prepRollBonus: 2,

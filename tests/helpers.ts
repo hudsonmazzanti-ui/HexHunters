@@ -63,11 +63,12 @@ export function addUnit(
     crawling: false,
     resting: false,
     burning: false,
+    partnerId: null,
     ...extra,
   };
   state.units.push(unit);
   // A hero brings its aura with it, as when an army is chosen (add heroes before the units they buff).
-  if (def.hero) state.auras[owner].push(def.hero.aura);
+  if (def.hero?.aura) state.auras[owner].push(def.hero.aura);
   if (extra.hp === undefined) unit.hp = maxHealth(state, unit);
   return unit;
 }

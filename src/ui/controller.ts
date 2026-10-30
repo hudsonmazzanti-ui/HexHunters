@@ -4,7 +4,17 @@
  * resulting events as animations, and re-renders.
  */
 import { previewAttack } from '../core/combat';
-import { type Action, type GameEvent, RuleError, applyAction, canUndoMove, isInDeployZone, newGame, unplacedUnits } from '../core/game';
+import {
+  type Action,
+  type GameEvent,
+  RuleError,
+  applyAction,
+  canUndoMove,
+  freePartnerHexes,
+  isInDeployZone,
+  newGame,
+  unplacedUnits,
+} from '../core/game';
 import { type Hex, type Point, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
   actionBonus,
@@ -35,6 +45,7 @@ import {
   SPECIALS,
   dashAmount,
   eatHeal,
+  partnerOf,
   healAmount,
   hookPath,
   previewSpecial,
@@ -71,6 +82,8 @@ interface UiState {
   /** Tap End Turn twice when models still have unused dice. */
   confirmEndTurn: boolean;
   message: string | null;
+  /** Deploying a twin: the first hex is chosen; waiting for the partner's adjacent hex. */
+  pendingTwin: { unitId: string; hex: Hex } | null;
 }
 
 export class Controller {
@@ -97,6 +110,7 @@ export class Controller {
       pendingChoice: null,
       confirmEndTurn: false,
       message: null,
+      pendingTwin: null,
     };
   }
 
@@ -241,7 +255,11 @@ export class Controller {
       else this.board.floatText(pos, `-${e.damage}`, '#fca5a5');
     }
 
-    if (ev.movedId && ev.to) {
+    if (ev.special === 'swap' && ev.movedId && ev.from && ev.to && ev.targetId) {
+      // Both twins slide across at once.
+      this.render();
+      await Promise.all([this.board.animateMove(ev.movedId, [ev.to]), this.board.animateMove(ev.targetId, [ev.from])]);
+    } else if (ev.movedId && ev.to) {
       this.render();
       await this.board.animateMove(ev.movedId, ev.path ?? [ev.to]);
     }
@@ -384,6 +402,7 @@ export class Controller {
 
   private selectUnit(id: string | null): void {
     this.ui.selectedId = id;
+    this.ui.pendingTwin = null;
     this.ui.pendingTargetId = null;
     this.ui.specialMode = false;
     this.ui.pendingChoice = null;
@@ -406,9 +425,33 @@ export class Controller {
       this.render();
       return;
     }
+    // Second tap for the Twins: the partner's hex, next to the first.
+    const twin = this.ui.pendingTwin;
+    if (twin) {
+      this.ui.pendingTwin = null;
+      if (freePartnerHexes(s, twin.hex).some((h) => hexEquals(h, hex))) {
+        void this.dispatch({ type: 'place', unitId: twin.unitId, hex: twin.hex, partnerHex: hex });
+      } else {
+        this.ui.message = 'Cancelled: the other twin must go on a highlighted hex next to the first.';
+        this.render();
+      }
+      return;
+    }
     const sel = this.selected();
     const unit = sel && sel.owner === s.current && !sel.pos ? sel : unplacedUnits(s, s.current)[0];
-    if (unit) void this.dispatch({ type: 'place', unitId: unit.id, hex });
+    if (!unit) return;
+    const partner = unit.partnerId ? getUnit(s, unit.partnerId) : undefined;
+    if (partner && !partner.pos) {
+      if (!freePartnerHexes(s, hex).length) {
+        this.ui.message = 'No free hex next to it for the other twin. Pick another hex.';
+      } else {
+        this.ui.pendingTwin = { unitId: unit.id, hex };
+        this.ui.message = `Now place ${unitDef(s, partner).name} on a highlighted hex next to it.`;
+      }
+      this.render();
+      return;
+    }
+    void this.dispatch({ type: 'place', unitId: unit.id, hex });
   }
 
   private async onPlayTap(hex: Hex): Promise<void> {
@@ -497,12 +540,20 @@ export class Controller {
       targetIds: new Set(),
       specialTargetIds: new Set(),
       pendingTargetId: this.ui.pendingTargetId ?? this.ui.pendingChoice?.targetId ?? null,
+      partnerId: this.selected()?.partnerId ?? null,
       watch: new Map(),
     };
     // Overwatch areas are always shown, to both players.
     for (const u of s.units) for (const h of u.overwatch?.hexes ?? []) o.watch.set(hexKey(h), u.owner);
 
     if (s.phase === 'deploy') {
+      const twin = this.ui.pendingTwin;
+      if (twin) {
+        // Placing the Twins: the first twin's hex, then where the partner can go.
+        o.shade.set(hexKey(twin.hex), 'landing');
+        for (const h of freePartnerHexes(s, twin.hex)) o.shade.set(hexKey(h), 'option');
+        return o;
+      }
       for (const h of s.map.deployZones[s.current]) {
         if (!unitAt(s, h)) o.shade.set(hexKey(h), `deploy-${s.current}`);
       }
@@ -552,6 +603,9 @@ export class Controller {
     const s = this.state;
     const sp = specialOf(s, unit);
     if (!sp) return;
+    // Swap: ring the partner twin.
+    const partner = specialIdOf(s, unit) === 'swap' ? partnerOf(s, unit) : undefined;
+    if (partner) o.specialTargetIds.add(partner.id);
     const choices = specialChoices(s, unit);
     if (targetsUnit(sp.targeting)) {
       for (const t of specialTargets(s, unit)) o.specialTargetIds.add(t.id);
@@ -638,7 +692,7 @@ export class Controller {
         title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[unitSize(s, sel)]})`,
         owner: sel.owner,
         stats,
-        special: def.hero
+        special: def.hero?.aura
           ? `Hero aura (lasts all game): ${AURAS[def.hero.aura].describe(s.config.specials)}`
           : sp
             ? `${sp.name}: ${sp.describe(s.config.specials)}`
@@ -666,8 +720,9 @@ export class Controller {
     const theirs = unplacedUnits(s, other(s.current)).length;
     const sel = this.selected();
     const next = sel && sel.owner === s.current && !sel.pos ? sel : unplacedUnits(s, s.current)[0];
+    const pairNote = next?.partnerId ? ' The Twins are placed together: pick a hex, then one next to it.' : '';
     model.hint =
-      `Tap a highlighted hex to place your ${next ? unitDef(s, next).name : 'model'} (or pick a different model above). ` +
+      `Tap a highlighted hex to place your ${next ? unitDef(s, next).name : 'model'} (or pick a different model above).${pairNote} ` +
       `You have ${mine} left; ${PLAYER_NAMES[other(s.current)]} has ${theirs}.`;
     if (!sel && next) {
       const chip = model.roster.find((c) => c.id === next.id);
@@ -742,6 +797,12 @@ export class Controller {
         if (id === 'grenade' || id === 'torch' || id === 'sweep') {
           const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
           model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
+        } else if (id === 'swap') {
+          const partner = partnerOf(s, unit);
+          model.preview = {
+            text: partner ? `Swap places with ${unitDef(s, partner).name}, across the map. It keeps its action.` : '',
+            good: true,
+          };
         } else if (id === 'eat') {
           const e = effects[0];
           const t = getUnit(s, choice.targetId!)!;

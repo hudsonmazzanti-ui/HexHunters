@@ -21,7 +21,8 @@ export type SpecialId =
   | 'load'
   | 'overwatch'
   | 'hook'
-  | 'eat';
+  | 'eat'
+  | 'swap';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
 export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard' | 'pyro';
@@ -41,8 +42,10 @@ export interface UnitDef {
   damage: number;
   /** The unit's special action. Heroes have none: their die is only for attacking. */
   special?: SpecialId;
-  /** Marks a hero: max one per army, grants a permanent army-wide aura. */
-  hero?: { aura: AuraId };
+  /** Marks a hero: max one per army, usually grants a permanent army-wide aura. */
+  hero?: { aura?: AuraId };
+  /** Only comes as part of this squad (see GameConfig.squads); can't be bought on its own. */
+  squadOnly?: string;
   /** Name of the basic attack in the UI (default "Attack"). */
   attackName?: string;
   /** Added to the die on basic attacks. */
@@ -75,7 +78,19 @@ export interface GameConfig {
   /** The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...). */
   firstPlayerSwapEvery: number;
   units: Record<string, UnitDef>;
+  /** Entries that buy several linked models at once (the Twins). */
+  squads: Record<string, SquadDef>;
   specials: SpecialRules;
+}
+
+/** One army-builder entry that adds several models, linked as partners. */
+export interface SquadDef {
+  name: string;
+  cost: number;
+  /** Counts as the army's hero (toward maxHeroesPerArmy). */
+  hero?: boolean;
+  /** Unit type ids it adds, one model each. */
+  members: string[];
 }
 
 export interface SpecialRules {
@@ -169,6 +184,8 @@ export interface Unit {
   resting: boolean;
   /** Takes Burn damage at the start of its owner's next turn, then stops burning. */
   burning: boolean;
+  /** The other model of its squad (the Twins), or null. */
+  partnerId: string | null;
 }
 
 export interface Overwatch {

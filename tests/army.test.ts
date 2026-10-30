@@ -4,7 +4,11 @@ import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 
 describe('army building', () => {
   it('has the agreed point costs', () => {
-    const costs = Object.fromEntries(Object.entries(UNITS).map(([id, u]) => [id, u.cost]));
+    const costs = Object.fromEntries(
+      Object.entries(UNITS)
+        .filter(([, u]) => !u.squadOnly) // squad members are bought through their squad
+        .map(([id, u]) => [id, u.cost]),
+    );
     expect(costs).toEqual({
       scout: 2,
       assassin: 2,
