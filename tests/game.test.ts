@@ -84,19 +84,20 @@ describe('deployment', () => {
     expect(order).toEqual(['p0', 'p1', 'p0', 'p0']);
     const nexts = events.filter((e) => e.type === 'placed').map((e) => (e.type === 'placed' ? e.next : -1));
     expect(nexts).toEqual([1, 0, 0, null]);
-    expect(state).toMatchObject({ phase: 'play', current: 0, round: 1 });
-    expect(events.at(-1)).toMatchObject({ type: 'turnStart', player: 0, round: 1 });
+    expect(state).toMatchObject({ phase: 'play', current: state.firstPlayer, round: 1 });
+    expect(events.at(-2)).toEqual({ type: 'coinFlip', winner: state.firstPlayer });
+    expect(events.at(-1)).toMatchObject({ type: 'turnStart', player: state.firstPlayer, round: 1 });
   });
 });
 
 describe('turn flow', () => {
   it('rolls a d12 for each of the current player’s models at turn start', () => {
     const { state } = deployBoth(newGame(DEFAULT_CONFIG, 3));
-    for (const u of livingUnits(state, 0)) {
+    for (const u of livingUnits(state, state.current)) {
       expect(u.die).toBeGreaterThanOrEqual(1);
       expect(u.die).toBeLessThanOrEqual(12);
     }
-    for (const u of livingUnits(state, 1)) expect(u.die).toBeNull();
+    for (const u of livingUnits(state, state.current === 0 ? 1 : 0)) expect(u.die).toBeNull();
   });
 
   it('dice are roughly uniform over 1..12', () => {
@@ -121,8 +122,10 @@ describe('turn flow', () => {
       state = applyAction(state, { type: 'endTurn' }).state;
     }
     expect(rounds).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
-    // Rounds 1–2: P1, P2. Rounds 3–4: P2, P1. Rounds 5–6: P1, P2.
-    expect(order).toEqual([0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1]);
+    // Relative to the coin-flip winner (W) and the other player (L):
+    // rounds 1–2: W, L. Rounds 3–4: L, W. Rounds 5–6: W, L.
+    const relative = order.map((p) => (p === state.firstPlayer ? 0 : 1));
+    expect(relative).toEqual([0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1]);
   });
 
   it('firstPlayerOfRound follows the configured swap interval', () => {
@@ -274,7 +277,7 @@ describe('purity', () => {
   it('applyAction never mutates its input', () => {
     const s = deployBoth(newGame(DEFAULT_CONFIG, 4)).state;
     const before = structuredClone(s);
-    const u = livingUnits(s, 0)[0];
+    const u = livingUnits(s, s.current)[0];
     applyAction(s, { type: 'special', unitId: u.id });
     applyAction(s, { type: 'endTurn' });
     expect(s).toEqual(before);

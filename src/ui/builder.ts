@@ -23,7 +23,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
   const army: string[] = [];
   // Heroes first (their own section), then regular units; each by cost, then name.
   const types = Object.keys(config.units)
-    .filter((t) => !config.units[t].squadOnly) // squad members are bought through their squad card
+    .filter((t) => !config.units[t].squadOnly && !config.units[t].formOnly) // squad members / alternate forms
     .sort(
     (a, b) =>
       Number(!!config.units[b].hero) - Number(!!config.units[a].hero) ||
@@ -170,6 +170,13 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
           special.append(h('b', '', 'Passive (whole army): '), document.createTextNode(aura));
         } else if (sp) {
           special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
+        } else if (def.transformsInto) {
+          // No special until it transforms; show the beast form's special.
+          const beastSp = config.units[def.transformsInto.type].special;
+          if (beastSp) {
+            const bsp = SPECIALS[beastSp];
+            special.append(h('b', '', `${bsp.name} (after transforming): `), document.createTextNode(bsp.describe(config.specials)));
+          }
         }
         // Callouts: hero rules, the unit's attack quirks, then the special's.
         const callouts = [
@@ -178,7 +185,8 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
           ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
           ...(def.woundedForm ? ['Crawls when first hurt: small, speed 1, for good'] : []),
           ...(def.restsOnDoubleTurn ? ['Rests on back-to-back turns'] : []),
-          ...(!def.hero && !sp ? ['No special'] : []),
+          ...(def.transformsInto ? [transformText(config, def.transformsInto)] : []),
+          ...(!def.hero && !sp && !def.transformsInto ? ['No special'] : []),
           ...(sp?.tags ?? []),
         ];
         const tags = h('div', 'unit-tags');
@@ -228,4 +236,15 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
     };
     render();
   });
+}
+
+/** "On your 3rd turn becomes Werewolf (Beast): large, move 4, def 6, HP 12, melee 5, Pounce (+5 HP)". */
+function transformText(config: GameConfig, t: { type: string; onOwnerTurn: number; heal: number }): string {
+  const f = config.units[t.type];
+  const special = f.special ? `, ${SPECIALS[f.special].name}` : '';
+  const range = f.range === 1 ? 'melee' : `range ${f.range},`;
+  return (
+    `On your turn ${t.onOwnerTurn} becomes ${f.name}: ${SIZE_NAMES[f.size]}, move ${f.speed}, def ${f.defense}, ` +
+    `HP ${f.health}, ${range} ${f.damage}${special} (heals ${t.heal})`
+  );
 }

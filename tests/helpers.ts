@@ -25,6 +25,10 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
     round: 1,
     turnInRound: 0,
     scores: [0, 0],
+    firstPlayer: 0,
+    turnsTaken: [0, 0],
+    deaths: [],
+    spawned: 0,
     auras: [[], []],
     winner: null,
     winReason: null,
@@ -64,6 +68,7 @@ export function addUnit(
     resting: false,
     burning: false,
     partnerId: null,
+    gambling: false,
     ...extra,
   };
   state.units.push(unit);

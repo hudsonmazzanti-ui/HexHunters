@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, maxHealth, unitDef, unitSize } from '../core/queries';
+import { actionBonus, maxHealth, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -60,6 +60,7 @@ interface UnitNodes {
   hpText: SVGTextElement;
   /** Size the model was drawn at; redrawn if it changes (a Zombie starting to crawl). */
   size: number;
+  moonText: SVGTextElement;
 }
 
 export class BoardView {
@@ -113,13 +114,7 @@ export class BoardView {
       }
     }
 
-    for (const t of map.terrain) {
-      for (const h of t.hexes) {
-        el('polygon', { points: points(h, HEX_SIZE - 1), class: `terrain h${t.height}` }, this.layers.terrain);
-        const c = hexToPixel(h, HEX_SIZE);
-        el('text', { x: c.x, y: c.y, class: 'terrain-label' }, this.layers.terrain).textContent = String(t.height);
-      }
-    }
+    this.drawTerrain(map);
 
     // Thick outline around the 7-hex control point: draw only edges not shared with another CP hex.
     for (const h of map.controlPoint) {
@@ -140,6 +135,18 @@ export class BoardView {
     }
 
     return bounds;
+  }
+
+  /** Draws (or redraws, after a Hill Giant's Hurl changed the map) the terrain layer. */
+  drawTerrain(map: GameMap): void {
+    this.layers.terrain.replaceChildren();
+    for (const t of map.terrain) {
+      for (const h of t.hexes) {
+        el('polygon', { points: points(h, HEX_SIZE - 1), class: `terrain h${t.height} ${t.kind}` }, this.layers.terrain);
+        const c = hexToPixel(h, HEX_SIZE);
+        el('text', { x: c.x, y: c.y, class: 'terrain-label' }, this.layers.terrain).textContent = String(t.height);
+      }
+    }
   }
 
   render(state: GameState, overlay: BoardOverlay): void {
@@ -193,6 +200,11 @@ export class BoardView {
     el('ellipse', { cx: -2, cy: 0, rx: 3, ry: 2.2 }, link);
     el('ellipse', { cx: 2, cy: 0, rx: 3, ry: 2.2 }, link);
 
+    // Werewolf: turns left until it transforms, in a small moon at the right.
+    const moon = el('g', { class: 'moon', transform: `translate(${r + 6} 2)` }, g);
+    el('circle', { r: 6.5 }, moon);
+    const moonText = el('text', {}, moon);
+
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
 
@@ -226,7 +238,7 @@ export class BoardView {
     el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
     const hpText = el('text', {}, hp);
 
-    const nodes = { g, die, dieText, dieRect, owText, hp, hpText, size };
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -256,16 +268,19 @@ export class BoardView {
     cls.toggle('burning', unit.burning);
     cls.toggle('twin', !!unit.partnerId);
     cls.toggle('partner', o.partnerId === unit.id);
+    const transformsIn = turnsUntilTransform(state, unit);
+    cls.toggle('counting', transformsIn !== null);
+    n.moonText.textContent = transformsIn === null ? '' : String(transformsIn);
     cls.toggle('aura', aurasOn(state, unit).length > 0);
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';
 
-    n.die.style.display = unit.die === null ? 'none' : '';
+    n.die.style.display = unit.die === null && !unit.gambling ? 'none' : '';
     n.die.classList.toggle('used', unit.acted);
     if (!this.rolling.has(unit.id)) {
       // Standard Bearer: show "8+2" while the model would get a bonus for acting here.
       const bonus = unit.die !== null && !unit.acted ? actionBonus(state, unit) : 0;
-      const text = unit.die === null ? '' : bonus ? `${unit.die}+${bonus}` : String(unit.die);
+      const text = unit.gambling ? '?' : unit.die === null ? '' : bonus ? `${unit.die}+${bonus}` : String(unit.die);
       n.dieText.textContent = text;
       const width = text.length > 2 ? 28 : 18;
       n.dieRect.setAttribute('width', String(width));

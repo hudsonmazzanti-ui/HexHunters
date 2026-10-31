@@ -92,9 +92,13 @@ export function movePath(state: GameState, unit: Unit, to: Hex): Hex[] | null {
 export const unitsOnControlPoint = (state: GameState, player: PlayerId): Unit[] =>
   livingUnits(state, player).filter((u) => state.map.controlPoint.some((h) => hexEquals(h, u.pos!)));
 
-/** Is it this unit's owner's turn and may it still use its die? */
+/** Is it this unit's owner's turn and may it still use its die? (A Gambler's "?" die counts.) */
 export const canAct = (state: GameState, unit: Unit): boolean =>
-  state.phase === 'play' && unit.owner === state.current && !!unit.pos && !unit.acted && unit.die !== null;
+  state.phase === 'play' &&
+  unit.owner === state.current &&
+  !!unit.pos &&
+  !unit.acted &&
+  (unit.die !== null || unit.gambling);
 
 /** Current size (height for line of sight): a crawling Zombie is small. */
 export function unitSize(state: GameState, unit: Unit): UnitDef['size'] {
@@ -122,5 +126,18 @@ export const isHero = (state: GameState, unit: Unit): boolean => !!unitDef(state
 /** Die bonus a unit gets when it acts right now (Standard Bearer: +2 while on the control point). */
 export const actionBonus = (state: GameState, unit: Unit): number => auraEffects(state, unit).actionRollBonus ?? 0;
 
-/** The die value used when the unit acts now: its rolled die (incl. Prep/Marshal) plus any action bonus. */
-export const actionDie = (state: GameState, unit: Unit): number => (unit.die ?? 0) + actionBonus(state, unit);
+/**
+ * The die value used when the unit acts now: its rolled die (incl. Prep/Marshal) plus any
+ * action bonus. For a Gambler's unrolled "?" die this is the best possible roll, which is
+ * what an action must be possible with before it is rolled for real.
+ */
+export function actionDie(state: GameState, unit: Unit): number {
+  const die = unit.gambling ? state.config.specials.gamblerMaxDie : (unit.die ?? 0);
+  return die + actionBonus(state, unit);
+}
+
+/** Werewolf: how many more of its owner's turns until it transforms (null if it never will / already has). */
+export function turnsUntilTransform(state: GameState, unit: Unit): number | null {
+  const t = unitDef(state, unit).transformsInto;
+  return t ? Math.max(0, t.onOwnerTurn - state.turnsTaken[unit.owner]) : null;
+}

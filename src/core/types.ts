@@ -22,10 +22,21 @@ export type SpecialId =
   | 'overwatch'
   | 'hook'
   | 'eat'
-  | 'swap';
+  | 'swap'
+  | 'hurl'
+  | 'pounce';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
-export type AuraId = 'marshal' | 'siege' | 'warlord' | 'warden' | 'ninja' | 'standard' | 'pyro';
+export type AuraId =
+  | 'marshal'
+  | 'siege'
+  | 'warlord'
+  | 'warden'
+  | 'ninja'
+  | 'standard'
+  | 'pyro'
+  | 'gambler'
+  | 'necro';
 
 export interface UnitDef {
   name: string;
@@ -46,6 +57,10 @@ export interface UnitDef {
   hero?: { aura?: AuraId };
   /** Only comes as part of this squad (see GameConfig.squads); can't be bought on its own. */
   squadOnly?: string;
+  /** Becomes this unit type for good at the start of its owner's Nth turn (Werewolf). */
+  transformsInto?: { type: string; onOwnerTurn: number; heal: number };
+  /** A form another unit turns into; not shown in the army builder. */
+  formOnly?: boolean;
   /** Name of the basic attack in the UI (default "Attack"). */
   attackName?: string;
   /** Added to the die on basic attacks. */
@@ -131,11 +146,22 @@ export interface SpecialRules {
   eatHeal: number;
   /** Damage Burn deals at the start of the burning model's owner's next turn. */
   burnDamage: number;
+  /** Gambler: dice roll when an action is confirmed, d12 + this, capped at gamblerMaxDie. */
+  gamblerRollBonus: number;
+  gamblerMaxDie: number;
+  /** Necromancer: Skeleton defense bonus, and how close a Zombie/Necromancer must be to raise the dead. */
+  necroSkeletonDefense: number;
+  necroRaiseRange: number;
+  /** Hill Giant's Hurl: range, and damage = base + the thrown terrain's height. */
+  hurlRange: number;
+  hurlBaseDamage: number;
+  /** Werewolf's Pounce: extra hexes of movement before its attack. */
+  pounceMoves: number;
 }
 
 export interface Terrain {
   id: number;
-  kind: 'wall' | 'curve';
+  kind: 'wall' | 'curve' | 'boulder';
   height: TerrainHeight;
   hexes: Hex[];
 }
@@ -186,6 +212,8 @@ export interface Unit {
   burning: boolean;
   /** The other model of its squad (the Twins), or null. */
   partnerId: string | null;
+  /** Gambler: this turn's die hasn't been rolled yet; it rolls when an action is confirmed ("?"). */
+  gambling: boolean;
 }
 
 export interface Overwatch {
@@ -208,6 +236,14 @@ export interface GameState {
   /** 0 for the first turn of a round, 1 for the second. */
   turnInRound: 0 | 1;
   scores: [number, number];
+  /** Who won the coin flip and went first in round 1 (the order then flips every two rounds). */
+  firstPlayer: PlayerId;
+  /** How many turns each player has started (Werewolf transformation timing). */
+  turnsTaken: [number, number];
+  /** Models that died during the current action, for Raise Dead (processed when the action finishes). */
+  deaths: { owner: PlayerId; pos: Hex }[];
+  /** Counter for ids of models created mid-game (risen Skeletons). */
+  spawned: number;
   /** Auras each player's army has. Set when the army is chosen; they last all game, even if the hero dies. */
   auras: [AuraId[], AuraId[]];
   /** null with phase 'over' means a draw. */

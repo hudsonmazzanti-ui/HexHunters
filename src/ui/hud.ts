@@ -13,7 +13,7 @@ export interface RosterChip {
   id: string;
   label: string;
   owner: 0 | 1;
-  die: number | null;
+  die: number | string | null;
   hp: number;
   maxHp: number;
   spent: boolean;
@@ -76,7 +76,7 @@ export function renderTopBar(state: GameState): void {
     // "R3 · ●P2 first · next ●P2": who goes first this round and next.
     const swap = state.config.firstPlayerSwapEvery;
     const first = (round: number) => {
-      const p = firstPlayerOfRound(round, swap);
+      const p = firstPlayerOfRound(round, swap, state.firstPlayer);
       const span = h('span', 'topbar-order');
       const dot = h('span', 'order-dot');
       dot.style.background = PLAYER_COLORS[p];

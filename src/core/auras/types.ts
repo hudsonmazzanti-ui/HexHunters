@@ -20,6 +20,14 @@ export interface AuraEffects {
   actionRollBonus?: number;
   /** Which of its actions set Burn on every model they hit (Pyromancer). */
   burnsOn?: ('attack' | 'special')[];
+  /** Its die isn't rolled at turn start; it rolls when an action is confirmed (Gambler). */
+  rollsOnAction?: boolean;
+  /** Ignores the back-to-back resting rule (Necromancer's Skeletons). */
+  noRest?: boolean;
+  /** A wounded-form unit only changes once at half health or less (Necromancer's Zombies). */
+  crawlAtHalf?: boolean;
+  /** Raises a Skeleton when an enemy dies nearby (Necromancer's Zombies and the Necromancer). */
+  raisesDead?: boolean;
 }
 
 /**
