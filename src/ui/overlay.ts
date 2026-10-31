@@ -9,6 +9,8 @@ export interface OverlayButton {
 export interface OverlayOptions {
   title: string;
   lines?: string[];
+  /** Optional element shown above the title (e.g. the coin-flip coin). */
+  art?: HTMLElement;
   /** Background color; defaults to a dark neutral. */
   color?: string;
   /** If set, tapping anywhere closes the overlay and resolves the promise. */
@@ -24,6 +26,7 @@ export function showOverlay(opts: OverlayOptions): Promise<void> {
   const card = document.createElement('div');
   card.className = 'overlay-card';
 
+  if (opts.art) card.append(opts.art);
   const h1 = document.createElement('h1');
   h1.textContent = opts.title;
   card.append(h1);

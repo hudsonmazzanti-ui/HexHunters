@@ -7,10 +7,12 @@ import {
   canAct,
   canSeeUnit,
   effectiveDefense,
+  maxHealth,
   needsLoading,
   unitDef,
   unitSpeed,
 } from './queries';
+import { auraEffects } from './auras';
 import type { GameState, Unit } from './types';
 
 export interface AttackPreview {
@@ -84,11 +86,18 @@ export function dealDamage(state: GameState, target: Unit, amount: number): bool
   target.hp = Math.max(0, target.hp - amount);
   if (target.hp <= 0) {
     state.units = state.units.filter((u) => u.id !== target.id);
+    // Remembered for Raise Dead (processed once the current action is over).
+    if (target.pos) state.deaths.push({ owner: target.owner, pos: target.pos });
     return true;
   }
-  if (amount > 0 && unitDef(state, target).woundedForm && !target.crawling) {
-    target.crawling = true;
-    target.movesLeft = Math.min(target.movesLeft, unitSpeed(state, target));
+  const def = unitDef(state, target);
+  if (amount > 0 && def.woundedForm && !target.crawling) {
+    // With the Necromancer, Zombies only crawl at half health or less.
+    const halfOnly = auraEffects(state, target).crawlAtHalf;
+    if (!halfOnly || target.hp <= maxHealth(state, target) / 2) {
+      target.crawling = true;
+      target.movesLeft = Math.min(target.movesLeft, unitSpeed(state, target));
+    }
   }
   return false;
 }

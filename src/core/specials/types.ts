@@ -2,7 +2,8 @@ import type { Hex } from '../hex';
 import type { GameState, SpecialId, SpecialRules, Unit } from '../types';
 
 /** What a special is aimed at. 'model' = any model except the user itself, friend or foe. */
-export type Targeting = 'none' | 'ally' | 'enemy' | 'model' | 'hex' | 'direction';
+/** 'hexAndEnemy' = a hex plus an enemy (Hill Giant's Hurl: which terrain, at whom). */
+export type Targeting = 'none' | 'ally' | 'enemy' | 'model' | 'hex' | 'direction' | 'hexAndEnemy';
 
 export const targetsUnit = (t: Targeting): boolean => t === 'ally' || t === 'enemy' || t === 'model';
 
@@ -71,6 +72,8 @@ export interface SpecialDef {
   tags?: string[];
   /** Keep the model's unused movement after using this special (it may move on). */
   keepsMovement?: boolean;
+  /** The model may still make its attack afterwards with the same die (Werewolf's Pounce). */
+  allowsAttackAfter?: boolean;
   /** Why the special can't be used at all right now (before picking a target), or null. */
   usable?(state: GameState, unit: Unit): string | null;
   /** Why this particular target isn't valid, or null. */

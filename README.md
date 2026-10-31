@@ -36,6 +36,8 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 | Zombie    | 2    | medium (2) | 3     | 0   | 9  | 1 (melee) | 3   | **Eat** (die 8+): adjacent enemy, normal hit roll; 2 damage and the Zombie heals 2. Crawls once hurt |
 | Skeleton  | 1    | medium (2) | 3     | 2   | 1  | 1 (melee) | 2   | No special. Rests on the second of back-to-back turns |
+| Hill Giant | 5   | large (3)  | 2     | 6   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
+| Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 4, def 6, HP 12, melee 5, **Pounce** |
 
 **Heroes** (max one per army, optional; no special, their die is only for attacking):
 
@@ -48,6 +50,8 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
 | Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1 |
 | Pyromancer    | 6    | medium (2) | 3     | 7   | 10 | 3            | 2   | Burn: its attacks, Flamer Torch and Grenadier Grenade set every model they hit burning |
+| Gambler       | 6    | medium (2) | 3     | 6   | 9  | 3            | 3   | Dice aren't rolled at turn start: each rolls d12+2 (max 14) when its action is confirmed |
+| Necromancer   | 7    | medium (2) | 3     | 5   | 8  | 3            | 2   | Skeletons +1 def, never rest; Zombies crawl only at half health; Raise Dead |
 
 **The Twins** (hero, 10 pts, bought as one entry that adds both models; no passive rule; both have **Swap**):
 
@@ -94,8 +98,9 @@ same without seeing Player 1's choices. Duplicates are allowed; the total cost m
 placements. Player 1 places in the bottom two rows, Player 2 in the top two. Tapping a hex places the model. If one player
 runs out of models, the other places the rest.
 
-**Rounds.** Each round both players take one turn. Who goes first flips every two rounds: Player 1 in rounds 1–2,
-Player 2 in rounds 3–4, Player 1 in 5–6, and so on. Where the order flips (between rounds 2–3, 4–5, ...) the same player
+**Rounds.** Each round both players take one turn. A coin flip at the end of deployment (seeded, so `?seed=` replays
+it) decides who goes first in round 1; after that, who goes first flips every two rounds: the winner in rounds 1–2,
+the other player in rounds 3–4, the winner in 5–6, and so on. Where the order flips (between rounds 2–3, 4–5, ...) the same player
 takes two turns in a row; the handoff screen says so. The top bar shows who goes first this round and next.
 
 **A turn.**
@@ -190,6 +195,24 @@ uses the activating twin's die (and ends its movement): the twins trade places f
 line of sight needed. The other twin keeps its die and, if it hasn't acted, can still move and act; it can't undo the
 swap. Once either twin dies, Swap is greyed out for the rest of the game. Both twins carry a purple link badge, and
 selecting one outlines the other.
+
+**Gambler.** Your dice aren't rolled at the start of your turn: models show "?" and can move freely. Confirming an
+attack or special first checks it would be legal with the best possible roll, then rolls d12+2 (Prep/Field Marshal
+bonuses included, capped at 14) and resolves with that. If the roll misses a special's threshold (Grenade 10+, Hook 7+,
+Eat 8+, Heal/Dash for 0), the die is spent and nothing happens. Overwatch rolls when it's chosen. Previews show the odds.
+
+**Necromancer.** Your Skeletons get +1 defense and never rest; your Zombies only crawl at half health or less. **Raise
+Dead**: when an enemy model dies within 2 hexes of one of your living Zombies or your living Necromancer, a free
+Skeleton rises in that hex (or the nearest empty open hex) once the action is over. It counts for the control point
+at once but can't move or act until your next turn. After the Necromancer dies, only Zombies raise.
+
+**Hill Giant: Hurl.** Pick an adjacent terrain hex (either height), then an enemy within 4 in line of sight (checked
+with the chunk lifted). Normal hit roll. The terrain is removed from the map either way; a hit deals 2 + its height; a
+kill drops a height-1 boulder on the target's hex. Greyed out with no adjacent terrain.
+
+**Werewolf.** A moon badge counts down its owner's turns. At the start of its owner's 3rd turn it permanently becomes
+the beast form (large, fast, def 6, max HP 12, melee 5) and heals 5. **Pounce** gives +2 hexes of movement, then it may
+still make its melee attack with the same die.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).

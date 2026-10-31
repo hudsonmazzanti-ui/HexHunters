@@ -193,6 +193,44 @@ export const UNITS: Record<string, UnitDef> = {
     restsOnDoubleTurn: true,
   },
 
+  hillgiant: {
+    name: 'Hill Giant',
+    label: 'HG',
+    cost: 5,
+    size: 3, // large
+    speed: SPEED.slow,
+    defense: 6,
+    health: 13,
+    range: 1, // melee only
+    damage: 4,
+    special: 'hurl',
+  },
+  werewolf: {
+    name: 'Werewolf',
+    label: 'Ww',
+    cost: 5,
+    size: 2, // medium (human form)
+    speed: SPEED.normal,
+    defense: 5,
+    health: 7,
+    range: 3,
+    damage: 2,
+    transformsInto: { type: 'werewolfbeast', onOwnerTurn: 3, heal: 5 },
+  },
+  werewolfbeast: {
+    name: 'Werewolf (Beast)',
+    label: 'WW',
+    cost: 0,
+    size: 3, // large
+    speed: SPEED.fast,
+    defense: 6,
+    health: 12,
+    range: 1, // melee only
+    damage: 5,
+    special: 'pounce',
+    formOnly: true,
+  },
+
   // ---- Heroes: max one per army, no special; grant a permanent army-wide aura ----
   marshal: {
     name: 'Field Marshal',
@@ -279,6 +317,30 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 2,
     hero: { aura: 'pyro' },
   },
+  gambler: {
+    name: 'Gambler',
+    label: 'Gb',
+    cost: 6,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 9,
+    range: 3,
+    damage: 3,
+    hero: { aura: 'gambler' },
+  },
+  necromancer: {
+    name: 'Necromancer',
+    label: 'Nc',
+    cost: 7,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 5,
+    health: 8,
+    range: 3,
+    damage: 2,
+    hero: { aura: 'necro' },
+  },
 
   // ---- The Twins: bought together as one hero (see SQUADS), never on their own ----
   twintank: {
@@ -359,5 +421,12 @@ export const DEFAULT_CONFIG: GameConfig = {
     eatDamage: 2,
     eatHeal: 2,
     burnDamage: 1,
+    gamblerRollBonus: 2,
+    gamblerMaxDie: 14,
+    necroSkeletonDefense: 1,
+    necroRaiseRange: 2,
+    hurlRange: 4,
+    hurlBaseDamage: 2,
+    pounceMoves: 2,
   },
 };

@@ -22,6 +22,8 @@ export function validateArmy(config: GameConfig, types: string[]): string | null
   if (types.length === 0) return 'Add at least one unit';
   const unknown = types.find((t) => !config.units[t] && !config.squads[t]);
   if (unknown) return `Unknown unit "${unknown}"`;
+  const form = types.find((t) => config.units[t]?.formOnly);
+  if (form) return `${config.units[form].name} can't be bought: another unit turns into it`;
   const loose = types.find((t) => config.units[t]?.squadOnly);
   if (loose) return `${config.units[loose].name} only comes with ${entryName(config, config.units[loose].squadOnly!)}`;
   const cost = armyCost(config, types);

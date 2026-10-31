@@ -6,13 +6,25 @@
  */
 import { type Hex, hexEquals, neighbors } from './hex';
 import { entryModels, validateArmy } from './army';
-import { type AttackResult, dealDamage, resolveAttack } from './combat';
+import { type AttackResult, dealDamage, previewAttack, resolveAttack } from './combat';
+import { raiseDead } from './necro';
 import { auraEffects, holdPoints } from './auras';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
-import { getUnit, livingUnits, maxHealth, movePath, other, unitAt, unitDef, unitSpeed, unitsOnControlPoint } from './queries';
+import {
+  getUnit,
+  hasDoubleAction,
+  livingUnits,
+  maxHealth,
+  movePath,
+  other,
+  unitAt,
+  unitDef,
+  unitSpeed,
+  unitsOnControlPoint,
+} from './queries';
 import { nextRandom } from './rng';
-import { type SpecialChoice, type SpecialResult, applySpecial } from './specials';
+import { type SpecialChoice, type SpecialResult, applySpecial, specialBlockedReason, specialOf } from './specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
 
 export type Action =
@@ -33,6 +45,16 @@ export type GameEvent =
   | { type: 'move'; unitId: string; path: Hex[] }
   | ({ type: 'attack'; unitId: string; targetId: string } & AttackResult)
   | ({ type: 'special'; unitId: string } & SpecialResult)
+  /** The coin flip deciding who goes first in round 1. */
+  | { type: 'coinFlip'; winner: PlayerId }
+  /** A Werewolf turned into its beast form at the start of its owner's turn. */
+  | { type: 'transformed'; unitId: string; into: string; healed: number }
+  /** A Skeleton rose from an enemy's death (Necromancer). */
+  | { type: 'raised'; unitId: string; at: Hex }
+  /** Gambler: the die rolled when the action was confirmed. */
+  | { type: 'gambleRoll'; unitId: string; roll: number }
+  /** Gambler: the roll missed the special's threshold, so the action was wasted. */
+  | { type: 'gambleFailed'; unitId: string; roll: number; reason: string }
   /** Burn damage at the start of the burning model's owner's turn. */
   | { type: 'burn'; unitId: string; damage: number; killed: boolean }
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
@@ -48,12 +70,13 @@ export interface ActionResult {
 }
 
 /**
- * Who goes first in a round. The order flips every `swapEvery` rounds; with 2:
- * rounds 1–2 player 1 first, rounds 3–4 player 2 first, 5–6 player 1, and so on.
- * Where it flips, the same player takes two turns in a row.
+ * Who goes first in a round. `first` won the coin flip and goes first in round 1; the
+ * order flips every `swapEvery` rounds. With 2 and player 1 winning the flip: rounds
+ * 1–2 player 1 first, rounds 3–4 player 2 first, and so on. Where it flips, the same
+ * player takes two turns in a row.
  */
-export const firstPlayerOfRound = (round: number, swapEvery: number): PlayerId =>
-  Math.floor((round - 1) / swapEvery) % 2 === 0 ? 0 : 1;
+export const firstPlayerOfRound = (round: number, swapEvery: number, first: PlayerId = 0): PlayerId =>
+  Math.floor((round - 1) / swapEvery) % 2 === 0 ? first : other(first);
 
 /** Starts in the army-building phase: player 1 builds, then player 2. */
 export function newGame(config: GameConfig, seed: number): GameState {
@@ -67,6 +90,10 @@ export function newGame(config: GameConfig, seed: number): GameState {
     round: 1,
     turnInRound: 0,
     scores: [0, 0],
+    firstPlayer: 0,
+    turnsTaken: [0, 0],
+    deaths: [],
+    spawned: 0,
     auras: [[], []],
     winner: null,
     winReason: null,
@@ -143,7 +170,12 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
         state.phase = 'play';
         state.round = 1;
         state.turnInRound = 0;
-        state.current = firstPlayerOfRound(1, state.config.firstPlayerSwapEvery);
+        // Coin flip: who goes first in round 1 (seeded, so a replayed seed flips the same way).
+        const [flip, rng] = nextRandom(state.rngState);
+        state.rngState = rng;
+        state.firstPlayer = flip < 0.5 ? 0 : 1;
+        events.push({ type: 'coinFlip', winner: state.firstPlayer });
+        state.current = state.firstPlayer;
         startTurn(state, events);
       } else {
         state.current = next;
@@ -173,6 +205,12 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (state.phase !== 'play') fail('Not in play');
       const unit = ownUnit(action.unitId);
       const target = getUnit(state, action.targetId) ?? fail('No such target');
+      if (unit.gambling) {
+        // Gambler: check the attack is legal, then roll its die now.
+        const reason = previewAttack(state, unit, target).blockedReason;
+        if (reason) fail(reason);
+        gambleRoll(state, unit, events);
+      }
       const result = guard(() => resolveAttack(state, unit, target));
       unit.overwatch = null;
       events.push({ type: 'attack', unitId: unit.id, targetId: target.id, ...result });
@@ -186,7 +224,23 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       // Using the die ends any earlier overwatch (Overwatch itself sets a new one).
       // If the special is illegal, applyAction throws and this cloned state is discarded.
       unit.overwatch = null;
-      const result = guard(() => applySpecial(state, unit, { targetId, hex, dir }));
+      const choice = { targetId, hex, dir };
+      if (unit.gambling) {
+        // Gambler: the special must be possible with the best roll; then roll for real.
+        const reason = specialBlockedReason(state, unit, choice);
+        if (reason) fail(reason);
+        const roll = gambleRoll(state, unit, events);
+        const missed = specialBlockedReason(state, unit, choice);
+        if (missed) {
+          // The gamble failed (e.g. Grenade needs 10+): the die is spent, nothing happens.
+          unit.specialUsed = true;
+          unit.acted = !hasDoubleAction(state, unit);
+          if (!specialOf(state, unit)?.keepsMovement) unit.movesLeft = 0;
+          events.push({ type: 'gambleFailed', unitId: unit.id, roll, reason: missed });
+          break;
+        }
+      }
+      const result = guard(() => applySpecial(state, unit, choice));
       events.push({ type: 'special', unitId: unit.id, ...result });
       checkElimination(state, events);
       break;
@@ -197,7 +251,18 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       break;
     }
   }
+  // Raise Dead (Necromancer) for every model that died during this action.
+  for (const u of raiseDead(state)) events.push({ type: 'raised', unitId: u.id, at: u.pos! });
   return { state, events };
+}
+
+/** Gambler: rolls the model's die now: d12 + bonus (+ Prep/Marshal), capped. */
+function gambleRoll(state: GameState, unit: Unit, events: GameEvent[]): number {
+  const r = state.config.specials;
+  unit.die = Math.min(r.gamblerMaxDie, rollDie(state) + r.gamblerRollBonus + unit.dieBonus);
+  unit.gambling = false;
+  events.push({ type: 'gambleRoll', unitId: unit.id, roll: unit.die });
+  return unit.die;
 }
 
 function newUnit(config: GameConfig, owner: PlayerId, type: string, index: number): Unit {
@@ -222,6 +287,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     resting: false,
     burning: false,
     partnerId: null,
+    gambling: false,
   };
 }
 
@@ -294,9 +360,20 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
   }
   if (checkElimination(state, events)) return;
 
+  // Werewolves transform for good at the start of their owner's Nth turn.
+  state.turnsTaken[state.current] += 1;
+  for (const unit of livingUnits(state, state.current)) {
+    const t = unitDef(state, unit).transformsInto;
+    if (!t || state.turnsTaken[state.current] < t.onOwnerTurn) continue;
+    unit.type = t.type;
+    const before = unit.hp;
+    unit.hp = Math.min(maxHealth(state, unit), unit.hp + t.heal);
+    events.push({ type: 'transformed', unitId: unit.id, into: t.type, healed: unit.hp - before });
+  }
+
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
-    unit.resting = backToBack && !!unitDef(state, unit).restsOnDoubleTurn;
+    unit.resting = backToBack && !!unitDef(state, unit).restsOnDoubleTurn && !auraEffects(state, unit).noRest;
     if (unit.resting) {
       // Sits this turn out: no die, no movement.
       unit.die = null;
@@ -312,13 +389,15 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     const prep = unit.prepped ? state.config.specials.prepRollBonus : 0;
     unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0);
     unit.prepped = false;
-    unit.die = rollDie(state) + unit.dieBonus;
+    // Gambler: no roll yet ("?"); the die rolls when an action is confirmed.
+    unit.gambling = !!auraEffects(state, unit).rollsOnAction;
+    unit.die = unit.gambling ? null : rollDie(state) + unit.dieBonus;
     unit.movesLeft = unitSpeed(state, unit);
     unit.acted = false;
     unit.specialUsed = false;
     unit.turnStartPos = unit.pos;
     unit.braced = false; // Brace lasts "until your next turn"
-    dice[unit.id] = unit.die;
+    if (unit.die !== null) dice[unit.id] = unit.die;
   }
   // Spot marks placed by this player expire at the start of their next turn.
   for (const unit of state.units) if (unit.spottedBy === state.current) unit.spottedBy = null;
@@ -328,6 +407,7 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
 function endTurn(state: GameState, events: GameEvent[]): void {
   for (const unit of livingUnits(state, state.current)) {
     unit.die = null;
+    unit.gambling = false;
     unit.dieBonus = 0;
     unit.movesLeft = 0;
     unit.turnStartPos = null;
@@ -349,7 +429,7 @@ function endTurn(state: GameState, events: GameEvent[]): void {
   const previous = state.current;
   state.round += 1;
   state.turnInRound = 0;
-  state.current = firstPlayerOfRound(state.round, state.config.firstPlayerSwapEvery);
+  state.current = firstPlayerOfRound(state.round, state.config.firstPlayerSwapEvery, state.firstPlayer);
   startTurn(state, events, state.current === previous);
 }
 

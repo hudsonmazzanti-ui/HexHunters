@@ -6,7 +6,7 @@ describe('army building', () => {
   it('has the agreed point costs', () => {
     const costs = Object.fromEntries(
       Object.entries(UNITS)
-        .filter(([, u]) => !u.squadOnly) // squad members are bought through their squad
+        .filter(([, u]) => !u.squadOnly && !u.formOnly) // squad members / alternate forms aren't bought directly
         .map(([id, u]) => [id, u.cost]),
     );
     expect(costs).toEqual({
@@ -31,6 +31,10 @@ describe('army building', () => {
       zombie: 2,
       skeleton: 1,
       pyromancer: 6,
+      hillgiant: 5,
+      werewolf: 5,
+      gambler: 6,
+      necromancer: 7,
     });
   });
 

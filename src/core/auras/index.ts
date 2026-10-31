@@ -3,7 +3,9 @@
  * to AuraId (types.ts), list it here, and give a unit `hero: { aura: '<id>' }`.
  */
 import type { AuraId, GameState, PlayerId, Unit } from '../types';
+import { gambler } from './gambler';
 import { marshal } from './marshal';
+import { necro } from './necro';
 import { ninja } from './ninja';
 import { pyro } from './pyro';
 import { siege } from './siege';
@@ -14,7 +16,7 @@ import { warlord } from './warlord';
 
 export * from './types';
 
-export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden, ninja, standard, pyro };
+export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden, ninja, standard, pyro, gambler, necro };
 
 /** Points a player scores for winning the control point at the end of a round (Standard Bearer: 2). */
 export const holdPoints = (state: GameState, player: PlayerId): number =>
@@ -35,6 +37,7 @@ export function auraEffects(state: GameState, unit: Unit): AuraEffects {
     if (e.noLoading) total.noLoading = true;
     if (e.doubleAction) total.doubleAction = true;
     if (e.burnsOn) total.burnsOn = [...(total.burnsOn ?? []), ...e.burnsOn];
+    for (const flag of ['rollsOnAction', 'noRest', 'crawlAtHalf', 'raisesDead'] as const) if (e[flag]) total[flag] = true;
   }
   return total;
 }

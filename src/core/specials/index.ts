@@ -6,7 +6,7 @@
  * would do nothing (Heal on a full-health ally, Dash for 0, Torch at empty hexes...)
  * is not allowed, so a die is never wasted by accident.
  */
-import { DIRECTIONS, hexagon } from '../hex';
+import { DIRECTIONS, hexagon, neighbors } from '../hex';
 import { canAct, getUnit, hasDoubleAction } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
@@ -14,9 +14,11 @@ import { dash } from './dash';
 import { eat } from './eat';
 import { grenade } from './grenade';
 import { heal } from './heal';
+import { hurl } from './hurl';
 import { hook } from './hook';
 import { load } from './load';
 import { overwatch } from './overwatch';
+import { pounce } from './pounce';
 import { prep } from './prep';
 import { shove } from './shove';
 import { spot } from './spot';
@@ -36,6 +38,7 @@ export { torchLine } from './torch';
 export { hookPath } from './hook';
 export { eatHeal } from './eat';
 export { partnerOf } from './swap';
+export { hurlChunks } from './hurl';
 
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   brace,
@@ -53,6 +56,8 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   hook,
   eat,
   swap,
+  hurl,
+  pounce,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */
@@ -81,6 +86,12 @@ function resolve(state: GameState, unit: Unit, sp: SpecialDef, choice: SpecialCh
     }
     case 'hex':
       return choice.hex ? { hex: choice.hex } : 'Choose a hex';
+    case 'hexAndEnemy': {
+      if (!choice.hex) return 'Choose a hex';
+      const target = choice.targetId ? getUnit(state, choice.targetId) : undefined;
+      if (!target?.pos || target.owner === unit.owner) return 'Choose an enemy';
+      return { hex: choice.hex, target };
+    }
     case 'direction':
       return Number.isInteger(choice.dir) && choice.dir! >= 0 && choice.dir! < 6 ? { dir: choice.dir } : 'Choose a direction';
   }
@@ -116,6 +127,11 @@ export function specialChoices(state: GameState, unit: Unit): SpecialChoice[] {
     case 'hex':
       candidates = hexagon(state.map.radius).map((hex) => ({ hex }));
       break;
+    case 'hexAndEnemy':
+      candidates = neighbors(unit.pos!).flatMap((hex) =>
+        state.units.filter((u) => u.owner !== unit.owner).map((u) => ({ hex, targetId: u.id })),
+      );
+      break;
     case 'direction':
       candidates = DIRECTIONS.map((_, dir) => ({ dir }));
       break;
@@ -145,7 +161,7 @@ export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
   unit.specialUsed = true;
   // Normally the special uses up the die. With Master Ninja's aura the unit may still attack afterwards.
-  unit.acted = !hasDoubleAction(state, unit);
+  unit.acted = !hasDoubleAction(state, unit) && !sp.allowsAttackAfter;
   // Using the die ends movement, unless the special says otherwise (Dash, Vault).
   if (!sp.keepsMovement) unit.movesLeft = 0;
   return { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };

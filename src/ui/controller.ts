@@ -33,6 +33,7 @@ import {
   onBoard,
   other,
   terrainHeight,
+  turnsUntilTransform,
   unitAt,
   unitDef,
   unitSize,
@@ -191,6 +192,42 @@ export class Controller {
         case 'special':
           await this.playSpecial(before, ev);
           break;
+        case 'coinFlip': {
+          const coin = document.createElement('div');
+          coin.className = 'coin';
+          coin.textContent = `P${ev.winner + 1}`;
+          await showOverlay({
+            title: `${PLAYER_NAMES[ev.winner]} goes first!`,
+            lines: ['The coin decides round 1. After that, who goes first flips every two rounds.'],
+            art: coin,
+            color: HANDOFF_BG[ev.winner],
+            tapText: 'Tap to continue',
+          });
+          break;
+        }
+        case 'gambleRoll':
+          this.render();
+          await this.board.rollDice({ [ev.unitId]: ev.roll }, this.state.config.dieSides + this.state.config.specials.gamblerRollBonus);
+          break;
+        case 'gambleFailed': {
+          const u = getUnit(this.state, ev.unitId);
+          if (u?.pos) this.board.floatText(u.pos, 'BUST', '#f87171');
+          this.ui.message = `Gamble failed: rolled ${ev.roll} (${ev.reason}). The action is wasted.`;
+          break;
+        }
+        case 'transformed': {
+          const u = getUnit(this.state, ev.unitId);
+          this.render();
+          if (u?.pos) this.board.floatText(u.pos, 'TRANSFORMS!', '#fde68a');
+          break;
+        }
+        case 'raised': {
+          this.render();
+          this.board.floatText(ev.at, 'RISEN', '#c4b5fd');
+          const line = `A Skeleton rises for ${PLAYER_NAMES[getUnit(this.state, ev.unitId)?.owner ?? 0]}!`;
+          this.ui.message = `${this.ui.message ?? ''} ${line}`.trim();
+          break;
+        }
         case 'burn': {
           const pos = getUnit(before, ev.unitId)?.pos;
           if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, '#fb923c');
@@ -255,6 +292,13 @@ export class Controller {
       else this.board.floatText(pos, `-${e.damage}`, '#fca5a5');
     }
 
+    if (ev.special === 'hurl' && ev.hex) {
+      // The map changed: the chunk is gone (and a boulder may have landed).
+      const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
+      if (target?.pos) this.board.shot(ev.hex, target.pos, '#a8835a');
+      this.board.drawTerrain(this.state.map);
+    }
+
     if (ev.special === 'swap' && ev.movedId && ev.from && ev.to && ev.targetId) {
       // Both twins slide across at once.
       this.render();
@@ -317,6 +361,8 @@ export class Controller {
     for (const e of events) {
       if (e.type === 'overwatch') lines.push(overwatchText(before, e));
       if (e.type === 'burn') lines.push(burnText(before, this.state, e));
+      if (e.type === 'transformed') lines.push(`${PLAYER_NAMES[player]}'s Werewolf transforms into a beast (+${e.healed} HP)!`);
+      if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
     }
     if (before.phase === 'play' && before.current === player) {
       lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
@@ -515,6 +561,13 @@ export class Controller {
       }
       case 'hex':
         return choices.find((c) => hexEquals(c.hex!, hex));
+      case 'hexAndEnemy': {
+        // Hurl: first tap the terrain chunk, then the enemy.
+        const chunk = this.ui.pendingChoice?.hex;
+        const occupant = unitAt(s, hex);
+        if (chunk && occupant) return choices.find((c) => hexEquals(c.hex!, chunk) && c.targetId === occupant.id);
+        return choices.some((c) => hexEquals(c.hex!, hex)) ? { hex } : undefined;
+      }
       case 'direction':
         // Any hex the flame would reach picks that direction.
         return choices.find((c) => previewSpecial(s, unit, c)?.area.some((a) => hexEquals(a.hex, hex)));
@@ -615,6 +668,13 @@ export class Controller {
       }
     } else if (sp.targeting === 'hex') {
       for (const c of choices) o.shade.set(hexKey(c.hex!), 'option');
+    } else if (sp.targeting === 'hexAndEnemy') {
+      const chunk = this.ui.pendingChoice?.hex;
+      for (const c of choices) o.shade.set(hexKey(c.hex!), 'option');
+      if (chunk) {
+        o.shade.set(hexKey(chunk), 'path');
+        for (const c of choices) if (hexEquals(c.hex!, chunk)) o.specialTargetIds.add(c.targetId!);
+      }
     } else if (sp.targeting === 'direction') {
       for (const c of choices) {
         for (const a of previewSpecial(s, unit, c)?.area ?? []) o.shade.set(hexKey(a.hex), 'option');
@@ -639,7 +699,7 @@ export class Controller {
           id: u.id,
           label: def.label,
           owner: u.owner,
-          die: u.die,
+          die: u.gambling ? '?' : u.die,
           hp: u.hp,
           maxHp: maxHealth(s, u),
           spent: s.phase === 'play' && u.acted && u.movesLeft === 0,
@@ -672,6 +732,7 @@ export class Controller {
         stats.push(['Aura', `${heroName(s.config, aura)} ${AURAS[aura].short(s.config.specials, def)}`]);
       }
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
+      if (sel.gambling) stats.unshift(['Die', '? (rolls on action)']);
       if (sel.die !== null) {
         const point = sel.acted ? 0 : actionBonus(s, sel);
         const prep =
@@ -688,6 +749,10 @@ export class Controller {
       if (sel.burning) stats.push(['', `Burning: -${s.config.specials.burnDamage} at its next turn`]);
       if (sel.crawling) stats.push(['', 'Crawling (small, speed 1)']);
       if (sel.resting && ownTurn) stats.push(['', 'Resting (back-to-back turn)']);
+      const transformsIn = turnsUntilTransform(s, sel);
+      if (transformsIn !== null) {
+        stats.push(['', transformsIn <= 1 ? 'Transforms at the start of its next turn!' : `Transforms in ${transformsIn} turns`]);
+      }
       model.info = {
         title: `${PLAYER_NAMES[sel.owner]} ${def.hero ? 'HERO ' : ''}${def.name} (${SIZE_NAMES[unitSize(s, sel)]})`,
         owner: sel.owner,
@@ -774,6 +839,20 @@ export class Controller {
       .join(' · ');
   }
 
+  /** Gambler: percent of d12 rolls (with +2, Prep etc., capped) for which `ok` holds. */
+  private gambleOdds(unit: Unit, ok: (state: GameState, unit: Unit) => boolean): number {
+    const r = this.state.config.specials;
+    let good = 0;
+    for (let d = 1; d <= this.state.config.dieSides; d++) {
+      const trial = structuredClone(this.state);
+      const u = getUnit(trial, unit.id)!;
+      u.gambling = false;
+      u.die = Math.min(r.gamblerMaxDie, d + r.gamblerRollBonus + u.dieBonus);
+      if (ok(trial, u)) good++;
+    }
+    return Math.round((good / this.state.config.dieSides) * 100);
+  }
+
   private unitActions(unit: Unit, model: PanelModel): void {
     const s = this.state;
     const sp = specialOf(s, unit);
@@ -783,6 +862,12 @@ export class Controller {
 
     if (this.ui.specialMode && sp) {
       const choice = this.ui.pendingChoice;
+      if (choice && sp.targeting === 'hexAndEnemy' && !choice.targetId) {
+        const height = terrainHeight(s, choice.hex!);
+        model.hint = `Height-${height} chunk picked (${s.config.specials.hurlBaseDamage + height} damage). Now tap a purple-ringed enemy to throw it at.`;
+        model.actions.push(cancel);
+        return;
+      }
       if (choice) {
         const preview = previewSpecial(s, unit, choice);
         const effects = preview?.effects ?? [];
@@ -824,6 +909,15 @@ export class Controller {
             text: `${unitDef(s, t).name}${ally ? ' (ally)' : ''}: −${e?.damage ?? 0}, ${pulled}`,
             good: !ally,
           };
+        } else if (id === 'hurl') {
+          const t = getUnit(s, choice.targetId!)!;
+          const e = effects[0];
+          model.preview = {
+            text: e.hit
+              ? `${unitDef(s, t).name}: HIT −${e.damage} (${e.roll} vs ${e.defense})${e.killed ? ', destroyed: a boulder lands there' : ''}. The terrain is gone.`
+              : `${unitDef(s, t).name}: miss (${e.roll} vs ${e.defense}). The terrain is gone either way.`,
+            good: !!e.hit,
+          };
         } else if (id === 'vault') {
           model.preview = { text: `Land here, then keep moving (${unit.movesLeft} left).`, good: true };
         } else if (id === 'overwatch') {
@@ -831,6 +925,18 @@ export class Controller {
           model.preview = {
             text: `Watch ${n} hexes with a locked ${actionDie(s, unit)}. At the end of the opponent's turn, fire at an enemy still in the area.`,
             good: true,
+          };
+        }
+        if (unit.gambling) {
+          // Gambler: the die isn't known yet, so show the odds instead of the outcome.
+          // Succeeds = the threshold is met and (for specials with a hit roll) the first target is hit.
+          const odds = this.gambleOdds(
+            unit,
+            (st, u) => !specialBlockedReason(st, u, choice) && (previewSpecial(st, u, choice)?.effects[0]?.hit ?? true),
+          );
+          model.preview = {
+            text: `Rolls d12+${s.config.specials.gamblerRollBonus} when you confirm: ${odds}% chance to succeed (best case shown on the board).`,
+            good: odds >= 50,
           };
         }
         actions.push({
@@ -847,6 +953,7 @@ export class Controller {
           enemy: `Tap a purple-ringed model to ${sp.name}.`,
           model: `Tap a purple-ringed model to ${sp.name}. Purple hexes show where each would land.`,
           hex: `Tap a purple hex to choose where to ${sp.name}.`,
+          hexAndEnemy: `Tap a purple terrain hex to rip out, then the enemy to ${sp.name} it at.`,
           direction: `Tap a purple hex to choose the ${sp.name} direction.`,
         };
         model.hint = n ? how[sp.targeting] : `No valid ${sp.name} targets.`;
@@ -866,6 +973,13 @@ export class Controller {
         text: `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
       };
+      if (unit.gambling) {
+        const odds = this.gambleOdds(unit, (st, u) => previewAttack(st, u, getUnit(st, pending.id)!).hit);
+        model.preview = {
+          text: `Rolls d12+${s.config.specials.gamblerRollBonus} when you confirm${mods} vs defense ${p.defense}: ${odds}% to hit for ${p.damage}`,
+          good: odds >= 50,
+        };
+      }
       actions.push({
         label: `${attackName(s, unit)} ${unitDef(s, pending).name}`,
         className: 'primary',
