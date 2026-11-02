@@ -116,6 +116,10 @@ describe('missions in the simulator', () => {
     expect(total((r) => r.flagPickups)).toBeGreaterThan(10);
     expect(total((r) => r.capturesA + r.capturesB)).toBeGreaterThan(0);
     for (const r of records) if (r.capturesA + r.capturesB) expect(r).toMatchObject({ reason: 'capture', winner: r.capturesA ? 'A' : 'B' });
+    for (const r of records) expect(r.captureUnit !== null).toBe(r.reason === 'capture');
+    for (const r of records) if (r.captureUnit) expect(ctfConfig.units[r.captureUnit]).toBeDefined();
+    const sum = summarize(records, ctfConfig, []);
+    expect(Object.values(sum.captureUnits).reduce((a, b) => a + b, 0)).toBe(records.filter((r) => r.reason === 'capture').length);
   }, 60_000);
 
   it('random missions are mixed in a run and the report breaks results down by mission', () => {
@@ -128,8 +132,17 @@ describe('missions in the simulator', () => {
     expect(s.byMission.ctf?.byMission).toEqual({}); // only one level deep
     const html = reportHtml(s, config, { seed: 4, perMatchup: 1, randomGames: 30, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
     expect(html).toContain('By mission');
+    expect(html).toContain('How each preset wins');
+    expect(html).toContain('who made the winning capture');
+    for (const [name, t] of Object.entries(s.presetWinTypes)) {
+      expect(t.elimination + t.objective + t.other).toBe(t.wins);
+      expect(t.wins).toBe(s.presets[name].wins);
+      const perMission = Object.values(s.byMission).reduce((n, m) => n + (m!.presetWinTypes[name]?.wins ?? 0), 0);
+      expect(perMission).toBe(t.wins);
+    }
     expect(html).toContain('Capture the Flag');
     expect(gamesCsv(records).split('\n')[0]).toContain('mission');
+    expect(gamesCsv(records).split('\n')[0]).toContain('captureUnit');
     expect(unitsCsv(s, config).split('\n')[0]).toContain('randomScore_ctf');
   }, 60_000);
 });

@@ -29,6 +29,14 @@ const pct = (n: number, d: number) => (d ? (100 * n) / d : 0);
 const resultFor = (winner: Outcome, side: 'A' | 'B'): 'win' | 'loss' | 'draw' =>
   winner === 'draw' ? 'draw' : winner === side ? 'win' : 'loss';
 
+/** A side's wins split by how they came. `other` = anything else (none today). */
+export interface WinTypes {
+  wins: number;
+  elimination: number;
+  objective: number;
+  other: number;
+}
+
 export interface Summary {
   games: number;
   presetNames: string[];
@@ -41,6 +49,11 @@ export interface Summary {
   /** Games won by the army that went first (coin flip), and how many were decisive. */
   firstMover: { games: number; wins: number; losses: number; draws: number };
   shapes: Record<string, { games: number; firstWins: number; draws: number; eliminations: number; rounds: number }>;
+  /** Per preset army: how its wins came (wipeout or the mission's objective: points / flag capture). */
+  presetWinTypes: Record<string, WinTypes>;
+  /** Capture the Flag: winning captures per unit type, overall and per preset army that made them. */
+  captureUnits: Record<string, number>;
+  presetCaptureUnits: Record<string, Record<string, number>>;
   /** presetShape[preset][shape] */
   presetShape: Record<string, Record<string, Tally>>;
   reasons: Record<string, number>;
@@ -68,6 +81,9 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     firstMover: { games: 0, wins: 0, losses: 0, draws: 0 },
     shapes: {},
     presetShape: {},
+    presetWinTypes: {},
+    captureUnits: {},
+    presetCaptureUnits: {},
     reasons: {},
     avgRounds: 0,
     roundsSq: 0,
@@ -82,6 +98,8 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     s.presets[n] = { ...tally(), rounds: 0 };
     s.grid[n] = {};
     s.presetShape[n] = {};
+    s.presetWinTypes[n] = { wins: 0, elimination: 0, objective: 0, other: 0 };
+    s.presetCaptureUnits[n] = {};
   }
   let rounds = 0;
   let pieces = 0;
@@ -95,6 +113,7 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     s.flag.captures += r.capturesA + r.capturesB;
     s.flag.pickups += r.flagPickups;
     s.flag.drops += r.flagDrops;
+    if (r.captureUnit) s.captureUnits[r.captureUnit] = (s.captureUnits[r.captureUnit] ?? 0) + 1;
     s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1;
 
     const fm = resultFor(r.winner, r.firstMover);
@@ -126,6 +145,17 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
         s.presets[army.name].rounds += r.rounds;
         add((s.grid[army.name][opp.name] ??= tally()), res);
         add((s.presetShape[army.name][r.shape] ??= tally()), res);
+        if (res === 'win') {
+          const wt = s.presetWinTypes[army.name];
+          wt.wins++;
+          if (r.reason === 'elimination') wt.elimination++;
+          else if (r.reason === 'points' || r.reason === 'capture') wt.objective++;
+          else wt.other++;
+          if (r.captureUnit) {
+            const cu = s.presetCaptureUnits[army.name];
+            cu[r.captureUnit] = (cu[r.captureUnit] ?? 0) + 1;
+          }
+        }
       }
       if (r.kind === 'random') {
         for (const entry of new Set(army.units)) {
@@ -179,11 +209,11 @@ const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join
 export function gamesCsv(records: GameRecord[]): string {
   return csv([
     ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'mission', 'shape', 'terrainPieces', 'terrainHexes',
-      'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops'],
+      'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops', 'captureUnit'],
     ...records.map((r) => [
       r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
       r.seatOfA + 1, r.firstMover, r.mission, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
-      r.capturesA, r.capturesB, r.flagPickups, r.flagDrops,
+      r.capturesA, r.capturesB, r.flagPickups, r.flagDrops, r.captureUnit ?? '',
     ]),
   ]);
 }
@@ -239,6 +269,33 @@ export interface ReportMeta {
   variant?: string;
 }
 
+/** Capture the Flag: which unit types made the winning captures, overall and per preset. */
+function captureSection(s: Summary, config: GameConfig): string {
+  const total = Object.values(s.captureUnits).reduce((a, b) => a + b, 0);
+  if (!total) return '<h3>Capture the Flag: who made the winning capture</h3><p class="muted">No captures.</p>';
+  const name = (id: string) => config.units[id]?.name ?? id;
+  const rows = Object.entries(s.captureUnits)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, n]) => `<tr><th>${esc(name(id))}</th><td>${n}</td><td>${p1(pct(n, total))}</td></tr>`)
+    .join('');
+  const presetRows = s.presetNames
+    .map((p) => {
+      const cu = s.presetCaptureUnits[p] ?? {};
+      const n = Object.values(cu).reduce((a, b) => a + b, 0);
+      const list = Object.entries(cu)
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, k]) => `${esc(name(id))} ${k}`)
+        .join(', ');
+      return `<tr><th>${esc(p)}</th><td>${n}</td><td style="text-align:left;white-space:normal">${list || '–'}</td></tr>`;
+    })
+    .join('');
+  return `<h3>Capture the Flag: who made the winning capture</h3>
+<table><tr><th>Unit</th><th>Captures</th><th>Share</th></tr>${rows}</table>
+<p class="muted">All ${total} winning captures (preset and random-army games), by the carrier's unit type when it scored.</p>
+<h3>Winning captures by preset</h3>
+<table><tr><th>Army</th><th>Captures</th><th>Carriers</th></tr>${presetRows}</table>`;
+}
+
 /** "By mission": flow, presets and random-army units/heroes side by side for each mission. */
 function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): string {
   const ms = (Object.keys(s.byMission) as MissionId[]).map((id) => ({ id, name: MISSIONS[id].name, s: s.byMission[id]! }));
@@ -265,9 +322,28 @@ function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): strin
       .sort((x, y) => score(y[1]) - score(x[1]))
       .map(([id]) => `<tr><th>${esc(entryName(config, id))}</th>${ms.map((m) => cell(m.s.entries[id])).join('')}</tr>`)
       .join('');
+  // How each preset's wins came, per mission: wins, then the share by wipeout / objective.
+  const objectiveName: Partial<Record<MissionId, string>> = { koth: 'points', ctf: 'capture' };
+  const winHead = `<tr><th rowspan="2">Army</th>${ms.map((m) => `<th colspan="3">${esc(m.name)}</th>`).join('')}</tr>` +
+    `<tr>${ms.map((m) => `<th>Wins</th><th>Wipeout</th><th>${esc(objectiveName[m.id] ?? 'objective')}</th>`).join('')}</tr>`;
+  const winRows = s.presetNames
+    .map((n) => `<tr><th>${esc(n)}</th>${ms
+      .map((m) => {
+        const t = m.s.presetWinTypes[n];
+        if (!t?.wins) return '<td>0</td><td class="na">–</td><td class="na">–</td>';
+        return `<td>${t.wins}</td><td>${p1(pct(t.elimination, t.wins))}</td><td>${p1(pct(t.objective, t.wins))}</td>`;
+      })
+      .join('')}</tr>`)
+    .join('');
+  const ctfS = s.byMission.ctf;
+  const captures = ctfS ? captureSection(ctfS, config) : '';
   return `<h2>By mission</h2>
 <section><h3>Game flow</h3><table>${head('')}${flow}</table>
 <h3>Preset score (%)</h3><table>${head('Army')}${presets}</table>
+<h3>How each preset wins</h3><table>${winHead}${winRows}</table>
+<p class="muted">Wins in preset games, and the share of them by wipeout or by the mission's objective
+(King of the Hill: points; Capture the Flag: a flag capture). A draw is not a win.</p>
+${captures}
 <h3>Random armies: hero score (%)</h3><table>${head('Hero')}${entries(true)}</table>
 <h3>Random armies: unit score (%)</h3><table>${head('Unit')}${entries(false)}</table>
 <p class="muted">Each game's mission is picked at random. Hover a cell for W/L/D. Pale cells have fewer than ${meta.minGames} games.</p></section>`;
