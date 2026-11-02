@@ -188,8 +188,7 @@ export class Controller {
       switch (ev.type) {
         case 'armyChosen':
           if (ev.next === null) {
-            await this.revealMission();
-            await this.revealDeployShape();
+            await this.revealSetup();
             await this.deployHandoff(this.state.current);
           }
           break;
@@ -418,13 +417,22 @@ export class Controller {
   }
 
   /** After both armies are built: this game's mission, with its one-line rule. */
-  private async revealMission(): Promise<void> {
+  /**
+   * After both armies are built, one screen: this game's mission (with its one-line
+   * rule) and deployment shape, over a small map of both zones and the objective.
+   */
+  private async revealSetup(): Promise<void> {
     const m = MISSIONS[this.state.mission];
+    const shape = DEPLOY_SHAPES[this.state.map.deployShape];
     await showOverlay({
-      title: `Mission: ${m.name}`,
-      lines: [m.summary(this.state.config), 'Tap the mission name at the top any time for the full rules.'],
+      title: m.name,
+      lines: [
+        m.summary(this.state.config),
+        `${shape.name} deployment: ${shape.description}`,
+        `${PLAYER_NAMES[0]} deploys in blue, ${PLAYER_NAMES[1]} in red. Tap the mission name at the top any time for the full rules.`,
+      ],
       art: zoneMap(this.state),
-      tapText: 'Tap to continue',
+      tapText: 'Tap to start placing',
     });
   }
 
@@ -434,17 +442,6 @@ export class Controller {
     const m = MISSIONS[this.state.mission];
     await showOverlay({ title: m.name, lines: m.rules(this.state.config), tapText: 'Tap to close' });
     this.render();
-  }
-
-  /** After both armies are built: name this game's deployment shape and show both zones. */
-  private async revealDeployShape(): Promise<void> {
-    const shape = DEPLOY_SHAPES[this.state.map.deployShape];
-    await showOverlay({
-      title: `Deployment: ${shape.name}`,
-      lines: [shape.description, `${PLAYER_NAMES[0]} deploys in blue, ${PLAYER_NAMES[1]} in red.`],
-      art: zoneMap(this.state),
-      tapText: 'Tap to start placing',
-    });
   }
 
   private async deployHandoff(p: PlayerId): Promise<void> {
