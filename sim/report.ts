@@ -1,0 +1,354 @@
+/**
+ * Turns game records into summaries, CSV files and a self-contained HTML report.
+ * Pure functions (no file system), so they can be tested.
+ *
+ * "Score" = (wins + draws / 2) / games: a draw counts as half a win. Flags use it.
+ */
+import type { GameConfig } from '../src/core/types';
+import { entryName } from '../src/core/army';
+import type { GameRecord, Outcome } from './runGame';
+
+export interface Tally {
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+const tally = (): Tally => ({ games: 0, wins: 0, losses: 0, draws: 0 });
+const add = (t: Tally, result: 'win' | 'loss' | 'draw') => {
+  t.games++;
+  if (result === 'win') t.wins++;
+  else if (result === 'loss') t.losses++;
+  else t.draws++;
+};
+export const score = (t: Tally): number => (t.games ? (t.wins + t.draws / 2) / t.games : 0.5);
+const pct = (n: number, d: number) => (d ? (100 * n) / d : 0);
+
+const resultFor = (winner: Outcome, side: 'A' | 'B'): 'win' | 'loss' | 'draw' =>
+  winner === 'draw' ? 'draw' : winner === side ? 'win' : 'loss';
+
+export interface Summary {
+  games: number;
+  presetNames: string[];
+  /** Per preset army, over all its preset games. */
+  presets: Record<string, Tally & { rounds: number }>;
+  /** grid[row][col]: the row army's results against the column army. */
+  grid: Record<string, Record<string, Tally>>;
+  /** Random armies: per builder entry (unit, hero or squad) included at least once. */
+  entries: Record<string, Tally & { hero: boolean }>;
+  /** Games won by the army that went first (coin flip), and how many were decisive. */
+  firstMover: { games: number; wins: number; losses: number; draws: number };
+  shapes: Record<string, { games: number; firstWins: number; draws: number; eliminations: number; rounds: number }>;
+  /** presetShape[preset][shape] */
+  presetShape: Record<string, Record<string, Tally>>;
+  reasons: Record<string, number>;
+  avgRounds: number;
+  usage: Record<string, { turns: number; attacks: number; specials: number }>;
+  illegal: number;
+}
+
+export function summarize(records: GameRecord[], config: GameConfig, presetNames: string[]): Summary {
+  const s: Summary = {
+    games: records.length,
+    presetNames,
+    presets: {},
+    grid: {},
+    entries: {},
+    firstMover: { games: 0, wins: 0, losses: 0, draws: 0 },
+    shapes: {},
+    presetShape: {},
+    reasons: {},
+    avgRounds: 0,
+    usage: {},
+    illegal: 0,
+  };
+  for (const n of presetNames) {
+    s.presets[n] = { ...tally(), rounds: 0 };
+    s.grid[n] = {};
+    s.presetShape[n] = {};
+  }
+  let rounds = 0;
+  for (const r of records) {
+    rounds += r.rounds;
+    s.illegal += r.illegal;
+    s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1;
+
+    const fm = resultFor(r.winner, r.firstMover);
+    s.firstMover.games++;
+    if (fm === 'win') s.firstMover.wins++;
+    else if (fm === 'loss') s.firstMover.losses++;
+    else s.firstMover.draws++;
+
+    const sh = (s.shapes[r.shape] ??= { games: 0, firstWins: 0, draws: 0, eliminations: 0, rounds: 0 });
+    sh.games++;
+    sh.rounds += r.rounds;
+    if (fm === 'win') sh.firstWins++;
+    if (r.winner === 'draw') sh.draws++;
+    if (r.reason === 'elimination') sh.eliminations++;
+
+    for (const [type, u] of Object.entries(r.usage)) {
+      const t = (s.usage[type] ??= { turns: 0, attacks: 0, specials: 0 });
+      t.turns += u.turns;
+      t.attacks += u.attacks;
+      t.specials += u.specials;
+    }
+
+    for (const side of ['A', 'B'] as const) {
+      const army = side === 'A' ? r.a : r.b;
+      const opp = side === 'A' ? r.b : r.a;
+      const res = resultFor(r.winner, side);
+      if (r.kind === 'preset' && s.presets[army.name]) {
+        add(s.presets[army.name], res);
+        s.presets[army.name].rounds += r.rounds;
+        add((s.grid[army.name][opp.name] ??= tally()), res);
+        add((s.presetShape[army.name][r.shape] ??= tally()), res);
+      }
+      if (r.kind === 'random') {
+        for (const entry of new Set(army.units)) {
+          const hero = !!(config.squads[entry]?.hero ?? config.units[entry]?.hero);
+          add((s.entries[entry] ??= { ...tally(), hero }), res);
+        }
+      }
+    }
+  }
+  s.avgRounds = records.length ? rounds / records.length : 0;
+  return s;
+}
+
+export interface Flag {
+  what: string;
+  score: number;
+  games: number;
+}
+
+/** Everything with a score above `high` or below `low` and at least `minGames` games. */
+export function findFlags(s: Summary, config: GameConfig, minGames: number, low = 0.4, high = 0.6): Flag[] {
+  const flags: Flag[] = [];
+  const check = (what: string, t: Tally) => {
+    const sc = score(t);
+    if (t.games >= minGames && (sc > high || sc < low)) flags.push({ what, score: sc, games: t.games });
+  };
+  for (const n of s.presetNames) check(`Preset: ${n}`, s.presets[n]);
+  for (const a of s.presetNames) for (const b of s.presetNames) if (a < b && s.grid[a][b]) check(`Matchup: ${a} vs ${b}`, s.grid[a][b]);
+  for (const [e, t] of Object.entries(s.entries)) check(`${t.hero ? 'Hero' : 'Unit'} in random armies: ${entryName(config, e)}`, t);
+  return flags.sort((x, y) => Math.abs(y.score - 0.5) - Math.abs(x.score - 0.5));
+}
+
+// ---------------------------------------------------------------------------
+// CSV
+// ---------------------------------------------------------------------------
+
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
+
+export function gamesCsv(records: GameRecord[]): string {
+  return csv([
+    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'shape', 'winner', 'reason', 'rounds', 'scoreA', 'scoreB'],
+    ...records.map((r) => [
+      r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
+      r.seatOfA + 1, r.firstMover, r.shape, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
+    ]),
+  ]);
+}
+
+export function unitsCsv(s: Summary, config: GameConfig): string {
+  const ids = [...new Set([...Object.keys(s.usage), ...Object.keys(s.entries)])].sort();
+  return csv([
+    ['id', 'name', 'modelTurns', 'attacks', 'specials', 'attacksPerTurn', 'specialsPerTurn', 'randomGames', 'randomWins', 'randomDraws', 'randomScore'],
+    ...ids.map((id) => {
+      const u = s.usage[id] ?? { turns: 0, attacks: 0, specials: 0 };
+      const e = s.entries[id];
+      return [
+        id, entryName(config, id), u.turns, u.attacks, u.specials,
+        u.turns ? (u.attacks / u.turns).toFixed(3) : '', u.turns ? (u.specials / u.turns).toFixed(3) : '',
+        e?.games ?? 0, e?.wins ?? 0, e?.draws ?? 0, e ? score(e).toFixed(3) : '',
+      ];
+    }),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// HTML
+// ---------------------------------------------------------------------------
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const p1 = (x: number) => `${x.toFixed(1)}%`;
+
+/** Background for a score cell: red below 50%, green above. */
+function heat(sc: number, games: number, minGames: number): string {
+  if (!games) return '';
+  const d = Math.max(-1, Math.min(1, (sc - 0.5) / 0.25));
+  const hue = d >= 0 ? 140 : 0;
+  const alpha = (Math.abs(d) * (games >= minGames ? 0.55 : 0.25)).toFixed(2);
+  return ` style="background:hsla(${hue},70%,45%,${alpha})"`;
+}
+
+export interface ReportMeta {
+  seed: number;
+  perMatchup: number;
+  randomGames: number;
+  workers: number;
+  seconds: number;
+  minGames: number;
+  maxRounds: number;
+}
+
+export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): string {
+  const flags = findFlags(s, config, meta.minGames);
+  const names = s.presetNames;
+  const shapeNames = Object.keys(s.shapes).sort();
+  const decisive = s.firstMover.wins + s.firstMover.losses;
+  const specialOf = (id: string) => config.units[id]?.special;
+
+  const presetRows = names
+    .map((n) => {
+      const t = s.presets[n];
+      return `<tr><th>${esc(n)}</th><td>${t.games}</td><td>${p1(pct(t.wins, t.games))}</td><td>${p1(pct(t.losses, t.games))}</td>
+        <td>${p1(pct(t.draws, t.games))}</td><td${heat(score(t), t.games, meta.minGames)}><b>${p1(100 * score(t))}</b></td>
+        <td>${t.games ? (t.rounds / t.games).toFixed(1) : '–'}</td></tr>`;
+    })
+    .join('');
+
+  const grid = `<tr><th>row vs column</th>${names.map((n) => `<th class="rot"><span>${esc(n)}</span></th>`).join('')}</tr>${names
+    .map(
+      (a) =>
+        `<tr><th>${esc(a)}</th>${names
+          .map((b) => {
+            const t = s.grid[a][b];
+            if (a === b || !t) return '<td class="na">–</td>';
+            return `<td${heat(score(t), t.games, meta.minGames)} title="${t.wins}W ${t.losses}L ${t.draws}D of ${t.games}">${Math.round(100 * score(t))}</td>`;
+          })
+          .join('')}</tr>`,
+    )
+    .join('')}`;
+
+  const entryRows = (hero: boolean) =>
+    Object.entries(s.entries)
+      .filter(([, t]) => t.hero === hero)
+      .sort((x, y) => score(y[1]) - score(x[1]))
+      .map(
+        ([id, t]) =>
+          `<tr><th>${esc(entryName(config, id))}</th><td>${t.games}</td><td>${p1(pct(t.wins, t.games))}</td><td>${p1(pct(t.draws, t.games))}</td>
+          <td${heat(score(t), t.games, meta.minGames)}><b>${p1(100 * score(t))}</b></td></tr>`,
+      )
+      .join('');
+
+  const shapeRows = shapeNames
+    .map((n) => {
+      const t = s.shapes[n];
+      return `<tr><th>${esc(n)}</th><td>${t.games}</td><td>${p1(pct(t.firstWins, t.games - t.draws))}</td><td>${p1(pct(t.draws, t.games))}</td>
+        <td>${p1(pct(t.eliminations, t.games))}</td><td>${(t.rounds / t.games).toFixed(1)}</td></tr>`;
+    })
+    .join('');
+
+  const presetShape = `<tr><th>preset \\ shape</th>${shapeNames.map((n) => `<th>${esc(n)}</th>`).join('')}</tr>${names
+    .map(
+      (a) =>
+        `<tr><th>${esc(a)}</th>${shapeNames
+          .map((sh) => {
+            const t = s.presetShape[a][sh];
+            return t ? `<td${heat(score(t), t.games, meta.minGames)} title="${t.games} games">${Math.round(100 * score(t))}</td>` : '<td class="na">–</td>';
+          })
+          .join('')}</tr>`,
+    )
+    .join('')}`;
+
+  const reasonNames: Record<string, string> = {
+    points: 'Points (King of the Hill)',
+    elimination: 'Wipeout',
+    draw: 'Draw (simultaneous wipeout)',
+    roundLimit: `Draw (${meta.maxRounds}-round limit)`,
+  };
+  const reasonRows = Object.entries(s.reasons)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `<tr><th>${esc(reasonNames[k] ?? k)}</th><td>${v}</td><td>${p1(pct(v, s.games))}</td></tr>`)
+    .join('');
+
+  const usageRows = Object.entries(s.usage)
+    .filter(([id]) => config.units[id])
+    .sort((a, b) => config.units[a[0]].name.localeCompare(config.units[b[0]].name))
+    .map(([id, u]) => {
+      const sp = specialOf(id);
+      const spRate = u.turns ? u.specials / u.turns : 0;
+      const rare = sp && u.turns >= 100 && spRate < 0.03;
+      return `<tr${rare ? ' class="rare"' : ''}><th>${esc(config.units[id].name)}</th><td>${sp ?? '—'}</td><td>${u.turns}</td>
+        <td>${p1(100 * (u.turns ? u.attacks / u.turns : 0))}</td><td>${sp ? p1(100 * spRate) : '—'}</td>
+        <td>${rare ? 'rarely used by the bot' : ''}</td></tr>`;
+    })
+    .join('');
+
+  const flagRows = flags.length
+    ? flags
+        .map((f) => `<li class="${f.score > 0.5 ? 'hi' : 'lo'}"><b>${p1(100 * f.score)}</b> ${esc(f.what)} <span class="muted">(${f.games} games)</span></li>`)
+        .join('')
+    : '<li>Nothing outside 40–60% with enough games.</li>';
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HexHunters balance report</title>
+<style>
+  :root { --bg:#f7f6f2; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e1da; --hi:#167a3e; --lo:#b42318; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:18px; margin:28px 0 8px; }
+  .muted { color:var(--muted); } .note { background:#fff7e0; border:1px solid #f0d78a; padding:10px 12px; border-radius:8px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; overflow-x:auto; }
+  table { border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:5px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th:first-child { text-align:left; } td.na { color:#bbb; text-align:center; }
+  th.rot { height:110px; vertical-align:bottom; } th.rot span { writing-mode:vertical-rl; transform:rotate(180deg); }
+  .kpis { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; min-width:150px; }
+  .kpi b { display:block; font-size:22px; }
+  ul.flags { margin:0; padding-left:18px; } li.hi b { color:var(--hi); } li.lo b { color:var(--lo); }
+  tr.rare td, tr.rare th { color:var(--lo); }
+</style></head><body><main>
+<h1>HexHunters balance report</h1>
+<div class="muted">${s.games} games · seed ${meta.seed} · ${meta.perMatchup} per preset matchup + ${meta.randomGames} random-vs-random ·
+${meta.workers} workers · ${meta.seconds.toFixed(1)} s</div>
+<p class="note"><b>Read with care:</b> these games are played by a simple heuristic bot (one step of look-ahead,
+no planning). Units that need clever play, such as the Twins, Sentinel, Hacker, Spot, Prep or Grappler setups,
+may test weaker than they really are, and simple brawlers may test stronger. "Score" counts a draw as half a win.
+Flags need at least ${meta.minGames} games.</p>
+
+<div class="kpis">
+  <div class="kpi"><span class="muted">Average length</span><b>${s.avgRounds.toFixed(1)} rounds</b></div>
+  <div class="kpi"><span class="muted">First mover wins (decisive games)</span><b>${p1(pct(s.firstMover.wins, decisive))}</b></div>
+  <div class="kpi"><span class="muted">Draws</span><b>${p1(pct(s.firstMover.draws, s.games))}</b></div>
+  <div class="kpi"><span class="muted">Illegal bot moves</span><b>${s.illegal}</b></div>
+</div>
+
+<h2>Flags (score above 60% or below 40%)</h2>
+<section><ul class="flags">${flagRows}</ul></section>
+
+<h2>Preset armies</h2>
+<section><table><tr><th>Army</th><th>Games</th><th>Win</th><th>Loss</th><th>Draw</th><th>Score</th><th>Avg rounds</th></tr>${presetRows}</table></section>
+
+<h2>Matchup grid (row army's score vs column army, %)</h2>
+<section><table>${grid}</table><p class="muted">Hover a cell for W/L/D. Each matchup alternates seats game by game.</p></section>
+
+<h2>Random armies: score when the army includes…</h2>
+<section><h3>Heroes</h3><table><tr><th>Hero</th><th>Games</th><th>Win</th><th>Draw</th><th>Score</th></tr>${entryRows(true)}</table>
+<h3>Units</h3><table><tr><th>Unit</th><th>Games</th><th>Win</th><th>Draw</th><th>Score</th></tr>${entryRows(false)}</table></section>
+
+<h2>Who went first</h2>
+<section><p>The army that won the coin flip won <b>${s.firstMover.wins}</b>, lost <b>${s.firstMover.losses}</b> and drew <b>${s.firstMover.draws}</b>
+of ${s.games} games: <b>${p1(pct(s.firstMover.wins, decisive))}</b> of decisive games.</p></section>
+
+<h2>By deployment shape</h2>
+<section><table><tr><th>Shape</th><th>Games</th><th>First mover wins</th><th>Draws</th><th>Wipeouts</th><th>Avg rounds</th></tr>${shapeRows}</table>
+<h3>Preset score by shape (%)</h3><table>${presetShape}</table></section>
+
+<h2>How games end</h2>
+<section><table><tr><th>Win type</th><th>Games</th><th>Share</th></tr>${reasonRows}</table></section>
+
+<h2>Ability use (per model-turn)</h2>
+<section><table><tr><th>Unit</th><th>Special</th><th>Model-turns</th><th>Basic attack</th><th>Special</th><th></th></tr>${usageRows}</table>
+<p class="muted">How often, per turn a model was on the board, the bot used its basic attack and its special. Red rows: the special
+was used on fewer than 3% of turns (with 100+ turns), so either it's weak or the bot doesn't know how to use it.</p></section>
+</main></body></html>`;
+}
