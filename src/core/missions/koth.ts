@@ -10,6 +10,8 @@ import type { MissionDef } from './types';
 
 export const koth: MissionDef = {
   name: 'King of the Hill',
+  icon: 'crown',
+  brief: (c) => `Hold the center: 1 point a round. First to ${c.pointsToWin}.`,
   summary: (c) => `Have more models on the control point at the end of each round: 1 point. First to ${c.pointsToWin} wins.`,
   rules: (c) => [
     'The control point is the center hex and the six around it.',

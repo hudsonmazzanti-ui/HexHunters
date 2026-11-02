@@ -34,17 +34,41 @@ export function deployZones(radius: number, rows: number): [Hex[], Hex[]] {
   return [all.filter((h) => h.r >= edge), all.filter((h) => h.r <= -edge)];
 }
 
-/** Both players' zones for a deployment shape: Player 1's, and its mirror image for Player 2. */
-export function shapeZones(cfg: GameConfig, shapeId: string): [Hex[], Hex[]] {
+/** The most models a legal army can have (16 Skeletons at 1 point each, by default). */
+export function largestArmy(cfg: GameConfig): number {
+  const perModel = [
+    ...Object.values(cfg.units).filter((u) => !u.squadOnly && !u.formOnly && u.cost > 0).map((u) => u.cost),
+    ...Object.values(cfg.squads).map((s) => s.cost / s.members.length),
+  ];
+  return Math.floor(cfg.armyPointLimit / Math.min(...perModel));
+}
+
+/**
+ * Both players' zones for a deployment shape: Player 1's, and its mirror image for Player 2.
+ * Zone hexes are at least 3 from the center (clear of the control point and its ring). A
+ * zone with fewer than `need` hexes grows one step at a time until the army fits.
+ */
+export function shapeZones(cfg: GameConfig, shapeId: string, need = largestArmy(cfg)): [Hex[], Hex[]] {
   const shape = DEPLOY_SHAPES[shapeId];
   if (!shape) throw new Error(`Unknown deployment shape "${shapeId}"`);
-  const zone = hexagon(cfg.boardRadius).filter((h) => shape.zone(h, cfg));
+  let zone: Hex[] = [];
+  for (let grow = 0; grow <= cfg.boardRadius; grow++) {
+    zone = hexagon(cfg.boardRadius).filter((h) => hexDistance(h, ORIGIN) >= 3 && shape.zone(h, cfg, grow));
+    if (zone.length >= need) break;
+  }
   return [zone, zone.map(mirror)];
 }
 
 /** Picks this seed's deployment shape (its own random stream, so terrain doesn't depend on it). */
 export function pickDeployShape(cfg: GameConfig, seed: number): string {
   return new Rng((seed ^ 0x2c1b3c6d) | 0).pick(cfg.deployShapes);
+}
+
+export interface MapOptions {
+  /** Use this deployment shape instead of a random one (Hot Drop). */
+  shape?: string;
+  /** Extra models each army gets on top of the largest army (Bonus Bones), so zones must fit them. */
+  extraModels?: number;
 }
 
 /** Can terrain go on this hex? Not in or next to a deployment zone, nor on or next to the control point. */
@@ -115,10 +139,10 @@ export function zonesConnected(radius: number, blocked: Set<string>, zones: [Hex
   return touches(from0, objective) && touches(from0, zones[1]) && touches(from1, objective);
 }
 
-export function generateMap(cfg: GameConfig, seed: number): GameMap {
+export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}): GameMap {
   const rng = new Rng(seed);
-  const deployShape = pickDeployShape(cfg, seed);
-  const zones = shapeZones(cfg, deployShape);
+  const deployShape = opts.shape ?? pickDeployShape(cfg, seed);
+  const zones = shapeZones(cfg, deployShape, largestArmy(cfg) + (opts.extraModels ?? 0));
   // A fractional terrainPairs (density) rounds up or down at random: 4.5 = 4 or 5 pairs, 50/50.
   // (Only draws a random number when fractional, so whole-number maps are unchanged.)
   const whole = Math.floor(cfg.terrainPairs);

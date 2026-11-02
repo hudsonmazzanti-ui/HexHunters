@@ -16,6 +16,10 @@ export interface OverlayOptions {
   /** If set, tapping anywhere closes the overlay and resolves the promise. */
   tapText?: string;
   buttons?: OverlayButton[];
+  /** Extra class on the card (e.g. 'wide' for the briefing). */
+  className?: string;
+  /** Put the art under the title instead of above it (the briefing cards). */
+  artBelowTitle?: boolean;
 }
 
 const root = () => document.getElementById('overlay')!;
@@ -24,12 +28,13 @@ export function showOverlay(opts: OverlayOptions): Promise<void> {
   const overlay = root();
   overlay.style.setProperty('--overlay-bg', opts.color ?? '');
   const card = document.createElement('div');
-  card.className = 'overlay-card';
+  card.className = `overlay-card ${opts.className ?? ''}`.trim();
 
-  if (opts.art) card.append(opts.art);
+  if (opts.art && !opts.artBelowTitle) card.append(opts.art);
   const h1 = document.createElement('h1');
   h1.textContent = opts.title;
   card.append(h1);
+  if (opts.art && opts.artBelowTitle) card.append(opts.art);
   for (const line of opts.lines ?? []) {
     const p = document.createElement('p');
     p.textContent = line;

@@ -7,8 +7,8 @@
  * is not allowed, so a die is never wasted by accident.
  */
 import { dropFlag, flagCarrier } from '../flag';
-import { DIRECTIONS, hexEquals, hexagon, neighbors } from '../hex';
-import { canAct, getUnit, hasDoubleAction } from '../queries';
+import { DIRECTIONS, hexDistance, hexEquals, hexagon, neighbors } from '../hex';
+import { canAct, getUnit, hasDoubleAction, maxReach } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
 import { breath } from './breath';
@@ -123,6 +123,11 @@ export function specialBlockedReason(state: GameState, unit: Unit, choice?: Spec
   if (!choice) return null;
   const resolved = resolve(state, unit, sp, choice);
   if (typeof resolved === 'string') return resolved;
+  // Fog: nothing can target a model, or a hex, farther than 4 away. (Swap targets nothing,
+  // so the Twins still swap at any distance.)
+  const reach = maxReach(state);
+  if (resolved.target?.pos && hexDistance(unit.pos!, resolved.target.pos) > reach) return 'Lost in the fog';
+  if (resolved.hex && hexDistance(unit.pos!, resolved.hex) > reach) return 'Lost in the fog';
   return sp.checkChoice?.(state, unit, resolved) ?? null;
 }
 

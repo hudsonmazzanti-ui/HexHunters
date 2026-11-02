@@ -68,6 +68,17 @@ export const COLORS = {
   flagDark: '#831843',
   flagPole: '#1f2937',
 
+  // Briefing icons (missions and battlefield Conditions)
+  iconSun: '#fbbf24',
+  iconFog: '#cbd5e1',
+  iconMud: '#a16207',
+  iconWind: '#7dd3fc',
+  iconBloodMoon: '#ef4444',
+  iconSand: '#e7c27d',
+  iconBone: '#f5f5f4',
+  iconDrop: '#fb923c',
+  iconMap: '#a7f3d0',
+
   // Badges
   dieFace: '#ffffff',
   dieBoosted: '#bbf7d0',

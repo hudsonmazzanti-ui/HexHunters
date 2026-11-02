@@ -9,6 +9,7 @@ import {
   canSeeUnit,
   effectiveDefense,
   maxHealth,
+  maxReach,
   needsLoading,
   unitDef,
   unitSpeed,
@@ -51,6 +52,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit, se
   else if (needsLoading(state, attacker) && !attacker.loaded) blockedReason = 'Not loaded';
   else if (!target.pos || target.owner === attacker.owner) blockedReason = 'Not an enemy';
   else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
+  else if (hexDistance(attacker.pos!, target.pos) > maxReach(state)) blockedReason = 'Lost in the fog';
   else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
 
   const hit = !!def.noDie || roll + bonus >= defense;

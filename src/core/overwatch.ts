@@ -10,12 +10,12 @@
  */
 import { dealDamage } from './combat';
 import { type Hex, hexDistance, hexEquals, hexagon } from './hex';
-import { attackDamage, canSeeHex, effectiveDefense, livingUnits, other, terrainHeight, unitDef } from './queries';
+import { attackDamage, canSeeHex, effectiveDefense, effectiveRange, livingUnits, other, terrainHeight, unitDef } from './queries';
 import type { GameState, PlayerId, Unit } from './types';
 
-/** Hexes a unit would watch from where it stands now. */
+/** Hexes a unit would watch from where it stands now (Fog: only within 4). */
 export function watchArea(state: GameState, unit: Unit): Hex[] {
-  const range = unitDef(state, unit).range;
+  const range = effectiveRange(state, unit);
   return hexagon(state.map.radius).filter((h) => {
     const d = hexDistance(h, unit.pos!);
     return d >= 1 && d <= range && terrainHeight(state, h) === 0 && canSeeHex(state, unit, h, 1);

@@ -123,7 +123,7 @@ describe('missions in the simulator', () => {
   }, 60_000);
 
   it('random missions are mixed in a run and the report breaks results down by mission', () => {
-    const jobs = buildJobs(config, { seed: 4, perMatchup: 1, randomGames: 30 }).filter((_, i) => i % 3 === 0 || i >= 36);
+    const jobs = buildJobs(config, { seed: 4, perMatchup: 1, randomGames: 60 }).filter((_, i) => i % 3 === 0 || i >= 36);
     const records = runJobs(jobs);
     const missions = new Set(records.map((r) => r.mission));
     expect(missions).toEqual(new Set(['koth', 'ctf']));
@@ -133,6 +133,10 @@ describe('missions in the simulator', () => {
     const html = reportHtml(s, config, { seed: 4, perMatchup: 1, randomGames: 30, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
     expect(html).toContain('By mission');
     expect(html).toContain('How each preset wins');
+    expect(html).toContain('By Condition');
+    expect(Object.values(s.byCondition).reduce((n, c) => n + c!.games, 0)).toBe(records.length);
+    expect(gamesCsv(records).split('\n')[0]).toContain('condition');
+    for (const r of records) expect(r.mission === 'ctf' && r.condition === 'hotdrop').toBe(false);
     expect(html).toContain('who made the winning capture');
     for (const [name, t] of Object.entries(s.presetWinTypes)) {
       expect(t.elimination + t.objective + t.other).toBe(t.wins);

@@ -110,8 +110,9 @@ describe('Mercenary: Premium Shot', () => {
 describe('deployment shapes', () => {
   const ids = Object.keys(DEPLOY_SHAPES);
 
-  it('every shape in the data is in the random pool', () => {
-    expect(new Set(DEFAULT_CONFIG.deployShapes)).toEqual(new Set(ids));
+  it('every shape in the data is in the random pool, except Condition-only ones (Hot Drop)', () => {
+    expect(new Set(DEFAULT_CONFIG.deployShapes)).toEqual(new Set(ids.filter((id) => !DEPLOY_SHAPES[id].special)));
+    expect(DEPLOY_SHAPES.hotdrop.special).toBe(true);
     expect(ids).toEqual(expect.arrayContaining(['standard', 'corners', 'flanks', 'spearhead', 'split', 'close']));
   });
 

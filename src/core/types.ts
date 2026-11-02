@@ -34,6 +34,19 @@ export type SpecialId =
 /** Game objectives (see src/core/missions/). One is picked at random each game. */
 export type MissionId = 'koth' | 'ctf';
 
+/** Battlefield Conditions (see src/core/conditions/). One is picked at random each game. */
+export type ConditionId =
+  | 'clear'
+  | 'fog'
+  | 'mud'
+  | 'tailwind'
+  | 'bloodmoon'
+  | 'sandstorm'
+  | 'bonusbones'
+  | 'hotdrop'
+  | 'smallmap'
+  | 'bigmap';
+
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
 export type AuraId =
   | 'marshal'
@@ -123,6 +136,11 @@ export interface GameConfig {
   dieSides: number;
   /** Mission ids one is picked from at random each game (see src/core/missions/). */
   missions: MissionId[];
+  /**
+   * Battlefield Conditions and their weights: one is picked per game with chance
+   * weight / total (see src/core/conditions/). Leave one out, or give it 0, to disable it.
+   */
+  conditions: Partial<Record<ConditionId, number>>;
   pointsToWin: number;
   /** Maximum total cost of each player's army. */
   armyPointLimit: number;
@@ -276,6 +294,8 @@ export interface Unit {
   armorCracks: number;
   /** Uses left of a limited special (see UnitDef.specialUses); null = unlimited. */
   usesLeft: number | null;
+  /** Given free by a Condition (Bonus Bones): not part of the army list, placed after the rest. */
+  free: boolean;
 }
 
 export interface Overwatch {
@@ -309,6 +329,8 @@ export interface GameState {
   map: GameMap;
   /** This game's objective (picked at random from config.missions). */
   mission: MissionId;
+  /** This game's battlefield Condition (picked at random from config.conditions). */
+  condition: ConditionId;
   /** Capture the Flag's flag; null in other missions. */
   flag: Flag | null;
   /** Flag drops made during the current action (reported as events when it finishes). */

@@ -117,7 +117,7 @@ reason ("Needs 2 more pts"), and their + is disabled.
 placements. Tapping a hex places the model. If one player runs out of models, the other places the rest.
 
 Each game uses a random **deployment shape**, picked from the seed when the map is generated and revealed (name, short
-description and a mini map of both zones) after both armies are built, on the same screen as the mission. Player 2's zone is always Player 1's mirrored
+description and a mini map of both zones) after both armies are built, on the briefing screen (see **Briefing** below). Player 2's zone is always Player 1's mirrored
 through the center, terrain stays out of both zones plus a one-hex buffer, and every zone is at least 3 hexes from the
 center (clear of the control point and its ring). During placement your zone is highlighted and the enemy's is shown
 faintly.
@@ -283,8 +283,8 @@ affect it: Hack can't target it, the Gambler doesn't turn its die into "?", and 
 apply to its attacks (Spot isn't used up by them). Enemies can still Spot it as a target.
 
 **Missions.** After both armies are built, each game's mission is picked at random (50/50, seeded) and shown with
-a one-line rule before deployment, together with the deployment shape on one screen (mission name as the title, the
-mission rule, the shape and its description, over a mini map with both zones and the control point or flag). The mission chip in the top bar shows the full rules any time. Missions are data
+a one-line rule on the briefing screen before deployment. The full rules are one tap away from the briefing during
+play. Missions are data
 (`src/core/missions/`, one module each; the pool is `missions` in `config.ts`). In every mission, eliminating every
 enemy model wins immediately. If one action (Grenade or Torch) wipes out the last models on both sides at once, the
 game is a draw.
@@ -295,7 +295,8 @@ game is a draw.
   pennant) starts on the center hex.
   - *Pick up:* a model standing on the flag spends its action to pick it up (the **Pick up flag** button; no roll, so
     the Behemoth can too). Movement ends, like a special; with the Master Ninja it may still attack after.
-  - *Carrier:* moves 1 slower (minimum 1, counted after the Warlord's bonus), and can still attack and use its
+  - *Carrier:* ignores every speed bonus (e.g. the Warlord's +1) and moves 1 slower than its own speed (minimum 1;
+    a Monster carrying the flag with the Warlord moves 1). It can still attack and use its
     special. It carries a pennant on the board, and your deployment zone is outlined (dashed) as the scoring zone.
   - *Walking only:* if the carrier moves any way other than its own normal move, the flag drops on the hex it stood
     on just before: Vault, Swap (either twin), a Hook pull (by friend or foe; a hook that doesn't move it doesn't
@@ -307,9 +308,37 @@ game is a draw.
     A dropped flag stays until someone picks it up.
   - *Capture wins:* if your carrier ends your turn inside your own deployment zone (checked after the enemy's
     overwatch, which can still stop it), you win the game. The other way to win is eliminating the enemy.
-  - *Standard Bearer:* your carrier isn't slowed by the flag and gets +2 on its rolls (instead of models on the
+  - *Standard Bearer:* your carrier isn't slowed by the flag (it moves at its own speed, still without bonuses) and gets +2 on its rolls (instead of models on the
     control point).
   - Every pickup, drop and capture gets a log line.
+
+**Battlefield Conditions.** Each game also gets one Condition, picked at random after the armies are built (seeded,
+like the mission and deployment shape). Clear comes up half the time; the other nine share the other half equally.
+The weights are `conditions` in `config.ts` (set one to 0 to remove it), and each Condition is a small data entry in
+`src/core/conditions/`.
+
+| Condition | Effect |
+|---|---|
+| Clear | No effect. |
+| Fog | Nothing can target or affect a model more than 4 hexes away: attacks (indirect fire too), specials, Grenade splash and the overwatch area. Army-wide auras still work, and the Twins still Swap at any distance. |
+| Mud | Every model's speed is 1 lower (minimum 1), after every other modifier. |
+| Tailwind | Every model's speed is 1 higher, after every other modifier (the flag carrier too). |
+| Blood Moon | +1 on every die result (Gambler included, within its cap). Models without a die (Behemoth) are unaffected. |
+| Sandstorm | −1 on every die result (minimum 1). Models without a die are unaffected. |
+| Bonus Bones | Each army gets 2 free Skeletons, placed after the rest of the army. They aren't in the army list, so they don't count toward points or the Mercenary's unspent points, but they are Skeletons for every rule (e.g. the Necromancer). Zones grow to fit 18 models. |
+| Hot Drop | Replaces the deployment shape: both armies deploy back to back in the middle. Player 1 gets the two rows just below the center line plus the left part of the center row, Player 2 the mirror image; the zones touch, and stay 3+ hexes from the center (off the control point and its ring). Never paired with Capture the Flag (rerolled). |
+| Small Map | The board is 2 rings smaller (radius 5). Terrain scales with the board's area; Close Quarters is left out (too cramped). |
+| Big Map | The board is 2 rings larger (radius 9), with terrain scaled up the same way. |
+
+Deployment shapes are drawn relative to the board edge, keep every hex at least 3 from the center, and grow one row
+or step deeper whenever a zone is too small for the largest army (16 Skeletons, or 18 with Bonus Bones). Maps stay
+mirrored and pass the same connectivity checks on every board size.
+
+**Briefing.** After both armies are built, one screen shows three cards, side by side (stacked on a phone): the
+**Mission** (big icon, name, a few words), the **Deployment** (a mini-map of the actual board with both zones and the
+control point or flag) and the **Condition** (big icon, name, one line). During the game, the mission and Condition
+icons sit in the board's top-left corner; tapping either reopens the briefing (with the mission's full rules one
+more tap away).
 
 ## Line of sight
 
@@ -358,7 +387,11 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
 - **Missions:** each sim game's mission is random (50/50), like the app. The report has a **By mission** section
   (game flow, preset scores and unit/hero scores per mission side by side, how each preset wins (wipeout vs objective) per mission, and which unit types made the winning flag captures, overall and per preset), `games.csv` has mission and flag
   columns, and `units.csv` has per-mission scores. `--mission koth|ctf` forces one; `--experiment missions`
-  compares random, King of the Hill only and Capture the Flag only. In Capture the Flag the bot picks up the flag,
+  compares random, King of the Hill only and Capture the Flag only.
+- **Conditions:** each sim game's Condition is random with the app's weights (and Hot Drop never with Capture the
+  Flag). The report's **By Condition** section shows, per Condition, games, game length, win types and the first-mover
+  rate, plus a preset × Condition score grid; `games.csv` has a `condition` column. `--condition fog` (or
+  `--variant only-fog`) forces one. In Capture the Flag the bot picks up the flag,
   walks the carrier home (avoiding Dash, Vault, Pounce and Swap) and values reaching its zone as winning the game,
   escorts it, and goes after enemy carriers, more urgently the closer they are to their zone (extra value on
   damaging them, plus Hack and Hook to knock the flag loose).
