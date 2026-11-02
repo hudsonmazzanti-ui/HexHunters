@@ -1095,3 +1095,19 @@ button.danger {
   text-anchor: middle;
   dominant-baseline: central;
 }
+
+/* Cracking Armor (Behemoth): current defense under the health badge, red once cracked. */
+.armor rect {
+  fill: #e5e7eb;
+  stroke: #111827;
+  stroke-width: 1;
+}
+.armor text {
+  fill: #111827;
+  font-size: 9px;
+  font-weight: 800;
+}
+.armor.cracked rect {
+  fill: #fecaca;
+  stroke: #b91c1c;
+}

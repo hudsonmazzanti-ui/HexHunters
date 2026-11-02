@@ -182,6 +182,9 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         const callouts = [
           ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
           ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
+          ...(def.crackingArmor
+            ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]
+            : []),
           ...(def.flying ? ['Flying: moves over terrain and models, lands on an open hex'] : []),
           ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
           ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),

@@ -21,9 +21,12 @@ export const terrainHeight = (state: GameState, h: Hex): number => state.map.hei
 export const livingUnits = (state: GameState, owner: PlayerId): Unit[] =>
   state.units.filter((u) => u.owner === owner && u.pos);
 
-/** Defense without temporary armor (Brace): base plus permanent aura bonuses (Warden). */
+/** The model's own defense: its stat minus permanent losses (the Behemoth's Cracking Armor). No bonuses. */
+export const naturalDefense = (state: GameState, unit: Unit): number => unitDef(state, unit).defense - unit.armorCracks;
+
+/** Defense without temporary armor (Brace): natural defense plus permanent aura bonuses (Warden). */
 export const baseDefense = (state: GameState, unit: Unit): number =>
-  unitDef(state, unit).defense + (auraEffects(state, unit).defenseBonus ?? 0);
+  naturalDefense(state, unit) + (auraEffects(state, unit).defenseBonus ?? 0);
 
 /** Defense against attacks: base, aura bonuses and Brace. */
 export function effectiveDefense(state: GameState, unit: Unit): number {

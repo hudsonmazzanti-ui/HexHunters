@@ -16,6 +16,7 @@ import {
   hasDoubleAction,
   livingUnits,
   maxHealth,
+  naturalDefense,
   movePath,
   other,
   unitAt,
@@ -63,6 +64,8 @@ export type GameEvent =
   | { type: 'gambleRoll'; unitId: string; roll: number }
   /** Gambler: the roll missed the special's threshold, so the action was wasted. */
   | { type: 'gambleFailed'; unitId: string; roll: number; reason: string }
+  /** Cracking Armor: the Behemoth lost 1 defense for good (now `defense`, `cracks` lost in total). */
+  | { type: 'cracked'; unitId: string; defense: number; cracks: number }
   /** Burn damage at the start of the burning model's owner's turn. */
   | { type: 'burn'; unitId: string; damage: number; killed: boolean }
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
@@ -101,6 +104,7 @@ export function newGame(config: GameConfig, seed: number): GameState {
     firstPlayer: 0,
     turnsTaken: [0, 0],
     deaths: [],
+    struck: [],
     spawned: 0,
     auras: [[], []],
     winner: null,
@@ -262,6 +266,15 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       break;
     }
   }
+  // Cracking Armor (Behemoth): one crack per action that damaged it, however many hits.
+  for (const id of state.struck) {
+    const unit = getUnit(state, id);
+    const crack = unit && unitDef(state, unit).crackingArmor;
+    if (!unit?.pos || !crack || naturalDefense(state, unit) <= crack.minDefense) continue;
+    unit.armorCracks += 1;
+    events.push({ type: 'cracked', unitId: id, defense: naturalDefense(state, unit), cracks: unit.armorCracks });
+  }
+  state.struck = [];
   // Raise Dead (Necromancer) for every model that died during this action.
   for (const u of raiseDead(state)) events.push({ type: 'raised', unitId: u.id, at: u.pos! });
   return { state, events };
@@ -304,6 +317,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     hacked: false,
     hackPenalty: 0,
     attacked: false,
+    armorCracks: 0,
   };
 }
 
@@ -371,7 +385,7 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     if (!unit.burning) continue;
     unit.burning = false;
     const damage = state.config.specials.burnDamage;
-    const killed = dealDamage(state, unit, damage);
+    const killed = dealDamage(state, unit, damage, { burn: true });
     events.push({ type: 'burn', unitId: unit.id, damage, killed });
   }
   if (checkElimination(state, events)) return;

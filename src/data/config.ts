@@ -386,9 +386,10 @@ export const UNITS: Record<string, UnitDef> = {
     size: 3, // large
     speed: SPEED.slow,
     defense: 10,
-    health: 20,
+    health: 15,
     range: 1, // melee only
     damage: 6,
+    crackingArmor: { minDefense: 4 },
     special: 'smash', // no passive: its hero ability is its special (like the Twins)
     hero: {},
   },

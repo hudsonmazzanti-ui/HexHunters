@@ -28,6 +28,7 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
     firstPlayer: 0,
     turnsTaken: [0, 0],
     deaths: [],
+    struck: [],
     spawned: 0,
     auras: [[], []],
     winner: null,
@@ -72,6 +73,7 @@ export function addUnit(
     hacked: false,
     hackPenalty: 0,
     attacked: false,
+    armorCracks: 0,
     ...extra,
   };
   state.units.push(unit);

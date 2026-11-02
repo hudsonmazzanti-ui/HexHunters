@@ -79,6 +79,11 @@ export interface UnitDef {
   restsOnDoubleTurn?: boolean;
   /** Moves over terrain and models; must still end on an empty, non-terrain hex (Dragon). */
   flying?: boolean;
+  /**
+   * Cracking Armor (Behemoth): each attack or special that damages it permanently lowers its
+   * defense by 1, down to `minDefense`. Burn doesn't count; one action cracks it at most once.
+   */
+  crackingArmor?: { minDefense: number };
 }
 
 export interface GameConfig {
@@ -231,6 +236,8 @@ export interface Unit {
   hackPenalty: number;
   /** Used its basic attack this turn (Dual Gunner's Second Shot needs it). */
   attacked: boolean;
+  /** Cracking Armor: how much defense it has permanently lost (see UnitDef.crackingArmor). */
+  armorCracks: number;
 }
 
 export interface Overwatch {
@@ -259,6 +266,8 @@ export interface GameState {
   turnsTaken: [number, number];
   /** Models that died during the current action, for Raise Dead (processed when the action finishes). */
   deaths: { owner: PlayerId; pos: Hex }[];
+  /** Models damaged by an attack or special during the current action (Cracking Armor; processed when it finishes). */
+  struck: string[];
   /** Counter for ids of models created mid-game (risen Skeletons). */
   spawned: number;
   /** Auras each player's army has. Set when the army is chosen; they last all game, even if the hero dies. */

@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, maxHealth, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
+import { actionBonus, maxHealth, naturalDefense, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -61,6 +61,10 @@ interface UnitNodes {
   /** Size the model was drawn at; redrawn if it changes (a Zombie starting to crawl). */
   size: number;
   moonText: SVGTextElement;
+  /** Cracking Armor (Behemoth): current defense, "DEF 7 (-3)". */
+  armor: SVGGElement;
+  armorText: SVGTextElement;
+  armorRect: SVGRectElement;
 }
 
 export class BoardView {
@@ -243,7 +247,12 @@ export class BoardView {
     el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
     const hpText = el('text', {}, hp);
 
-    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size };
+    // Cracking Armor (Behemoth): its current defense, under the health badge.
+    const armor = el('g', { class: 'badge armor', transform: `translate(0 ${r + 19})` }, g);
+    const armorRect = el('rect', { x: -16, y: -7, width: 32, height: 14, rx: 4 }, armor);
+    const armorText = el('text', {}, armor);
+
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, armor, armorText, armorRect };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -297,6 +306,15 @@ export class BoardView {
       n.die.classList.toggle('hacked', unit.hackPenalty > 0);
     }
 
+    n.armor.style.display = def.crackingArmor ? '' : 'none';
+    if (def.crackingArmor) {
+      const text = `DEF ${naturalDefense(state, unit)}${unit.armorCracks ? ` (-${unit.armorCracks})` : ''}`;
+      n.armorText.textContent = text;
+      const width = text.length * 6 + 8;
+      n.armorRect.setAttribute('width', String(width));
+      n.armorRect.setAttribute('x', String(-width / 2));
+      n.armor.classList.toggle('cracked', unit.armorCracks > 0);
+    }
     n.hpText.textContent = String(unit.hp);
     n.hp.classList.toggle('low', unit.hp <= Math.ceil(maxHealth(state, unit) / 3));
   }
