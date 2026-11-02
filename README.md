@@ -30,17 +30,17 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Grenadier | 3    | medium (2) | 3     | 6   | 5  | 4         | 2   | **Grenade** (die 10+): 2 damage on impact, 1 to each neighbor |
 | Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 3   | **Brace**: +2 defense until your next turn |
 | Flamer    | 4    | medium (2) | 2     | 6   | 9  | 3         | 3   | **Torch**: die vs each model in a 2-hex line, ignores Brace |
-| Monster   | 5    | large (3)  | 3     | 3   | 14 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy |
+| Monster   | 5    | large (3)  | 2     | 3   | 14 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy |
 | Artillery | 3    | medium (2) | 1     | 4   | 8  | 7         | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 | Zombie    | 2    | medium (2) | 3     | 0   | 9  | 1 (melee) | 3   | **Eat** (die 8+): adjacent enemy, normal hit roll; 2 damage and the Zombie heals 2. Crawls once hurt |
 | Skeleton  | 1    | medium (2) | 3     | 2   | 1  | 1 (melee) | 2   | No special. Rests on the second of back-to-back turns |
 | Hill Giant | 5   | large (3)  | 2     | 5   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
-| Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 4, def 6, HP 12, melee 5, **Pounce** |
+| Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 3, def 6, HP 12, melee 5, **Pounce** |
 | Hacker    | 3    | small (1)  | 3     | 5   | 6  | 4         | 2   | **Hack**: enemy within 4 in sight gets -2 on its next die (min 1). No roll |
 | Dual Gunner | 4  | medium (2) | 3     | 6   | 7  | 4         | 2   | **Second Shot**: after its attack, attack again with the same die |
-| Dragon    | 6    | large (3)  | 4     | 6   | 12 | 3         | 3   | **Breath**: like Torch, and everything hit burns. Flying |
+| Dragon    | 6    | large (3)  | 3     | 6   | 12 | 3         | 3   | **Breath**: like Torch, and everything hit burns. Flying |
 
 **Heroes** (max one per army, optional; no special, their die is only for attacking):
 
@@ -48,7 +48,7 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 |---------------|------|------------|-------|-----|----|--------------|-----|--------------------------------|
 | Field Marshal | 7    | medium (2) | 3     | 6   | 9  | 4            | 3   | Your Infantry get +2 on their roll every turn (stacks with Prep) |
 | Siege Master  | 8    | medium (2) | 2     | 5   | 8  | 4 (indirect) | 2   | Your Artillery never needs to Load |
-| Warlord       | 6    | large (3)  | 3     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
+| Warlord       | 6    | large (3)  | 2     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
 | Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
 | Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1 |
@@ -247,7 +247,7 @@ with the chunk lifted). Normal hit roll. The terrain is removed from the map eit
 kill drops a height-1 boulder on the target's hex. Greyed out with no adjacent terrain.
 
 **Werewolf.** A moon badge counts down its owner's turns. At the start of its owner's 3rd turn it permanently becomes
-the beast form (large, fast, def 6, max HP 12, melee 5) and heals 5. **Pounce** gives +2 hexes of movement, then it may
+the beast form (large, speed 3, def 6, max HP 12, melee 5) and heals 5. **Pounce** gives +2 hexes of movement, then it may
 still make its melee attack with the same die.
 
 **Hacker: Hack.** Target an enemy within 4 the Hacker can see; no roll, the die is just spent. At the start of that

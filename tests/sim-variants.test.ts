@@ -158,12 +158,10 @@ describe('pacing variants', () => {
       const expected = def.size === 3 ? Math.max(1, def.speed - 1) : def.speed;
       expect([id, c.units[id].speed]).toEqual([id, expected]);
     }
-    expect(c.units.monster.speed).toBe(2);
-    expect(c.units.dragon.speed).toBe(3);
     expect(c.units.behemoth.speed).toBe(1);
-    expect(c.units.werewolfbeast.speed).toBe(3);
+    expect(c.units.dragon.speed).toBe(UNITS.dragon.speed - 1);
     expect(c.units.infantry.speed).toBe(UNITS.infantry.speed);
-    expect(UNITS.monster.speed).toBe(3); // real data unchanged
+    expect(UNITS.monster.speed).toBe(2); // real data unchanged by the variant
     expect(c.specials.warlordSpeedBonus).toBe(DEFAULT_CONFIG.specials.warlordSpeedBonus);
   });
 
@@ -182,7 +180,7 @@ describe('pacing variants', () => {
     expect(tall.share).toBeGreaterThan(0.55);
     expect(tall.share).toBeLessThan(0.66);
     expect(tall.perMap).toBe(base.perMap);
-    expect(variantConfig('slow-large-tall').units.monster.speed).toBe(2);
+    expect(variantConfig('slow-large-tall').units.dragon.speed).toBe(UNITS.dragon.speed - 1);
   });
 
   it('the pacing experiment covers every hero', () => {
