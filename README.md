@@ -326,6 +326,11 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   first-mover, deployment shape and win-type stats, game length, ability use, and flags for anything outside
   40–60%), `games.csv` (one row per game, with its seed) and `units.csv`.
 - The bot is simple: units that need clever play (Twins, Sentinel, Hacker…) may test weaker than they really are.
+- **Balance variants** (`sim/variants.ts`): temporary overrides of unit stats, special-rule numbers or rule/map
+  settings (e.g. `terrainPairs`), applied to a copy of the data. `--variant ID`, `--variants A,B` or
+  `--experiment NAME` (e.g. `monster`, `terrain`) run them with the same seed and write `compare.html`: one row
+  per variant, changes from the baseline marked as real (beyond 2 standard errors) or noise, plus a sample map
+  per variant (`sample-map.svg` / `.txt`).
 
 ## Look and feel
 

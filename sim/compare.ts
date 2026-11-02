@@ -1,11 +1,35 @@
 /**
- * Side-by-side comparison of several balance variants run with the same seed.
- * Pure functions (no file system), so they can be tested.
+ * Side-by-side comparison of several balance variants run with the same seed:
+ * one row per variant, changes from the baseline (the first variant), and whether
+ * each change is bigger than the noise. Pure functions (no file system).
+ *
+ * Noise: a change counts as real when it's more than 2 standard errors (about 95%).
+ *  - rates and scores: SE = sqrt(p(1-p)/n) for each variant, combined for the difference
+ *    (this ignores that variants share seeds, so it's on the cautious side);
+ *  - average rounds: SE from the spread of game lengths;
+ *  - spreads (SD and best-minus-worst): bootstrap over games (see bootstrapSpreads).
  */
 import { entryName } from '../src/core/army';
+import { Rng } from '../src/core/rng';
 import type { GameConfig } from '../src/core/types';
-import { type Summary, type Tally, score } from './report';
+import { type Summary, score, summarize } from './report';
+import type { GameRecord } from './runGame';
 import type { Experiment } from './variants';
+
+export interface Spread {
+  /** Standard deviation of the scores (0–1 scale). */
+  sd: number;
+  /** Highest minus lowest score. */
+  range: number;
+  count: number;
+}
+
+export interface SpreadNoise {
+  presetsSd: number;
+  presetsRange: number;
+  entriesSd: number;
+  entriesRange: number;
+}
 
 export interface VariantResult {
   id: string;
@@ -16,14 +40,10 @@ export interface VariantResult {
   /** Presets left out because they're illegal under this variant, with the reason. */
   excluded: string[];
   seconds: number;
-}
-
-export interface Spread {
-  /** Standard deviation of the scores (0–1 scale). */
-  sd: number;
-  /** Highest minus lowest score. */
-  range: number;
-  count: number;
+  /** Standard errors of the spread metrics (bootstrap), if computed. */
+  spreadNoise?: SpreadNoise;
+  /** A sample map for this variant (same seed for every variant). */
+  sampleMap?: { svg: string; ascii: string };
 }
 
 export function spread(scores: number[]): Spread {
@@ -33,7 +53,7 @@ export function spread(scores: number[]): Spread {
   return { sd, range: Math.max(...scores) - Math.min(...scores), count: scores.length };
 }
 
-/** Spread of preset scores (legal presets only) and of unit/hero scores in random armies (enough games only). */
+/** Spread of preset scores (presets that played) and of unit/hero scores in random armies (enough games only). */
 export function spreads(s: Summary, minGames: number): { presets: Spread; entries: Spread } {
   const presets = s.presetNames.filter((n) => s.presets[n]?.games).map((n) => score(s.presets[n]));
   const entries = Object.values(s.entries)
@@ -42,9 +62,129 @@ export function spreads(s: Summary, minGames: number): { presets: Spread; entrie
   return { presets: spread(presets), entries: spread(entries) };
 }
 
-/** Score of a unit/hero/squad in random armies, or of a preset (null if not played). */
-const entryTally = (s: Summary, id: string): Tally | null => s.entries[id] ?? null;
-const presetTally = (s: Summary, name: string): Tally | null => (s.presets[name]?.games ? s.presets[name] : null);
+/** Standard errors of the spread metrics, by resampling games with replacement. */
+export function bootstrapSpreads(
+  records: GameRecord[],
+  config: GameConfig,
+  presetNames: string[],
+  minGames: number,
+  iterations = 200,
+  seed = 1,
+): SpreadNoise {
+  const rng = new Rng(seed);
+  const samples: number[][] = [[], [], [], []];
+  for (let i = 0; i < iterations; i++) {
+    const resampled = records.map(() => records[Math.floor(rng.next() * records.length)]);
+    const sp = spreads(summarize(resampled, config, presetNames), minGames);
+    [sp.presets.sd, sp.presets.range, sp.entries.sd, sp.entries.range].forEach((v, k) => samples[k].push(v));
+  }
+  const sd = (xs: number[]) => spread(xs).sd;
+  return { presetsSd: sd(samples[0]), presetsRange: sd(samples[1]), entriesSd: sd(samples[2]), entriesRange: sd(samples[3]) };
+}
+
+// ---------------------------------------------------------------------------
+// Metrics: each is a value per variant plus its standard error (for the noise check)
+// ---------------------------------------------------------------------------
+
+export interface Metric {
+  label: string;
+  /** How to print it. */
+  format: 'pct' | 'num';
+  /** Per variant: value, standard error (null = not estimated), sample size, note. */
+  cells: { value: number | null; se: number | null; n: number; note?: string }[];
+}
+
+const propSe = (p: number, n: number) => (n ? Math.sqrt((p * (1 - p)) / n) : null);
+
+export interface MetricGroups {
+  flow: Metric[];
+  presets: Metric[];
+  units: Metric[];
+  spread: Metric[];
+}
+
+export function compareMetrics(results: VariantResult[], exp: Experiment, minGames: number): MetricGroups {
+  const s = results.map((r) => r.summary);
+  const rate = (label: string, f: (x: Summary) => { k: number; n: number }): Metric => ({
+    label,
+    format: 'pct',
+    cells: s.map((x) => {
+      const { k, n } = f(x);
+      const p = n ? k / n : 0;
+      return { value: n ? p : null, se: propSe(p, n), n };
+    }),
+  });
+
+  const flow: Metric[] = [
+    { label: 'Terrain pieces / map', format: 'num', cells: s.map((x) => ({ value: x.avgTerrainPieces, se: null, n: x.games })) },
+    { label: 'Terrain hexes / map', format: 'num', cells: s.map((x) => ({ value: x.avgTerrainHexes, se: null, n: x.games })) },
+    {
+      label: 'Avg game length (rounds)',
+      format: 'num',
+      cells: s.map((x) => {
+        const variance = Math.max(0, x.roundsSq / x.games - x.avgRounds ** 2);
+        return { value: x.avgRounds, se: Math.sqrt(variance / x.games), n: x.games };
+      }),
+    },
+    rate('Wipeout wins', (x) => ({ k: x.reasons.elimination ?? 0, n: x.games })),
+    rate('Points wins', (x) => ({ k: x.reasons.points ?? 0, n: x.games })),
+    rate('Draws', (x) => ({ k: (x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0), n: x.games })),
+    rate('First mover wins (decisive games)', (x) => ({ k: x.firstMover.wins, n: x.firstMover.wins + x.firstMover.losses })),
+  ];
+
+  const presetNames = [...new Set(results.flatMap((r) => r.summary.presetNames).concat(results.flatMap((r) => r.excluded.map((e) => e.split(':')[0]))))];
+  const presets: Metric[] = presetNames.map((name) => ({
+    label: name,
+    format: 'pct',
+    cells: results.map((r) => {
+      const t = r.summary.presets[name];
+      if (!t?.games) return { value: null, se: null, n: 0, note: r.excluded.some((e) => e.startsWith(`${name}:`)) ? 'not legal' : undefined };
+      const p = score(t);
+      return { value: p, se: propSe(p, t.games), n: t.games };
+    }),
+  }));
+
+  const config = results[0].config;
+  const units: Metric[] = exp.focusUnits.map((id) => ({
+    label: entryName(config, id),
+    format: 'pct',
+    cells: results.map((r) => {
+      const t = r.summary.entries[id];
+      if (!t?.games) return { value: null, se: null, n: 0 };
+      const p = score(t);
+      return { value: p, se: propSe(p, t.games), n: t.games };
+    }),
+  }));
+
+  const sp = results.map((r) => spreads(r.summary, minGames));
+  const noise = (r: VariantResult, k: keyof SpreadNoise) => r.spreadNoise?.[k] ?? null;
+  const spreadMetric = (label: string, f: (x: { presets: Spread; entries: Spread }) => Spread, part: 'sd' | 'range', k: keyof SpreadNoise): Metric => ({
+    label,
+    format: 'pct',
+    cells: results.map((r, i) => ({ value: f(sp[i])[part], se: noise(r, k), n: f(sp[i]).count })),
+  });
+  const spread: Metric[] = [
+    spreadMetric('Preset spread (SD)', (x) => x.presets, 'sd', 'presetsSd'),
+    spreadMetric('Preset range (best − worst)', (x) => x.presets, 'range', 'presetsRange'),
+    spreadMetric(`Unit/hero spread (SD, ${minGames}+ games)`, (x) => x.entries, 'sd', 'entriesSd'),
+    spreadMetric('Unit/hero range (best − worst)', (x) => x.entries, 'range', 'entriesRange'),
+  ];
+  return { flow, presets, units, spread };
+}
+
+/** Change from the baseline and whether it's beyond 2 standard errors (null when it can't be judged). */
+export function change(metric: Metric, i: number): { delta: number; real: boolean | null } | null {
+  const b = metric.cells[0];
+  const c = metric.cells[i];
+  if (i === 0 || b.value === null || c.value === null) return null;
+  const delta = c.value - b.value;
+  const se = b.se !== null && c.se !== null ? Math.sqrt(b.se ** 2 + c.se ** 2) : null;
+  return { delta, real: se === null ? null : Math.abs(delta) > 2 * se };
+}
+
+// ---------------------------------------------------------------------------
+// Output
+// ---------------------------------------------------------------------------
 
 export interface CompareMeta {
   seed: number;
@@ -54,98 +194,59 @@ export interface CompareMeta {
   workers: number;
 }
 
-const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
-const pp = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(100 * x).toFixed(1)}`;
+const fmt = (m: Metric, v: number) => (m.format === 'pct' ? `${(100 * v).toFixed(1)}%` : v.toFixed(2));
+const fmtDelta = (m: Metric, d: number) => {
+  const sign = d >= 0 ? '+' : '−';
+  return m.format === 'pct' ? `${sign}${Math.abs(100 * d).toFixed(1)}` : `${sign}${Math.abs(d).toFixed(2)}`;
+};
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-/** Rows of the main comparison table: one per metric, one column per variant. */
-export function compareRows(results: VariantResult[], exp: Experiment, minGames: number) {
-  type Cell = { value: number | null; games: number; note?: string };
-  const rows: { label: string; kind: 'score' | 'spread'; cells: Cell[] }[] = [];
-  for (const id of exp.focusUnits) {
-    const name = entryName(results[0].config, id);
-    const isHero = !!(results[0].config.units[id]?.hero ?? results[0].config.squads[id]?.hero);
-    rows.push({
-      label: `${name} (${isHero ? 'hero' : 'unit'} in random armies)`,
-      kind: 'score',
-      cells: results.map((r) => {
-        const t = entryTally(r.summary, id);
-        return { value: t ? score(t) : null, games: t?.games ?? 0 };
-      }),
-    });
-  }
-  for (const name of exp.focusPresets) {
-    rows.push({
-      label: `${name} (preset)`,
-      kind: 'score',
-      cells: results.map((r) => {
-        const t = presetTally(r.summary, name);
-        const why = r.excluded.find((e) => e.startsWith(`${name}:`));
-        return { value: t ? score(t) : null, games: t?.games ?? 0, note: why ? 'not legal' : undefined };
-      }),
-    });
-  }
-  const sp = results.map((r) => spreads(r.summary, minGames));
-  rows.push({ label: 'Preset spread (SD of preset scores)', kind: 'spread', cells: sp.map((s) => ({ value: s.presets.sd, games: s.presets.count })) });
-  rows.push({ label: 'Preset range (best − worst)', kind: 'spread', cells: sp.map((s) => ({ value: s.presets.range, games: s.presets.count })) });
-  rows.push({ label: `Unit/hero spread (SD, ${minGames}+ games)`, kind: 'spread', cells: sp.map((s) => ({ value: s.entries.sd, games: s.entries.count })) });
-  rows.push({ label: 'Unit/hero range (best − worst)', kind: 'spread', cells: sp.map((s) => ({ value: s.entries.range, games: s.entries.count })) });
-  return rows;
-}
-
 export function compareCsv(results: VariantResult[], exp: Experiment, minGames: number): string {
-  const rows = compareRows(results, exp, minGames);
-  const header = ['metric', ...results.flatMap((r) => [`${r.label}`, `${r.label} games`])];
-  const lines = [header, ...rows.map((row) => [row.label, ...row.cells.flatMap((c) => [c.value === null ? (c.note ?? '') : c.value.toFixed(4), String(c.games)])])];
-  return lines.map((l) => l.map((v) => (/[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(',')).join('\n') + '\n';
+  const g = compareMetrics(results, exp, minGames);
+  const metrics = [...g.flow, ...g.presets.map((m) => ({ ...m, label: `Preset: ${m.label}` })), ...g.units.map((m) => ({ ...m, label: `Random armies: ${m.label}` })), ...g.spread];
+  const header = ['variant', ...metrics.flatMap((m) => [m.label, `${m.label} (change)`, `${m.label} (beyond noise)`])];
+  const rows = results.map((r, i) => [
+    r.label,
+    ...metrics.flatMap((m) => {
+      const c = m.cells[i];
+      const ch = change(m, i);
+      return [c.value === null ? (c.note ?? '') : c.value.toFixed(4), ch ? ch.delta.toFixed(4) : '', ch?.real === null || !ch ? '' : ch.real ? 'yes' : 'no'];
+    }),
+  ]);
+  return [header, ...rows].map((l) => l.map((v) => (/[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(',')).join('\n') + '\n';
 }
 
-function cellBg(delta: number | null, kind: 'score' | 'spread'): string {
-  if (delta === null || Math.abs(delta) < 0.005) return '';
-  // For spreads, smaller is better (more balanced); for scores just show direction.
-  const good = kind === 'spread' ? delta < 0 : null;
-  const hue = good === null ? 210 : good ? 140 : 0;
-  const alpha = Math.min(0.5, Math.abs(delta) * (kind === 'spread' ? 6 : 2.5)).toFixed(2);
-  return ` style="background:hsla(${hue},70%,45%,${alpha})"`;
+function table(title: string, metrics: Metric[], results: VariantResult[]): string {
+  const head = `<tr><th>Variant</th>${metrics.map((m) => `<th>${esc(m.label)}</th>`).join('')}</tr>`;
+  const rows = results
+    .map((r, i) => {
+      const cells = metrics
+        .map((m) => {
+          const c = m.cells[i];
+          if (c.value === null) return `<td class="na">${c.note ?? '–'}</td>`;
+          const ch = change(m, i);
+          let d = '';
+          if (ch) {
+            const cls = ch.real === null ? 'd' : ch.real ? `d real ${ch.delta > 0 ? 'up' : 'down'}` : 'd noise';
+            const tag = ch.real === false ? ' ~' : '';
+            d = `<span class="${cls}">${fmtDelta(m, ch.delta)}${tag}</span>`;
+          }
+          const n = m.format === 'pct' && c.se !== null && i === 0 ? `<span class="n">±${(200 * c.se).toFixed(1)}</span>` : '';
+          return `<td><b>${fmt(m, c.value)}</b>${d}${n}</td>`;
+        })
+        .join('');
+      return `<tr${i === 0 ? ' class="base"' : ''}><th>${esc(r.label)}</th>${cells}</tr>`;
+    })
+    .join('');
+  return `<h2>${esc(title)}</h2><section><table>${head}${rows}</table></section>`;
 }
 
 export function compareHtml(results: VariantResult[], exp: Experiment, meta: CompareMeta): string {
-  const base = results[0];
-  const rows = compareRows(results, exp, meta.minGames);
-  const head = `<tr><th>Metric</th>${results.map((r) => `<th>${esc(r.label)}</th>`).join('')}</tr>`;
-  const body = rows
-    .map((row) => {
-      const cells = row.cells
-        .map((c, i) => {
-          if (c.value === null) return `<td class="na">${c.note ?? '–'}</td>`;
-          const b = row.cells[0].value;
-          const delta = i > 0 && b !== null ? c.value - b : null;
-          const d = delta === null ? '' : `<span class="d">${pp(delta)}</span>`;
-          const n = row.kind === 'score' ? `<span class="n">${c.games} games</span>` : '';
-          return `<td${cellBg(delta, row.kind)}><b>${pct(c.value)}</b>${d}${n}</td>`;
-        })
-        .join('');
-      return `<tr><th>${esc(row.label)}</th>${cells}</tr>`;
-    })
+  const g = compareMetrics(results, exp, meta.minGames);
+  const maps = results
+    .filter((r) => r.sampleMap)
+    .map((r) => `<figure><figcaption>${esc(r.label)}</figcaption>${r.sampleMap!.svg}</figure>`)
     .join('');
-
-  // Every preset's score per variant.
-  const presetNames = base.summary.presetNames;
-  const presetTable = `<tr><th>Preset</th>${results.map((r) => `<th>${esc(r.label)}</th>`).join('')}</tr>${presetNames
-    .map(
-      (n) =>
-        `<tr><th>${esc(n)}</th>${results
-          .map((r, i) => {
-            const t = presetTally(r.summary, n);
-            if (!t) return `<td class="na">${r.excluded.some((e) => e.startsWith(`${n}:`)) ? 'not legal' : '–'}</td>`;
-            const b = presetTally(base.summary, n);
-            const delta = i > 0 && b ? score(t) - score(b) : null;
-            return `<td${cellBg(delta, 'score')}>${pct(score(t))}${delta === null ? '' : `<span class="d">${pp(delta)}</span>`}</td>`;
-          })
-          .join('')}</tr>`,
-    )
-    .join('')}`;
-
   const variantList = results
     .map(
       (r) =>
@@ -160,30 +261,35 @@ export function compareHtml(results: VariantResult[], exp: Experiment, meta: Com
 <style>
   :root { --bg:#f7f6f2; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e1da; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
-  main { max-width:1150px; margin:0 auto; padding:24px 16px 64px; }
+  main { max-width:1250px; margin:0 auto; padding:24px 16px 64px; }
   h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:18px; margin:28px 0 8px; }
   .muted { color:var(--muted); } .note { background:#fff7e0; border:1px solid #f0d78a; padding:10px 12px; border-radius:8px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; overflow-x:auto; }
   table { border-collapse:collapse; font-variant-numeric:tabular-nums; }
-  th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; vertical-align:top; }
-  th:first-child { text-align:left; } td.na { color:#999; text-align:center; }
-  td b { display:block; font-size:15px; } .d { display:block; font-size:12px; color:#333; } .n { display:block; font-size:11px; color:var(--muted); }
+  th, td { padding:6px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; vertical-align:top; }
+  th:first-child { text-align:left; } td.na { color:#999; text-align:center; } tr.base td, tr.base th { background:#faf9f5; }
+  td b { display:block; font-size:15px; }
+  .d { display:block; font-size:12px; } .d.noise { color:#9aa0ac; } .d.real { font-weight:700; } .d.up { color:#167a3e; } .d.down { color:#b42318; }
+  .n { display:block; font-size:11px; color:var(--muted); }
+  .maps { display:flex; flex-wrap:wrap; gap:16px; } figure { margin:0; } figcaption { font-weight:700; margin-bottom:4px; }
+  figure svg { width:300px; height:auto; }
   .warn { color:#b42318; } li { margin:4px 0; }
 </style></head><body><main>
 <h1>${esc(exp.title)}: variant comparison</h1>
 <div class="muted">Seed ${meta.seed} for every variant · ${meta.perMatchup} games per preset matchup + ${meta.randomGames} random-vs-random each ·
 ${meta.workers} workers</div>
-<p class="note">Same seed and setup for every variant: maps, deployment shapes and dice line up, so differences come from the
-stat change (random armies are rebuilt per variant, so a cost change also changes which armies get built). Scores count a
-draw as half a win; the small numbers under each score are the change from the baseline in percentage points. Spread rows:
-green = more balanced than the baseline. The bot is simple, so treat this as a signal, not a verdict.
-With ~${meta.perMatchup * 8} games per preset, differences under about 5 points are within noise.</p>
+<p class="note">Every variant uses the same seed and setup, so deployment shapes, coin flips and armies line up; differences come from
+the variant (its maps and dice still differ once the terrain changes). Scores count a draw as half a win. Under each value is the change
+from the baseline: <b class="up">bold green</b> / <b class="down">bold red</b> = beyond 2 standard errors (probably real),
+<span style="color:#9aa0ac">grey with ~</span> = within noise. The baseline row shows each score's 95% margin (±). The bot is simple,
+so treat this as a signal, not a verdict.</p>
 
-<h2>Comparison</h2>
-<section><table>${head}${body}</table></section>
-
-<h2>Every preset</h2>
-<section><table>${presetTable}</table></section>
+${maps ? `<h2>Sample maps (same seed)</h2><section><div class="maps">${maps}</div><p class="muted">Cream = open, gray = height 1,
+dark = height 2, gold = control point, blue/red = deployment zones.</p></section>` : ''}
+${table('Game flow', g.flow, results)}
+${table('Preset armies (score)', g.presets, results)}
+${g.units.length ? table('Random armies: score when the army includes…', g.units, results) : ''}
+${table('Overall spread', g.spread, results)}
 
 <h2>Variants</h2>
 <section><ul>${variantList}</ul></section>

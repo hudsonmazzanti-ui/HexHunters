@@ -27,8 +27,12 @@ export interface Variant {
   units?: Record<string, { [K in keyof UnitDef]?: UnitDef[K] | null }>;
   /** Special-rule numbers to override (SpecialRules). */
   specials?: Partial<SpecialRules>;
-  /** Other top-level settings (e.g. armyPointLimit, pointsToWin). */
-  settings?: Partial<Pick<GameConfig, 'armyPointLimit' | 'pointsToWin' | 'maxHeroesPerArmy' | 'boardRadius'>>;
+  /**
+   * Rule and map settings: anything in GameConfig except the unit tables, e.g.
+   * terrainPairs (terrain amount, may be fractional), terrainTries, pointsToWin,
+   * armyPointLimit, deployShapes, boardRadius.
+   */
+  settings?: Partial<Omit<GameConfig, 'units' | 'squads' | 'specials'>>;
 }
 
 export const VARIANTS: Record<string, Variant> = {
@@ -56,6 +60,18 @@ export const VARIANTS: Record<string, Variant> = {
     description: 'Monster costs 6 points instead of 5; stats unchanged.',
     units: { monster: { cost: 6 } },
   },
+
+  // ---- Terrain experiment: 3 mirrored pairs (6 pieces) today ----
+  'terrain-150': {
+    label: 'Terrain +50%',
+    description: '4.5 terrain pairs per map on average (about 9 pieces instead of 6), 400 placement tries.',
+    settings: { terrainPairs: 4.5, terrainTries: 400 },
+  },
+  'terrain-200': {
+    label: 'Terrain +100%',
+    description: '6 terrain pairs per map (about 11.7 pieces placed instead of 6), 400 placement tries.',
+    settings: { terrainPairs: 6, terrainTries: 400 },
+  },
 };
 
 /**
@@ -66,6 +82,7 @@ export interface Experiment {
   title: string;
   variants: string[];
   focusUnits: string[];
+  /** Presets to call out (every preset is always shown). */
   focusPresets: string[];
 }
 
@@ -75,6 +92,12 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     variants: ['baseline', 'monster-hp14', 'monster-no-hit', 'monster-hp14-no-hit', 'monster-cost6'],
     focusUnits: ['monster', 'warlord'],
     focusPresets: ['Big Guys', 'Mercenary Mix'],
+  },
+  terrain: {
+    title: 'Terrain amount',
+    variants: ['baseline', 'terrain-150', 'terrain-200'],
+    focusUnits: ['monster', 'heavy', 'hillgiant', 'werewolf', 'dragon', 'behemoth', 'sniper', 'artillery', 'infantry', 'dualgunner', 'assassin'],
+    focusPresets: [],
   },
 };
 
@@ -92,6 +115,9 @@ export function applyVariant(base: GameConfig, variant: Variant): GameConfig {
   for (const [key, value] of Object.entries(variant.specials ?? {})) {
     if (!(key in config.specials)) throw new Error(`Variant "${variant.label}": unknown special rule "${key}"`);
     (config.specials as unknown as Record<string, unknown>)[key] = value;
+  }
+  for (const key of Object.keys(variant.settings ?? {})) {
+    if (!(key in config) && key !== 'terrainTries') throw new Error(`Variant "${variant.label}": unknown setting "${key}"`);
   }
   Object.assign(config, variant.settings ?? {});
   return config;
