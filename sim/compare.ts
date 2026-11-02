@@ -100,6 +100,7 @@ export interface MetricGroups {
   flow: Metric[];
   presets: Metric[];
   units: Metric[];
+  heroes: Metric[];
   spread: Metric[];
 }
 
@@ -145,7 +146,8 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
   }));
 
   const config = results[0].config;
-  const units: Metric[] = exp.focusUnits.map((id) => ({
+  const isHero = (id: string) => !!(config.units[id]?.hero ?? config.squads[id]?.hero);
+  const focus = (ids: string[]): Metric[] => ids.map((id) => ({
     label: entryName(config, id),
     format: 'pct',
     cells: results.map((r) => {
@@ -169,7 +171,7 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
     spreadMetric(`Unit/hero spread (SD, ${minGames}+ games)`, (x) => x.entries, 'sd', 'entriesSd'),
     spreadMetric('Unit/hero range (best − worst)', (x) => x.entries, 'range', 'entriesRange'),
   ];
-  return { flow, presets, units, spread };
+  return { flow, presets, units: focus(exp.focusUnits.filter((id) => !isHero(id))), heroes: focus(exp.focusUnits.filter(isHero)), spread };
 }
 
 /** Change from the baseline and whether it's beyond 2 standard errors (null when it can't be judged). */
@@ -203,7 +205,13 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 export function compareCsv(results: VariantResult[], exp: Experiment, minGames: number): string {
   const g = compareMetrics(results, exp, minGames);
-  const metrics = [...g.flow, ...g.presets.map((m) => ({ ...m, label: `Preset: ${m.label}` })), ...g.units.map((m) => ({ ...m, label: `Random armies: ${m.label}` })), ...g.spread];
+  const metrics = [
+    ...g.flow,
+    ...g.presets.map((m) => ({ ...m, label: `Preset: ${m.label}` })),
+    ...g.units.map((m) => ({ ...m, label: `Random armies: ${m.label}` })),
+    ...g.heroes.map((m) => ({ ...m, label: `Random armies (hero): ${m.label}` })),
+    ...g.spread,
+  ];
   const header = ['variant', ...metrics.flatMap((m) => [m.label, `${m.label} (change)`, `${m.label} (beyond noise)`])];
   const rows = results.map((r, i) => [
     r.label,
@@ -288,7 +296,8 @@ ${maps ? `<h2>Sample maps (same seed)</h2><section><div class="maps">${maps}</di
 dark = height 2, gold = control point, blue/red = deployment zones.</p></section>` : ''}
 ${table('Game flow', g.flow, results)}
 ${table('Preset armies (score)', g.presets, results)}
-${g.units.length ? table('Random armies: score when the army includes…', g.units, results) : ''}
+${g.units.length ? table('Random armies: score when the army includes the unit…', g.units, results) : ''}
+${g.heroes.length ? table('Random armies: score when the army includes the hero…', g.heroes, results) : ''}
 ${table('Overall spread', g.spread, results)}
 
 <h2>Variants</h2>

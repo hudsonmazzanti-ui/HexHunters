@@ -150,3 +150,43 @@ describe('terrain variants', () => {
     expect(ascii).toMatch(/terrain pieces: \d+/);
   });
 });
+
+describe('pacing variants', () => {
+  it('Slow-Large: every large model loses 1 speed (minimum 1); others and the real data are untouched', () => {
+    const c = variantConfig('slow-large');
+    for (const [id, def] of Object.entries(UNITS)) {
+      const expected = def.size === 3 ? Math.max(1, def.speed - 1) : def.speed;
+      expect([id, c.units[id].speed]).toEqual([id, expected]);
+    }
+    expect(c.units.monster.speed).toBe(2);
+    expect(c.units.dragon.speed).toBe(3);
+    expect(c.units.behemoth.speed).toBe(1);
+    expect(c.units.werewolfbeast.speed).toBe(3);
+    expect(c.units.infantry.speed).toBe(UNITS.infantry.speed);
+    expect(UNITS.monster.speed).toBe(3); // real data unchanged
+    expect(c.specials.warlordSpeedBonus).toBe(DEFAULT_CONFIG.specials.warlordSpeedBonus);
+  });
+
+  it('Tall Walls: about 60% of pieces are height 2 (default about 50%), same amount of terrain', () => {
+    const share = (id: string) => {
+      const c = variantConfig(id);
+      let tall = 0;
+      let all = 0;
+      for (let s = 1; s <= 300; s++) for (const t of generateMap(c, s * 13).terrain) (all++, t.height === 2 && tall++);
+      return { share: tall / all, perMap: all / 300 };
+    };
+    const base = share('baseline');
+    const tall = share('slow-large-tall');
+    expect(base.share).toBeGreaterThan(0.44);
+    expect(base.share).toBeLessThan(0.56);
+    expect(tall.share).toBeGreaterThan(0.55);
+    expect(tall.share).toBeLessThan(0.66);
+    expect(tall.perMap).toBe(base.perMap);
+    expect(variantConfig('slow-large-tall').units.monster.speed).toBe(2);
+  });
+
+  it('the pacing experiment covers every hero', () => {
+    const heroes = [...Object.entries(UNITS).filter(([, d]) => d.hero && !d.squadOnly).map(([id]) => id), 'twins'];
+    for (const h of heroes) expect(EXPERIMENTS.pacing.focusUnits).toContain(h);
+  });
+});

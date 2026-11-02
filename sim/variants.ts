@@ -33,7 +33,14 @@ export interface Variant {
    * armyPointLimit, deployShapes, boardRadius.
    */
   settings?: Partial<Omit<GameConfig, 'units' | 'squads' | 'specials'>>;
+  /** Computed changes applied last, for rules like "every large model gets -1 speed". Mutates the copy. */
+  modify?: (config: GameConfig) => void;
 }
+
+/** Every large (size 3) model, including alternate forms and squad members, loses 1 speed (minimum 1). */
+const slowLarge = (config: GameConfig) => {
+  for (const def of Object.values(config.units)) if (def.size === 3) def.speed = Math.max(1, def.speed - 1);
+};
 
 export const VARIANTS: Record<string, Variant> = {
   baseline: { label: 'Baseline', description: 'The current game data, unchanged.' },
@@ -72,7 +79,30 @@ export const VARIANTS: Record<string, Variant> = {
     description: '6 terrain pairs per map (about 11.7 pieces placed instead of 6), 400 placement tries.',
     settings: { terrainPairs: 6, terrainTries: 400 },
   },
+
+  // ---- Pacing experiment ----
+  'slow-large': {
+    label: 'Slow-Large',
+    description: 'Every large (size 3) model gets -1 speed (minimum 1); the Warlord\'s +1 still applies on top.',
+    modify: slowLarge,
+  },
+  'slow-large-tall': {
+    label: 'Slow-Large + Tall Walls',
+    description: 'Slow-Large, plus 60% of terrain pieces are height 2 (today: 50%), same terrain amount.',
+    settings: { terrainTallShare: 0.6 },
+    modify: slowLarge,
+  },
 };
+
+/** Every hero entry (hero units and hero squads such as the Twins). */
+const allHeroes = (): string[] => [
+  ...Object.entries(DEFAULT_CONFIG.units)
+    .filter(([, d]) => d.hero && !d.squadOnly)
+    .map(([id]) => id),
+  ...Object.entries(DEFAULT_CONFIG.squads)
+    .filter(([, s]) => s.hero)
+    .map(([id]) => id),
+];
 
 /**
  * Named groups of variants to compare side by side, and what to highlight in the
@@ -99,6 +129,15 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     focusUnits: ['monster', 'heavy', 'hillgiant', 'werewolf', 'dragon', 'behemoth', 'sniper', 'artillery', 'infantry', 'dualgunner', 'assassin'],
     focusPresets: [],
   },
+  pacing: {
+    title: 'Pacing: slower large models and taller walls',
+    variants: ['baseline', 'slow-large', 'slow-large-tall'],
+    focusUnits: [
+      'monster', 'heavy', 'hillgiant', 'werewolf', 'dragon', 'grappler', 'sniper', 'artillery', 'infantry', 'dualgunner', 'assassin',
+      ...allHeroes(),
+    ],
+    focusPresets: [],
+  },
 };
 
 /** A copy of `base` with the variant's overrides applied. Never modifies `base`. */
@@ -117,9 +156,10 @@ export function applyVariant(base: GameConfig, variant: Variant): GameConfig {
     (config.specials as unknown as Record<string, unknown>)[key] = value;
   }
   for (const key of Object.keys(variant.settings ?? {})) {
-    if (!(key in config) && key !== 'terrainTries') throw new Error(`Variant "${variant.label}": unknown setting "${key}"`);
+    if (!(key in config) && key !== 'terrainTries' && key !== 'terrainTallShare') throw new Error(`Variant "${variant.label}": unknown setting "${key}"`);
   }
   Object.assign(config, variant.settings ?? {});
+  variant.modify?.(config);
   return config;
 }
 

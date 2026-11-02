@@ -56,7 +56,9 @@ function terrainAllowed(h: Hex, cfg: GameConfig, nearZones: Set<string>): boolea
 function randomPiece(rng: Rng, cfg: GameConfig, candidates: Hex[]): Omit<Terrain, 'id'> {
   const length = rng.int(cfg.terrainMinLength, cfg.terrainMaxLength);
   const kind = length >= 3 && rng.next() < 0.5 ? 'curve' : 'wall';
-  const height = rng.int(1, 2) as TerrainHeight;
+  // Height 2 with probability terrainTallShare (default: 50/50, drawn exactly as before).
+  const tall = cfg.terrainTallShare;
+  const height = (tall === undefined ? rng.int(1, 2) : rng.next() < tall ? 2 : 1) as TerrainHeight;
   const turn = rng.next() < 0.5 ? 1 : -1;
   let dir = rng.int(0, 5);
   let cur = rng.pick(candidates);

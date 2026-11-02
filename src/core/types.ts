@@ -107,6 +107,8 @@ export interface GameConfig {
   terrainPairs: number;
   /** Random attempts to place each terrain pair before giving up on it (default 50). */
   terrainTries?: number;
+  /** Chance that a terrain piece is height 2 rather than 1 (default 0.5). */
+  terrainTallShare?: number;
   terrainMinLength: number;
   terrainMaxLength: number;
   /** Rows at each player's edge where they may deploy (the Standard deployment shape). */
