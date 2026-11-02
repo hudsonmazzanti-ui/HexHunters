@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { validateArmy } from '../src/core/army';
 import { Rng } from '../src/core/rng';
 import { DEFAULT_CONFIG } from '../src/data/config';
-import { PRESETS, checkPresets, randomArmy } from '../sim/armies';
+import { PRESETS, checkPresets, meetsSynergy, randomArmy } from '../sim/armies';
+import { HERO_SYNERGIES } from '../sim/synergies';
+import { armyCost } from '../src/core/army';
+import { specialUsesFor } from '../src/core/army';
 import { findFlags, gamesCsv, reportHtml, summarize, unitsCsv } from '../sim/report';
 import { type GameJob, runGame, runJobs } from '../sim/runGame';
 import { buildJobs, splitGames } from '../sim/schedule';
@@ -33,6 +36,53 @@ describe('armies', () => {
     expect(withHero).toBeGreaterThan(90);
     expect(withHero).toBeLessThan(210);
   });
+});
+
+describe('hero synergies in random armies', () => {
+  it('the synergy config names real heroes and units', () => {
+    for (const [hero, rule] of Object.entries(HERO_SYNERGIES)) {
+      expect(config.units[hero]?.hero).toBeTruthy();
+      for (const u of rule.units ?? []) expect(config.units[u]).toBeDefined();
+    }
+    expect(Object.keys(HERO_SYNERGIES).sort()).toEqual(
+      ['marshal', 'siegemaster', 'necromancer', 'masterninja', 'warden', 'pyromancer', 'warlord', 'mercenary'].sort(),
+    );
+  });
+
+  it('a hero with a synergy always comes with 2+ of its units; the Mercenary leaves 1-3 points', () => {
+    const rng = new Rng(17);
+    const seen = new Set<string>();
+    for (let i = 0; i < 700; i++) {
+      const army = randomArmy(config, rng).units;
+      expect(validateArmy(config, army)).toBeNull();
+      expect(armyCost(config, army)).toBeLessThanOrEqual(config.armyPointLimit);
+      for (const [hero, rule] of Object.entries(HERO_SYNERGIES)) {
+        if (!army.includes(hero)) continue;
+        seen.add(hero);
+        expect(meetsSynergy(config, army, rule)).toBe(true);
+        if (rule.units) expect(army.filter((u) => rule.units!.includes(u)).length).toBeGreaterThanOrEqual(2);
+        if (hero === 'mercenary') {
+          const unspent = config.armyPointLimit - armyCost(config, army);
+          expect(unspent).toBeGreaterThanOrEqual(1);
+          expect(unspent).toBeLessThanOrEqual(3);
+          expect(specialUsesFor(config, army, 'mercenary')).toBe(unspent); // it has Premium Shots
+        }
+      }
+      for (const free of ['standardbearer', 'gambler', 'twins', 'behemoth']) if (army.includes(free)) seen.add(free);
+    }
+    // Every hero shows up, with and without rules; the remaining points are still random.
+    expect(seen.size).toBe(12);
+  }, 60_000);
+
+  it('heroes without synergies stay unrestricted (no extra units forced in)', () => {
+    const rng = new Rng(3);
+    const sizes = new Set<number>();
+    for (let i = 0; i < 700; i++) {
+      const army = randomArmy(config, rng).units;
+      if (army.includes('gambler')) sizes.add(army.length);
+    }
+    expect([...sizes].some((n) => n <= 2)).toBe(true);
+  }, 60_000);
 });
 
 describe('simulator games', () => {
