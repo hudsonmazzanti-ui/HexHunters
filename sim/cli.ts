@@ -19,7 +19,11 @@
  * Balance variants (temporary stat overrides, see sim/variants.ts; the real data is untouched):
  *   --variant ID       run one variant instead of the current data
  *   --variants A,B,C   run several with the same seed and write a comparison (out/compare.html)
- *   --experiment NAME  run a named group from EXPERIMENTS (e.g. "monster")
+ *   --experiment NAME  run a named group from EXPERIMENTS (e.g. "monster", "missions")
+ *
+ * Missions: each game's mission is picked at random (King of the Hill or Capture the Flag,
+ * 50/50) and the report breaks results down by mission. To force one:
+ *   --mission koth|ctf  same as --variant koth-only / ctf-only
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -142,6 +146,11 @@ async function runVariant(id: string, o: RunSettings, out: string): Promise<Vari
     `  done in ${seconds.toFixed(1)} s · avg ${summary.avgRounds.toFixed(1)} rounds · terrain ${summary.avgTerrainPieces.toFixed(1)} pieces / ` +
       `${summary.avgTerrainHexes.toFixed(1)} hexes · illegal bot moves: ${summary.illegal}`,
   );
+  for (const [m, x] of Object.entries(summary.byMission)) {
+    const share = (k: string) => `${((100 * (x.reasons[k] ?? 0)) / x.games).toFixed(0)}%`;
+    const caps = m === 'ctf' ? ` · ${(x.flag.captures / x.games).toFixed(2)} captures/game` : '';
+    console.log(`  ${m}: ${x.games} games · ${x.avgRounds.toFixed(1)} rounds · points ${share('points')} · wipeouts ${share('elimination')}${caps}`);
+  }
   return { id, label: variant.label, description: variant.description, config, summary, excluded, seconds, spreadNoise, sampleMap };
 }
 
@@ -165,6 +174,8 @@ async function main(): Promise<void> {
     experiment = { title: 'Balance variants', variants: ids, focusUnits: [], focusPresets: [] };
   } else if (a.variant) {
     ids = [a.variant];
+  } else if (a.mission) {
+    ids = [`${a.mission}-only`];
   }
   for (const id of ids) variantConfig(id); // fail fast on an unknown id
 
@@ -180,7 +191,7 @@ async function main(): Promise<void> {
     };
     const r = runGame(job, { keepLog: true, config: variantConfig(ids[0]) });
     console.log(`Seed ${seed}${ids[0] !== 'baseline' ? ` · variant ${ids[0]}` : ''}: ${job.a.name} [${job.a.units.join(' ')}] (P${job.seatOfA + 1}) vs ${job.b.name} [${job.b.units.join(' ')}]`);
-    console.log(`Shape ${r.shape} · first mover ${r.firstMover}`);
+    console.log(`Mission ${r.mission} · shape ${r.shape} · first mover ${r.firstMover}`);
     r.log!.forEach((act, i) => console.log(`${String(i + 1).padStart(4)}. ${JSON.stringify(act)}`));
     console.log(`Result: ${r.winner === 'draw' ? 'draw' : `${r.winner === 'A' ? job.a.name : job.b.name} wins`} (${r.reason}) after ${r.rounds} rounds, ${r.scoreA}-${r.scoreB}`);
     return;

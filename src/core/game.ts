@@ -8,7 +8,9 @@ import { type Hex, hexEquals, neighbors } from './hex';
 import { entryModels, specialUsesFor, validateArmy, validateConfig } from './army';
 import { type AttackResult, dealDamage, previewAttack, resolveAttack } from './combat';
 import { raiseDead } from './necro';
-import { auraEffects, holdPoints } from './auras';
+import { auraEffects } from './auras';
+import { settleFlag } from './flag';
+import { MISSIONS, pickMission } from './missions';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
 import {
@@ -19,10 +21,10 @@ import {
   naturalDefense,
   movePath,
   other,
+  pickUpBlockedReason,
   unitAt,
   unitDef,
   unitSpeed,
-  unitsOnControlPoint,
 } from './queries';
 import { nextRandom } from './rng';
 import {
@@ -34,7 +36,7 @@ import {
   specialChoices,
   specialOf,
 } from './specials';
-import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
+import type { FlagDropReason, GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
 
 export type Action =
   | { type: 'chooseArmy'; units: string[] }
@@ -44,6 +46,8 @@ export type Action =
   | { type: 'undoMove'; unitId: string }
   | { type: 'attack'; unitId: string; targetId: string }
   | ({ type: 'special'; unitId: string } & SpecialChoice)
+  /** Capture the Flag: a model standing on the flag spends its action to pick it up. */
+  | { type: 'pickUp'; unitId: string }
   | { type: 'endTurn' };
 
 export type GameEvent =
@@ -72,6 +76,14 @@ export type GameEvent =
   | ({ type: 'overwatch' } & OverwatchShot)
   /** `points` is what the scorer got (Standard Bearer: 2), 0 on a tie. */
   | { type: 'roundScored'; round: number; counts: [number, number]; scorer: PlayerId | null; points: number }
+  /** Capture the Flag: a model picked up the flag. */
+  | { type: 'flagPickedUp'; unitId: string; hex: Hex }
+  /** Capture the Flag: the carrier dropped the flag on `hex` (`by` = the model whose action caused it). */
+  | { type: 'flagDropped'; unitId: string; hex: Hex; reason: FlagDropReason; by?: string }
+  /** Capture the Flag: a dropped flag buried by new terrain rolled to the nearest open hex. */
+  | { type: 'flagShifted'; from: Hex; to: Hex }
+  /** Capture the Flag: `player` scored `points` (scores after); the flag went back to the center. */
+  | { type: 'flagCaptured'; player: PlayerId; unitId: string; points: number; scores: [number, number] }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
@@ -94,10 +106,14 @@ export function newGame(config: GameConfig, seed: number): GameState {
   // Bad unit data (e.g. a range above the cap) fails loudly at the start of a game.
   const problems = validateConfig(config);
   if (problems.length) throw new Error(`Invalid config: ${problems.join('; ')}`);
-  return {
+  const mission = pickMission(config, seed);
+  const state: GameState = {
     config,
     seed,
     map: generateMap(config, seed),
+    mission,
+    flag: null,
+    flagChanges: [],
     units: [],
     phase: 'build',
     current: 0,
@@ -115,6 +131,8 @@ export function newGame(config: GameConfig, seed: number): GameState {
     // A separate random stream from the map so dice don't depend on map attempts.
     rngState: (seed ^ 0x5bd1e995) | 0,
   };
+  MISSIONS[mission].setup?.(state);
+  return state;
 }
 
 export class RuleError extends Error {}
@@ -264,12 +282,30 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       checkElimination(state, events);
       break;
     }
+    case 'pickUp': {
+      if (state.phase !== 'play') fail('Not in play');
+      const unit = ownUnit(action.unitId);
+      const reason = pickUpBlockedReason(state, unit);
+      if (reason) fail(reason);
+      // Uses the model's action like a special (no roll): movement ends, and with the
+      // Master Ninja it may still attack afterwards.
+      state.flag = { pos: null, carrierId: unit.id };
+      unit.specialUsed = true;
+      unit.acted = !hasDoubleAction(state, unit);
+      unit.gambling = false; // a Gambler's unrolled die is spent
+      unit.movesLeft = 0;
+      unit.overwatch = null;
+      events.push({ type: 'flagPickedUp', unitId: unit.id, hex: unit.pos! });
+      break;
+    }
     case 'endTurn': {
       if (state.phase !== 'play') fail('Not in play');
       endTurn(state, events);
       break;
     }
   }
+  settleFlag(state);
+  flushFlag(state, events);
   // Cracking Armor (Behemoth): one crack per action that damaged it, however many hits.
   for (const id of state.struck) {
     const unit = getUnit(state, id);
@@ -282,6 +318,15 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
   // Raise Dead (Necromancer) for every model that died during this action.
   for (const u of raiseDead(state)) events.push({ type: 'raised', unitId: u.id, at: u.pos! });
   return { state, events };
+}
+
+/** Turns flag drops recorded while rules resolved into events. */
+function flushFlag(state: GameState, events: GameEvent[]): void {
+  for (const c of state.flagChanges) {
+    if (c.kind === 'dropped') events.push({ type: 'flagDropped', unitId: c.unitId, hex: c.hex, reason: c.reason, ...(c.by ? { by: c.by } : {}) });
+    else events.push({ type: 'flagShifted', from: c.from, to: c.to });
+  }
+  state.flagChanges = [];
 }
 
 /** Gambler: rolls the model's die now: d12 + bonus (+ Prep/Marshal), capped. */
@@ -393,6 +438,7 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     const killed = dealDamage(state, unit, damage, { burn: true });
     events.push({ type: 'burn', unitId: unit.id, damage, killed });
   }
+  flushFlag(state, events);
   if (checkElimination(state, events)) return;
 
   // Werewolves transform for good at the start of their owner's Nth turn.
@@ -459,7 +505,13 @@ function endTurn(state: GameState, events: GameEvent[]): void {
 
   // The opponent's Sentinels on overwatch fire at enemies still in their area.
   for (const shot of resolveOverwatch(state, state.current)) events.push({ type: 'overwatch', ...shot });
+  flushFlag(state, events);
   if (checkElimination(state, events)) return;
+
+  // Mission scoring at the end of this player's turn (Capture the Flag: a capture).
+  const mission = MISSIONS[state.mission];
+  mission.endOfTurn?.(state, state.current, events);
+  if (checkPoints(state, events)) return;
 
   if (state.turnInRound === 0) {
     state.turnInRound = 1;
@@ -468,8 +520,8 @@ function endTurn(state: GameState, events: GameEvent[]): void {
     return;
   }
 
-  scoreRound(state, events);
-  if (state.phase === 'over') return;
+  mission.endOfRound?.(state, events);
+  if (checkPoints(state, events)) return;
   const previous = state.current;
   state.round += 1;
   state.turnInRound = 0;
@@ -477,13 +529,12 @@ function endTurn(state: GameState, events: GameEvent[]): void {
   startTurn(state, events, state.current === previous);
 }
 
-function scoreRound(state: GameState, events: GameEvent[]): void {
-  const counts: [number, number] = [unitsOnControlPoint(state, 0).length, unitsOnControlPoint(state, 1).length];
-  const scorer: PlayerId | null = counts[0] > counts[1] ? 0 : counts[1] > counts[0] ? 1 : null;
-  const points = scorer === null ? 0 : holdPoints(state, scorer);
-  if (scorer !== null) state.scores[scorer] += points;
-  events.push({ type: 'roundScored', round: state.round, counts, scorer, points });
-  if (scorer !== null && state.scores[scorer] >= state.config.pointsToWin) endGame(state, events, scorer, 'points');
+/** Ends the game if a side has reached the points to win. Returns true if it ended. */
+function checkPoints(state: GameState, events: GameEvent[]): boolean {
+  const winner = ([0, 1] as const).find((p) => state.scores[p] >= state.config.pointsToWin);
+  if (winner === undefined) return false;
+  endGame(state, events, winner, 'points');
+  return true;
 }
 
 function endGame(state: GameState, events: GameEvent[], winner: PlayerId | null, reason: WinReason): void {

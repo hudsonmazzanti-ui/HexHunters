@@ -35,6 +35,7 @@ import {
   needsLoading,
   onBoard,
   other,
+  pickUpBlockedReason,
   terrainHeight,
   turnsUntilTransform,
   unitAt,
@@ -63,6 +64,8 @@ import {
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
 import { heroName, speedName } from '../data/config';
 import { AURAS, aurasOn } from '../core/auras';
+import { flagCarrier, isCarrier } from '../core/flag';
+import { MISSIONS } from '../core/missions';
 import { BoardView, type BoardOverlay, HEX_SIZE, UNDO_MS } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
@@ -126,7 +129,7 @@ export class Controller {
   async start(seed: number): Promise<void> {
     this.state = newGame(this.config, seed);
     this.ui = this.freshUi();
-    const bounds = this.board.setMap(this.state.map);
+    const bounds = this.board.setMap(this.state.map, MISSIONS[this.state.mission].usesControlPoint);
     const svg = this.board.world.ownerSVGElement!;
     if (!this.camera) {
       this.camera = new Camera(svg, this.board.world, bounds, (p) => this.onTap(p));
@@ -185,6 +188,7 @@ export class Controller {
       switch (ev.type) {
         case 'armyChosen':
           if (ev.next === null) {
+            await this.revealMission();
             await this.revealDeployShape();
             await this.deployHandoff(this.state.current);
           }
@@ -291,6 +295,23 @@ export class Controller {
         case 'roundScored':
           // Shown on the next handoff screen.
           break;
+        case 'flagPickedUp':
+        case 'flagDropped':
+        case 'flagShifted':
+        case 'flagCaptured': {
+          this.render();
+          const at = ev.type === 'flagPickedUp' || ev.type === 'flagDropped' ? ev.hex : ev.type === 'flagShifted' ? ev.to : null;
+          if (ev.type === 'flagCaptured') {
+            const pos = getUnit(this.state, ev.unitId)?.pos;
+            if (pos) this.board.floatText(pos, `CAPTURE +${ev.points}`, COLORS.fxGold);
+            haptics.kill();
+          } else if (at) {
+            this.board.floatText(at, ev.type === 'flagPickedUp' ? 'FLAG!' : ev.type === 'flagDropped' ? 'DROPPED' : 'FLAG', COLORS.flag);
+          }
+          const line = flagText(before, this.state, ev);
+          this.ui.message = `${this.ui.message ?? ''} ${line}`.trim();
+          break;
+        }
         case 'turnStart':
           this.ui = this.freshUi();
           this.render();
@@ -396,6 +417,25 @@ export class Controller {
     }
   }
 
+  /** After both armies are built: this game's mission, with its one-line rule. */
+  private async revealMission(): Promise<void> {
+    const m = MISSIONS[this.state.mission];
+    await showOverlay({
+      title: `Mission: ${m.name}`,
+      lines: [m.summary(this.state.config), 'Tap the mission name at the top any time for the full rules.'],
+      art: zoneMap(this.state),
+      tapText: 'Tap to continue',
+    });
+  }
+
+  /** The mission's full rules (tap the mission chip in the top bar). */
+  private async showMissionRules(): Promise<void> {
+    if (this.busy) return;
+    const m = MISSIONS[this.state.mission];
+    await showOverlay({ title: m.name, lines: m.rules(this.state.config), tapText: 'Tap to close' });
+    this.render();
+  }
+
   /** After both armies are built: name this game's deployment shape and show both zones. */
   private async revealDeployShape(): Promise<void> {
     const shape = DEPLOY_SHAPES[this.state.map.deployShape];
@@ -430,6 +470,7 @@ export class Controller {
       if (e.type === 'transformed') lines.push(`${PLAYER_NAMES[player]}'s Werewolf transforms into a beast (+${e.healed} HP)!`);
       if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
       if (e.type === 'cracked') lines.push(crackText(this.state, e));
+      if (e.type === 'flagDropped' || e.type === 'flagShifted' || e.type === 'flagCaptured') lines.push(flagText(before, this.state, e));
     }
     if (before.phase === 'play' && before.current === player) {
       lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
@@ -666,7 +707,7 @@ export class Controller {
   // ---------- Rendering ----------
 
   private render(): void {
-    renderTopBar(this.state);
+    renderTopBar(this.state, () => void this.showMissionRules());
     this.board.render(this.state, this.boardOverlay());
     renderPanel(this.panelModel(), (id) => this.onChip(id));
   }
@@ -682,7 +723,13 @@ export class Controller {
       pendingTargetId: this.ui.pendingTargetId ?? this.ui.pendingChoice?.targetId ?? null,
       partnerId: this.selected()?.partnerId ?? null,
       watch: new Map(),
+      scoreZone: null,
     };
+    // Capture the Flag: while one of your models has the flag, your scoring zone is outlined.
+    const carrier = flagCarrier(s);
+    if (s.phase === 'play' && carrier?.owner === s.current) {
+      o.scoreZone = { player: s.current, hexes: new Set(s.map.deployZones[s.current].map(hexKey)) };
+    }
     // Overwatch areas are always shown, to both players.
     for (const u of s.units) for (const h of u.overwatch?.hexes ?? []) o.watch.set(hexKey(h), u.owner);
 
@@ -1147,6 +1194,15 @@ export class Controller {
         hints.push(`tap a red-ringed enemy to ${attackName(s, unit).toLowerCase()}`);
       }
     }
+    // Capture the Flag: standing on the flag, it can spend its action to pick it up.
+    if (s.flag && !pickUpBlockedReason(s, unit)) {
+      hints.unshift('standing on the flag: pick it up (uses its action)');
+      actions.push({ label: 'Pick up flag', className: 'primary', onClick: () => void this.dispatch({ type: 'pickUp', unitId: unit.id }) });
+    }
+    if (isCarrier(s, unit)) {
+      const slow = s.config.specials.flagCarrierSlow;
+      hints.push(`carrying the flag (move −${slow}): end your turn inside your zone to score`);
+    }
     // Heroes have no special: their die is only for attacking.
     if (canAct(s, unit) && sp) {
       const reason = specialBlockedReason(s, unit);
@@ -1211,8 +1267,13 @@ function overwatchText(state: GameState, ev: Extract<GameEvent, { type: 'overwat
 /** "normal", or "(slow +1)" when an aura adds movement. */
 function moveNote(state: GameState, unit: Unit): string {
   const base = unitDef(state, unit).speed;
-  const bonus = unitSpeed(state, unit) - base;
-  return bonus ? `(${speedName(base)} +${bonus})` : speedName(base);
+  // Capture the Flag: the carrier's slowdown, shown separately from aura bonuses.
+  const free = unitSpeed({ ...state, flag: null }, unit);
+  const flagCut = free - unitSpeed(state, unit);
+  const bonus = free - base;
+  const notes = [...(bonus ? [`+${bonus}`] : []), ...(flagCut ? [`flag −${flagCut}`] : [])];
+  if (!notes.length) return speedName(base);
+  return bonus ? `(${speedName(base)} ${notes.join(', ')})` : `(${speedName(base)}, ${notes.join(', ')})`;
 }
 
 /** "Infantry burns for 1." / "... destroyed!" / "... now crawling!" */
@@ -1232,6 +1293,39 @@ function crawlText(before: GameState, after: GameState): string {
   return names.length ? `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} now crawling!` : '';
 }
 
+/** "Player 1's Infantry picks up the flag." and the other flag log lines. */
+export function flagText(
+  before: GameState,
+  after: GameState,
+  ev: Extract<GameEvent, { type: 'flagPickedUp' | 'flagDropped' | 'flagShifted' | 'flagCaptured' }>,
+): string {
+  const name = (id: string) => {
+    const u = getUnit(after, id) ?? getUnit(before, id);
+    return u ? `${PLAYER_NAMES[u.owner]}'s ${unitDef(after, u).name}` : 'A model';
+  };
+  switch (ev.type) {
+    case 'flagPickedUp':
+      return `${name(ev.unitId)} picks up the flag!`;
+    case 'flagDropped': {
+      const by = ev.by && ev.by !== ev.unitId ? getUnit(after, ev.by) ?? getUnit(before, ev.by) : undefined;
+      const byName = by ? unitDef(after, by).name : '';
+      const why =
+        ev.reason === 'killed'
+          ? 'falls'
+          : ev.reason === 'hacked'
+            ? `is hacked${byName ? ` by the ${byName}` : ''}`
+            : by
+              ? `is moved by the ${byName}`
+              : 'moves without walking';
+      return `${name(ev.unitId)} ${why} and drops the flag.`;
+    }
+    case 'flagShifted':
+      return 'The flag rolls off the boulder to the nearest open hex.';
+    case 'flagCaptured':
+      return `${PLAYER_NAMES[ev.player]} captures the flag: +${ev.points} (${ev.scores[0]} – ${ev.scores[1]}). The flag returns to the center.`;
+  }
+}
+
 /** A small picture of the board for the deployment reveal: both zones, the control point and terrain. */
 function zoneMap(state: GameState): HTMLElement {
   const NS = 'http://www.w3.org/2000/svg';
@@ -1241,11 +1335,13 @@ function zoneMap(state: GameState): HTMLElement {
   svg.setAttribute('viewBox', `${-extent} ${-extent} ${extent * 2} ${extent * 2}`);
   svg.setAttribute('class', 'zone-map');
   const zone = (h: Hex, p: PlayerId) => state.map.deployZones[p].some((z) => hexEquals(z, h));
-  const cp = (h: Hex) => state.map.controlPoint.some((c) => hexEquals(c, h));
+  const mission = MISSIONS[state.mission];
+  const cp = (h: Hex) => mission.usesControlPoint && state.map.controlPoint.some((c) => hexEquals(c, h));
+  const flag = (h: Hex) => !!state.flag?.pos && hexEquals(state.flag.pos, h);
   for (const h of hexagon(state.map.radius)) {
     const poly = document.createElementNS(NS, 'polygon');
     poly.setAttribute('points', hexCorners(h, size).map((p) => `${p.x},${p.y}`).join(' '));
-    const kind = zone(h, 0) ? 'z0' : zone(h, 1) ? 'z1' : cp(h) ? 'cp' : state.map.heights[hexKey(h)] ? 'wall' : 'open';
+    const kind = zone(h, 0) ? 'z0' : zone(h, 1) ? 'z1' : cp(h) ? 'cp' : flag(h) ? 'flag' : state.map.heights[hexKey(h)] ? 'wall' : 'open';
     poly.setAttribute('class', kind);
     svg.append(poly);
   }

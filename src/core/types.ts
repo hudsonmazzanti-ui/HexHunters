@@ -31,6 +31,9 @@ export type SpecialId =
   | 'smash'
   | 'premiumShot';
 
+/** Game objectives (see src/core/missions/). One is picked at random each game. */
+export type MissionId = 'koth' | 'ctf';
+
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
 export type AuraId =
   | 'marshal'
@@ -118,6 +121,8 @@ export interface GameConfig {
   /** No attack or special may reach farther than this (checked by validateConfig). */
   maxRange: number;
   dieSides: number;
+  /** Mission ids one is picked from at random each game (see src/core/missions/). */
+  missions: MissionId[];
   pointsToWin: number;
   /** Maximum total cost of each player's army. */
   armyPointLimit: number;
@@ -200,6 +205,11 @@ export interface SpecialRules {
   /** Mercenary's Premium Shot: range and damage (always hits). */
   premiumRange: number;
   premiumDamage: number;
+  /** Capture the Flag: points per capture, and how much slower the carrier moves (minimum 1). */
+  flagCapturePoints: number;
+  flagCarrierSlow: number;
+  /** Capture the Flag with the Standard Bearer: extra points per capture. */
+  standardCaptureBonus: number;
 }
 
 export interface Terrain {
@@ -276,6 +286,21 @@ export interface Overwatch {
   hexes: Hex[];
 }
 
+/** Capture the Flag: the flag lies on `pos`, or is carried by `carrierId` (then pos is null). */
+export interface Flag {
+  pos: Hex | null;
+  carrierId: string | null;
+}
+
+/** Why a carrier lost the flag. */
+export type FlagDropReason = 'killed' | 'hacked' | 'moved';
+
+/** A flag change made while an action resolves (turned into game events when it finishes). */
+export type FlagChange =
+  | { kind: 'dropped'; unitId: string; hex: Hex; reason: FlagDropReason; by?: string }
+  /** A dropped flag landing under new terrain (Hurl's boulder) rolls to the nearest open hex. */
+  | { kind: 'shifted'; from: Hex; to: Hex };
+
 export type WinReason = 'points' | 'elimination' | 'draw';
 
 export type Phase = 'build' | 'deploy' | 'play' | 'over';
@@ -284,6 +309,12 @@ export interface GameState {
   config: GameConfig;
   seed: number;
   map: GameMap;
+  /** This game's objective (picked at random from config.missions). */
+  mission: MissionId;
+  /** Capture the Flag's flag; null in other missions. */
+  flag: Flag | null;
+  /** Flag drops made during the current action (reported as events when it finishes). */
+  flagChanges: FlagChange[];
   units: Unit[];
   phase: Phase;
   current: PlayerId;

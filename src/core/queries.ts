@@ -1,6 +1,7 @@
 /** Read-only helpers for asking questions about a GameState. */
 import { auraEffects } from './auras';
 import { type Hex, ORIGIN, hexDistance, hexEquals, hexKey } from './hex';
+import { isCarrier } from './flag';
 import { blocksSight, hasLineOfSight } from './los';
 import { type Reach, pathTo, reachable } from './pathfinding';
 import type { GameState, PlayerId, Unit, UnitDef } from './types';
@@ -72,11 +73,12 @@ export function canSeeUnit(state: GameState, viewer: Unit, target: Unit): boolea
 /**
  * Where can this unit move with its remaining movement? Terrain and enemy models
  * block; friendly models can be passed through but not stopped on. Flyers (Dragon)
- * pass over terrain and any models, but still must stop on an empty, open hex.
+ * pass over terrain and any models, but still must stop on an empty, open hex. A flyer
+ * carrying the flag (Capture the Flag) walks instead.
  */
 export function moveReach(state: GameState, unit: Unit): Reach {
   if (!unit.pos) return { costs: new Map(), prev: new Map() };
-  const flying = !!unitDef(state, unit).flying;
+  const flying = !!unitDef(state, unit).flying && !isCarrier(state, unit);
   return reachable(
     unit.pos,
     unit.movesLeft,
@@ -113,11 +115,23 @@ export function unitSize(state: GameState, unit: Unit): UnitDef['size'] {
   return unit.crawling && def.woundedForm ? def.woundedForm.size : def.size;
 }
 
-/** Hexes of movement per turn: base (crawl once a Zombie is crawling) plus hero auras (Warlord). */
+/**
+ * Hexes of movement per turn: base (crawl once a Zombie is crawling) plus hero auras
+ * (Warlord). The flag carrier (Capture the Flag) is slower, minimum 1.
+ */
 export function unitSpeed(state: GameState, unit: Unit): number {
   const def = unitDef(state, unit);
   const base = unit.crawling && def.woundedForm ? def.woundedForm.speed : def.speed;
-  return base + (auraEffects(state, unit).speedBonus ?? 0);
+  const speed = base + (auraEffects(state, unit).speedBonus ?? 0);
+  return isCarrier(state, unit) ? Math.max(1, speed - state.config.specials.flagCarrierSlow) : speed;
+}
+
+/** Why this model can't pick up the flag right now, or null if it can (Capture the Flag). */
+export function pickUpBlockedReason(state: GameState, unit: Unit): string | null {
+  if (!state.flag?.pos || !unit.pos || !hexEquals(state.flag.pos, unit.pos)) return 'Not on the flag';
+  if (!canAct(state, unit)) return 'This model cannot act';
+  if (unit.specialUsed || unit.attacked) return 'Already acted';
+  return null;
 }
 
 /** Does this unit's attack / special set Burn on what it hits? (Pyromancer's aura) */

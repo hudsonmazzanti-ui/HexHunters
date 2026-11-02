@@ -4,7 +4,8 @@
  *
  * "Score" = (wins + draws / 2) / games: a draw counts as half a win. Flags use it.
  */
-import type { GameConfig } from '../src/core/types';
+import { MISSIONS } from '../src/core/missions';
+import type { GameConfig, MissionId } from '../src/core/types';
 import { entryName } from '../src/core/army';
 import type { GameRecord, Outcome } from './runGame';
 
@@ -51,9 +52,13 @@ export interface Summary {
   avgTerrainHexes: number;
   usage: Record<string, { turns: number; attacks: number; specials: number }>;
   illegal: number;
+  /** Capture the Flag totals: captures (both sides), pickups and drops. */
+  flag: { captures: number; pickups: number; drops: number };
+  /** The same summary for each mission's games alone (only on the top-level summary). */
+  byMission: Partial<Record<MissionId, Summary>>;
 }
 
-export function summarize(records: GameRecord[], config: GameConfig, presetNames: string[]): Summary {
+export function summarize(records: GameRecord[], config: GameConfig, presetNames: string[], splitMissions = true): Summary {
   const s: Summary = {
     games: records.length,
     presetNames,
@@ -70,6 +75,8 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     avgTerrainHexes: 0,
     usage: {},
     illegal: 0,
+    flag: { captures: 0, pickups: 0, drops: 0 },
+    byMission: {},
   };
   for (const n of presetNames) {
     s.presets[n] = { ...tally(), rounds: 0 };
@@ -85,6 +92,9 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     pieces += r.terrainPieces;
     hexes += r.terrainHexes;
     s.illegal += r.illegal;
+    s.flag.captures += r.capturesA + r.capturesB;
+    s.flag.pickups += r.flagPickups;
+    s.flag.drops += r.flagDrops;
     s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1;
 
     const fm = resultFor(r.winner, r.firstMover);
@@ -128,6 +138,12 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
   s.avgRounds = records.length ? rounds / records.length : 0;
   s.avgTerrainPieces = records.length ? pieces / records.length : 0;
   s.avgTerrainHexes = records.length ? hexes / records.length : 0;
+  if (splitMissions) {
+    for (const m of Object.keys(MISSIONS) as MissionId[]) {
+      const games = records.filter((r) => r.mission === m);
+      if (games.length) s.byMission[m] = summarize(games, config, presetNames, false);
+    }
+  }
   return s;
 }
 
@@ -162,18 +178,23 @@ const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join
 
 export function gamesCsv(records: GameRecord[]): string {
   return csv([
-    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'shape', 'terrainPieces', 'terrainHexes', 'winner', 'reason', 'rounds', 'scoreA', 'scoreB'],
+    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'mission', 'shape', 'terrainPieces', 'terrainHexes',
+      'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops'],
     ...records.map((r) => [
       r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
-      r.seatOfA + 1, r.firstMover, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
+      r.seatOfA + 1, r.firstMover, r.mission, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
+      r.capturesA, r.capturesB, r.flagPickups, r.flagDrops,
     ]),
   ]);
 }
 
 export function unitsCsv(s: Summary, config: GameConfig): string {
   const ids = [...new Set([...Object.keys(s.usage), ...Object.keys(s.entries)])].sort();
+  // Per mission: random-army games and score with the entry, e.g. randomGames_ctf, randomScore_ctf.
+  const missions = Object.keys(s.byMission) as MissionId[];
   return csv([
-    ['id', 'name', 'modelTurns', 'attacks', 'specials', 'attacksPerTurn', 'specialsPerTurn', 'randomGames', 'randomWins', 'randomDraws', 'randomScore'],
+    ['id', 'name', 'modelTurns', 'attacks', 'specials', 'attacksPerTurn', 'specialsPerTurn', 'randomGames', 'randomWins', 'randomDraws', 'randomScore',
+      ...missions.flatMap((m) => [`randomGames_${m}`, `randomScore_${m}`])],
     ...ids.map((id) => {
       const u = s.usage[id] ?? { turns: 0, attacks: 0, specials: 0 };
       const e = s.entries[id];
@@ -181,6 +202,10 @@ export function unitsCsv(s: Summary, config: GameConfig): string {
         id, entryName(config, id), u.turns, u.attacks, u.specials,
         u.turns ? (u.attacks / u.turns).toFixed(3) : '', u.turns ? (u.specials / u.turns).toFixed(3) : '',
         e?.games ?? 0, e?.wins ?? 0, e?.draws ?? 0, e ? score(e).toFixed(3) : '',
+        ...missions.flatMap((m) => {
+          const t = s.byMission[m]!.entries[id];
+          return [t?.games ?? 0, t ? score(t).toFixed(3) : ''];
+        }),
       ];
     }),
   ]);
@@ -212,6 +237,41 @@ export interface ReportMeta {
   maxRounds: number;
   /** Set when the run used a balance variant (temporary stat overrides). */
   variant?: string;
+}
+
+/** "By mission": flow, presets and random-army units/heroes side by side for each mission. */
+function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): string {
+  const ms = (Object.keys(s.byMission) as MissionId[]).map((id) => ({ id, name: MISSIONS[id].name, s: s.byMission[id]! }));
+  if (!ms.length) return '';
+  const head = (first: string) => `<tr><th>${first}</th>${ms.map((m) => `<th>${esc(m.name)}</th>`).join('')}</tr>`;
+  const row = (label: string, f: (x: Summary) => string) => `<tr><th>${esc(label)}</th>${ms.map((m) => `<td>${f(m.s)}</td>`).join('')}</tr>`;
+  const decisive = (x: Summary) => x.firstMover.wins + x.firstMover.losses;
+  const flow = [
+    row('Games', (x) => String(x.games)),
+    row('Avg length (rounds)', (x) => x.avgRounds.toFixed(1)),
+    row('Points wins', (x) => p1(pct(x.reasons.points ?? 0, x.games))),
+    row('Wipeout wins', (x) => p1(pct(x.reasons.elimination ?? 0, x.games))),
+    row('Draws', (x) => p1(pct((x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0), x.games))),
+    row('First mover wins (decisive)', (x) => p1(pct(x.firstMover.wins, decisive(x)))),
+    row('Flag captures / game', (x) => (x.flag.captures || x.flag.pickups ? (x.flag.captures / x.games).toFixed(2) : '–')),
+    row('Flag pickups / game', (x) => (x.flag.pickups ? (x.flag.pickups / x.games).toFixed(2) : '–')),
+    row('Flag drops / game', (x) => (x.flag.pickups ? (x.flag.drops / x.games).toFixed(2) : '–')),
+  ].join('');
+  const cell = (t: Tally | undefined) =>
+    t?.games ? `<td${heat(score(t), t.games, meta.minGames)} title="${t.wins}W ${t.losses}L ${t.draws}D of ${t.games}">${p1(100 * score(t))}</td>` : '<td class="na">–</td>';
+  const presets = s.presetNames.map((n) => `<tr><th>${esc(n)}</th>${ms.map((m) => cell(m.s.presets[n])).join('')}</tr>`).join('');
+  const entries = (hero: boolean) =>
+    Object.entries(s.entries)
+      .filter(([, t]) => t.hero === hero)
+      .sort((x, y) => score(y[1]) - score(x[1]))
+      .map(([id]) => `<tr><th>${esc(entryName(config, id))}</th>${ms.map((m) => cell(m.s.entries[id])).join('')}</tr>`)
+      .join('');
+  return `<h2>By mission</h2>
+<section><h3>Game flow</h3><table>${head('')}${flow}</table>
+<h3>Preset score (%)</h3><table>${head('Army')}${presets}</table>
+<h3>Random armies: hero score (%)</h3><table>${head('Hero')}${entries(true)}</table>
+<h3>Random armies: unit score (%)</h3><table>${head('Unit')}${entries(false)}</table>
+<p class="muted">Each game's mission is picked at random. Hover a cell for W/L/D. Pale cells have fewer than ${meta.minGames} games.</p></section>`;
 }
 
 export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): string {
@@ -275,7 +335,7 @@ export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): st
     .join('')}`;
 
   const reasonNames: Record<string, string> = {
-    points: 'Points (King of the Hill)',
+    points: 'Points (mission objective)',
     elimination: 'Wipeout',
     draw: 'Draw (simultaneous wipeout)',
     roundLimit: `Draw (${meta.maxRounds}-round limit)`,
@@ -359,6 +419,8 @@ of ${s.games} games: <b>${p1(pct(s.firstMover.wins, decisive))}</b> of decisive 
 <h2>By deployment shape</h2>
 <section><table><tr><th>Shape</th><th>Games</th><th>First mover wins</th><th>Draws</th><th>Wipeouts</th><th>Avg rounds</th></tr>${shapeRows}</table>
 <h3>Preset score by shape (%)</h3><table>${presetShape}</table></section>
+
+${missionSection(s, config, meta)}
 
 <h2>How games end</h2>
 <section><table><tr><th>Win type</th><th>Games</th><th>Share</th></tr>${reasonRows}</table></section>

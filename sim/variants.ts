@@ -9,6 +9,7 @@
  *   npm run sim -- --variant monster-hp14 --games 2000 --seed 2026
  *   npm run sim -- --experiment monster --games 2000 --seed 2026
  *   npm run sim -- --variants baseline,monster-cost6 --games 2000 --seed 2026
+ *   npm run sim -- --experiment missions --games 2000 --seed 2026
  *
  * Every variant in a comparison uses the same seed, so the maps, deployment shapes and
  * dice sequences line up. Random armies are rebuilt per variant, though: if a variant
@@ -80,6 +81,18 @@ export const VARIANTS: Record<string, Variant> = {
     settings: { terrainPairs: 6, terrainTries: 400 },
   },
 
+  // ---- Missions: by default each game's mission is random (50/50); these force one ----
+  'koth-only': {
+    label: 'King of the Hill only',
+    description: 'Every game is King of the Hill.',
+    settings: { missions: ['koth'] },
+  },
+  'ctf-only': {
+    label: 'Capture the Flag only',
+    description: 'Every game is Capture the Flag.',
+    settings: { missions: ['ctf'] },
+  },
+
   // ---- Pacing experiment ----
   'slow-large': {
     label: 'Slow-Large',
@@ -127,6 +140,12 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     title: 'Terrain amount',
     variants: ['baseline', 'terrain-150', 'terrain-200'],
     focusUnits: ['monster', 'heavy', 'hillgiant', 'werewolf', 'dragon', 'behemoth', 'sniper', 'artillery', 'infantry', 'dualgunner', 'assassin'],
+    focusPresets: [],
+  },
+  missions: {
+    title: 'Missions: random vs each mission alone',
+    variants: ['baseline', 'koth-only', 'ctf-only'],
+    focusUnits: ['monster', 'heavy', 'werewolf', 'dragon', 'grappler', 'hacker', 'sniper', 'infantry', 'assassin', 'scout', ...allHeroes()],
     focusPresets: [],
   },
   pacing: {

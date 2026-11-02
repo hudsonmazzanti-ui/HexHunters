@@ -1,4 +1,5 @@
 /** Attack resolution. An attack hits if die + modifiers >= the target's defense. */
+import { dropFlag } from './flag';
 import { hexDistance } from './hex';
 import {
   actionBonus,
@@ -100,6 +101,8 @@ export function dealDamage(state: GameState, target: Unit, amount: number, opts:
   target.hp = Math.max(0, target.hp - amount);
   if (target.hp <= 0) {
     state.units = state.units.filter((u) => u.id !== target.id);
+    // Capture the Flag: a dying carrier drops the flag where it fell.
+    if (target.pos) dropFlag(state, target, target.pos, 'killed');
     // Remembered for Raise Dead (processed once the current action is over).
     if (target.pos) state.deaths.push({ owner: target.owner, pos: target.pos });
     return true;

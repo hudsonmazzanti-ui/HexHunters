@@ -27,6 +27,7 @@ import {
   effectiveDefense,
   getUnit,
   livingUnits,
+  pickUpBlockedReason,
   maxHealth,
   moveReach,
   onBoard,
@@ -50,6 +51,8 @@ import {
   specialIdOf,
   specialOf,
 } from '../src/core/specials';
+import { flagCarrier, flagHex, isCarrier } from '../src/core/flag';
+import { MISSIONS } from '../src/core/missions';
 import type { GameState, PlayerId, Unit } from '../src/core/types';
 import { WEIGHTS, type Weights } from './weights';
 
@@ -71,7 +74,12 @@ function hitChance(state: GameState, attacker: Unit, target: Unit): number {
   return Math.min(1, Math.max(0, (state.config.dieSides - need + 1) / state.config.dieSides));
 }
 
-const onPoint = (state: GameState, h: Hex) => state.map.controlPoint.some((c) => hexEquals(c, h));
+const onPoint = (state: GameState, h: Hex) =>
+  MISSIONS[state.mission].usesControlPoint && state.map.controlPoint.some((c) => hexEquals(c, h));
+
+/** Hexes from `h` to the nearest hex of `player`'s deployment zone (0 inside it). */
+const toZone = (state: GameState, player: PlayerId, h: Hex): number =>
+  Math.min(...state.map.deployZones[player].map((z) => hexDistance(z, h)));
 
 /** Value of dealing `damage` to `target` (negative for own models). */
 function damageValue(state: GameState, actor: Unit, target: Unit, damage: number, w: Weights): number {
@@ -80,7 +88,9 @@ function damageValue(state: GameState, actor: Unit, target: Unit, damage: number
   const dealt = Math.min(damage, target.hp);
   let v = (w.damage * dealt * value) / maxHealth(state, target);
   if (damage >= target.hp) v += w.kill * value;
-  return target.owner === actor.owner ? -w.friendlyFire * v : v;
+  if (target.owner === actor.owner) return -w.friendlyFire * v;
+  // Capture the Flag: hurting the enemy carrier matters more (killing it drops the flag).
+  return isCarrier(state, target) ? v * w.carrierTarget : v;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,15 +127,56 @@ function positionScore(state: GameState, unit: Unit, h: Hex, w: Weights): number
     if (enemies.some((e) => onPoint(state, e.pos!))) s += w.contestPoint;
     if (state.turnInRound === 1) s += w.pointLateBonus;
   }
-  // Head for an enemy within its range, or the control point, whichever is closer.
+  // Head for an enemy within its range, or the objective (control point / flag), whichever is closer.
   const dEnemy = enemies.length ? Math.min(...enemies.map((e) => hexDistance(e.pos!, h))) : 99;
   const toEnemy = Math.max(0, dEnemy - def.range);
-  const toPoint = Math.max(0, hexDistance(h, ORIGIN) - 1);
+  const flag = flagHex(state);
+  const toPoint = flag ? hexDistance(h, flag) : Math.max(0, hexDistance(h, ORIGIN) - 1);
   s -= w.approach * Math.min(toEnemy, toPoint);
+  if (flag) s += flagScore(state, unit, h, flag, w);
   // Stay out of reach of enemies that could hurt it next turn.
-  const value = unitValue(state, unit, w);
+  const value = unitValue(state, unit, w) + (isCarrier(state, unit) ? w.flagStake : 0);
   s -= (w.danger * incomingDamage(state, unit, h, w) * value) / maxHealth(state, unit);
   return s;
+}
+
+/**
+ * Capture the Flag position terms: the carrier walks home; the two models nearest a
+ * loose flag go for it; the others escort their own carrier or chase the enemy's.
+ */
+function flagScore(state: GameState, unit: Unit, h: Hex, flag: Hex, w: Weights): number {
+  if (isCarrier(state, unit)) {
+    const home = toZone(state, unit.owner, h);
+    return home === 0 ? w.inZone : -w.carryHome * home;
+  }
+  const carrier = flagCarrier(state);
+  if (!carrier) {
+    const d = hexDistance(h, flag);
+    const closer = livingUnits(state, unit.owner).filter((u) => u.id !== unit.id && hexDistance(u.pos!, flag) < d).length;
+    if (closer >= 2) return 0;
+    return (d === 0 ? w.onFlag : 0) - w.flagApproach * d;
+  }
+  if (carrier.owner === unit.owner) return -w.escort * Math.max(0, hexDistance(h, carrier.pos!) - 2);
+  // Enemy carrier: get within range of it (the approach term already pulls toward it).
+  return -w.flagApproach * Math.max(0, hexDistance(h, carrier.pos!) - unitDef(state, unit).range);
+}
+
+/** Capture the Flag: does this special make a carrier drop the flag? +knock for the enemy's, -drop for ours. */
+function flagSpecialValue(state: GameState, unit: Unit, choice: SpecialChoice, preview: SpecialPreview | null, w: Weights): number {
+  const carrier = flagCarrier(state);
+  if (!carrier) return 0;
+  const id = specialIdOf(state, unit)!;
+  const sp = specialOf(state, unit)!;
+  let moved = false;
+  if (carrier.id === unit.id) moved = !!sp.grantsMovement || id === 'vault' || id === 'swap';
+  else if (id === 'swap') moved = partnerOf(state, unit)?.id === carrier.id;
+  else if (choice.targetId === carrier.id) {
+    if (id === 'hack') moved = true;
+    if (id === 'shove') moved = true;
+    if (id === 'hook') moved = (preview?.area.length ?? 0) > 0;
+  }
+  if (!moved) return 0;
+  return carrier.owner === unit.owner ? -w.dropOwnFlag : w.knockFlag;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +249,7 @@ function specialScore(state: GameState, unit: Unit, choice: SpecialChoice, w: We
   const target = choice.targetId ? getUnit(state, choice.targetId) : undefined;
   const pos = unit.pos!;
   const die = actionDie(state, unit);
+  v += flagSpecialValue(state, unit, choice, preview, w);
   switch (id) {
     case 'heal': {
       const t = target!;
@@ -346,6 +398,8 @@ export function planStep(state: GameState, rng: Rng, w: Weights = WEIGHTS): Acti
       const gain = moved ? positionScore(work, unit, h, w) - base : 0;
       if (moved) consider(gain, move);
       if (!canAct(work, unit)) continue;
+      // Capture the Flag: pick up the flag it's standing on.
+      if (work.flag && !pickUpBlockedReason(work, unit)) consider(gain + w.pickUp, [...move, { type: 'pickUp', unitId: unit.id }]);
       for (const enemy of livingUnits(work, other(unit.owner))) {
         const s = attackScore(work, unit, enemy, w);
         if (s !== null) consider(gain + s, [...move, { type: 'attack', unitId: unit.id, targetId: enemy.id }]);

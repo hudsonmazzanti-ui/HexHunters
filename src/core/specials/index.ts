@@ -6,7 +6,8 @@
  * would do nothing (Heal on a full-health ally, Dash for 0, Torch at empty hexes...)
  * is not allowed, so a die is never wasted by accident.
  */
-import { DIRECTIONS, hexagon, neighbors } from '../hex';
+import { dropFlag, flagCarrier } from '../flag';
+import { DIRECTIONS, hexEquals, hexagon, neighbors } from '../hex';
 import { canAct, getUnit, hasDoubleAction } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
@@ -180,5 +181,13 @@ export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice
   unit.acted = sp.afterAttack || (!hasDoubleAction(state, unit) && !sp.allowsAttackAfter);
   // Using the die ends movement, unless the special says otherwise (Dash, Vault).
   if (!sp.keepsMovement) unit.movesLeft = 0;
-  return { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };
+  // Capture the Flag, walking only: extra movement (Dash, Pounce) drops the flag here...
+  const carrier = flagCarrier(state);
+  const carrierFrom = carrier?.pos;
+  if (carrier === unit && sp.grantsMovement) dropFlag(state, unit, unit.pos!, 'moved', unit.id);
+  const result: SpecialResult = { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };
+  // ...and so does any special that moves the carrier (Vault, Swap, Hook, Shove): it drops
+  // on the hex the carrier stood on before the move.
+  if (carrier?.pos && carrierFrom && !hexEquals(carrier.pos, carrierFrom)) dropFlag(state, carrier, carrierFrom, 'moved', unit.id);
+  return result;
 }

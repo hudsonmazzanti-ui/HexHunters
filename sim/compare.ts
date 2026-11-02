@@ -13,6 +13,8 @@ import { entryName } from '../src/core/army';
 import { Rng } from '../src/core/rng';
 import type { GameConfig } from '../src/core/types';
 import { type Summary, score, summarize } from './report';
+import { MISSIONS } from '../src/core/missions';
+import type { MissionId } from '../src/core/types';
 import type { GameRecord } from './runGame';
 import type { Experiment } from './variants';
 
@@ -132,6 +134,37 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
     rate('Draws', (x) => ({ k: (x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0), n: x.games })),
     rate('First mover wins (decisive games)', (x) => ({ k: x.firstMover.wins, n: x.firstMover.wins + x.firstMover.losses })),
   ];
+  // The same flow, split by mission (each game's mission is random).
+  const missions = [...new Set(s.flatMap((x) => Object.keys(x.byMission)))] as MissionId[];
+  for (const m of missions) {
+    const name = MISSIONS[m].name;
+    const of = (x: Summary) => x.byMission[m];
+    flow.push(
+      rate(`${name}: share of games`, (x) => ({ k: of(x)?.games ?? 0, n: x.games })),
+      {
+        label: `${name}: avg game length`,
+        format: 'num',
+        cells: s.map((x) => {
+          const y = of(x);
+          if (!y?.games) return { value: null, se: null, n: 0 };
+          const variance = Math.max(0, y.roundsSq / y.games - y.avgRounds ** 2);
+          return { value: y.avgRounds, se: Math.sqrt(variance / y.games), n: y.games };
+        }),
+      },
+      rate(`${name}: wipeout wins`, (x) => ({ k: of(x)?.reasons.elimination ?? 0, n: of(x)?.games ?? 0 })),
+      rate(`${name}: points wins`, (x) => ({ k: of(x)?.reasons.points ?? 0, n: of(x)?.games ?? 0 })),
+    );
+    if (m === 'ctf') {
+      flow.push({
+        label: `${name}: captures per game`,
+        format: 'num',
+        cells: s.map((x) => {
+          const y = of(x);
+          return y?.games ? { value: y.flag.captures / y.games, se: null, n: y.games } : { value: null, se: null, n: 0 };
+        }),
+      });
+    }
+  }
 
   const presetNames = [...new Set(results.flatMap((r) => r.summary.presetNames).concat(results.flatMap((r) => r.excluded.map((e) => e.split(':')[0]))))];
   const presets: Metric[] = presetNames.map((name) => ({

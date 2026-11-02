@@ -4,6 +4,7 @@
  * The controller builds a plain PanelModel; this module only draws it.
  */
 import { firstPlayerOfRound } from '../core/game';
+import { MISSIONS } from '../core/missions';
 import type { GameState } from '../core/types';
 
 export { PLAYER_COLORS } from './theme';
@@ -47,7 +48,8 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
   return node;
 }
 
-export function renderTopBar(state: GameState): void {
+/** The top bar. `onMission`: tapping the mission chip (shows the mission's rules). */
+export function renderTopBar(state: GameState, onMission?: () => void): void {
   const bar = document.getElementById('topbar')!;
   const score = (p: 0 | 1) => {
     const div = h('div', `score${p === 1 ? ' right' : ''}`);
@@ -94,6 +96,12 @@ export function renderTopBar(state: GameState): void {
   const color = state.phase === 'over' ? (state.winner === null ? COLORS.muted : PLAYER_COLORS[state.winner]) : PLAYER_COLORS[state.current];
   who.style.color = color;
   label.append(who, sub);
+  if (state.phase === 'deploy' || state.phase === 'play' || state.phase === 'over') {
+    const chip = h('button', `mission-chip ${state.mission}`, MISSIONS[state.mission].name);
+    chip.title = 'Mission rules';
+    if (onMission) chip.addEventListener('click', onMission);
+    label.append(chip);
+  }
 
   bar.style.setProperty('--turn-color', color);
   bar.replaceChildren(score(0), label, score(1));

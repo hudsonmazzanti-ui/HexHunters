@@ -22,6 +22,10 @@ export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden,
 export const holdPoints = (state: GameState, player: PlayerId): number =>
   Math.max(1, ...state.auras[player].map((id) => AURAS[id].holdPoints?.(state.config.specials) ?? 1));
 
+/** Capture the Flag: extra points per capture (Standard Bearer: +1). */
+export const captureBonus = (state: GameState, player: PlayerId): number =>
+  Math.max(0, ...state.auras[player].map((id) => AURAS[id].captureBonus?.(state.config.specials) ?? 0));
+
 /** Auras of the unit's own army that affect it. */
 export const aurasOn = (state: GameState, unit: Unit): AuraId[] =>
   state.auras[unit.owner].filter((id) => AURAS[id].affects(state, unit));
