@@ -34,7 +34,8 @@ export interface Variant {
 export const VARIANTS: Record<string, Variant> = {
   baseline: { label: 'Baseline', description: 'The current game data, unchanged.' },
 
-  // ---- Monster experiment ----
+  // ---- Monster experiment (run before the rebalance; health 14 and no +1 to hit are now
+  // the real values, so the first three are no-ops against today's data) ----
   'monster-hp14': {
     label: 'A: Monster health 14',
     description: 'Monster health 18 → 14.',

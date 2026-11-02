@@ -17,7 +17,8 @@ describe('balance variants', () => {
     expect(c.units.monster.damage).toBe(UNITS.monster.damage);
     expect(variantConfig('monster-cost6').units.monster.cost).toBe(6);
     expect(DEFAULT_CONFIG).toEqual(before);
-    expect(UNITS.monster).toMatchObject({ health: 18, hitBonus: 1, cost: 5 });
+    expect(UNITS.monster).toMatchObject({ health: 14, cost: 5 });
+    expect(variantConfig('monster-cost6').units.heavy).toEqual(UNITS.heavy);
     expect(variantConfig('baseline')).toEqual(DEFAULT_CONFIG);
   });
 
