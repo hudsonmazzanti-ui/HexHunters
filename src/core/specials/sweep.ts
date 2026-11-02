@@ -1,7 +1,7 @@
 /**
  * Sweep: the Monster compares this turn's die against the defense of EVERY adjacent
  * enemy separately; each one it beats takes damage. Enemies only. Brace counts;
- * Spot and the Monster's +1 to hit (basic attack only) don't apply.
+ * Spot doesn't apply.
  */
 import { dealDamage } from '../combat';
 import { neighbors } from '../hex';

@@ -172,11 +172,11 @@ describe('Necromancer', () => {
     addUnit(s, 'necromancer', 1, hex(-5, -1));
     const z = addUnit(s, 'zombie', 1, hex(0, 0));
     const a = addUnit(s, 'infantry', 0, hex(0, 3), { die: 12 }); // 2 dmg
-    const b = addUnit(s, 'heavy', 0, hex(1, 2), { die: 12 }); // 4 dmg
+    const b = addUnit(s, 'heavy', 0, hex(1, 2), { die: 12 }); // 3 dmg
     let state = run(s, { type: 'attack', unitId: a.id, targetId: z.id }).state;
     expect(getUnit(state, z.id)).toMatchObject({ hp: 7, crawling: false });
     state = run(state, { type: 'attack', unitId: b.id, targetId: z.id }).state;
-    expect(getUnit(state, z.id)).toMatchObject({ hp: 3, crawling: true });
+    expect(getUnit(state, z.id)).toMatchObject({ hp: 4, crawling: true }); // 4 of 9: half or less
   });
 
   it('Raise Dead: an enemy dying near your Zombie rises as your Skeleton, unable to act yet', () => {
@@ -250,7 +250,7 @@ describe('Necromancer', () => {
 
 describe('Hill Giant: Hurl', () => {
   it('has the agreed stats and needs adjacent terrain', () => {
-    expect(UNITS.hillgiant).toMatchObject({ cost: 5, size: 3, speed: 2, defense: 6, health: 13, range: 1, damage: 4, special: 'hurl' });
+    expect(UNITS.hillgiant).toMatchObject({ cost: 5, size: 3, speed: 2, defense: 5, health: 13, range: 1, damage: 4, special: 'hurl' });
     const s = makeState();
     const g = addUnit(s, 'hillgiant', 0, hex(0, 3));
     addUnit(s, 'infantry', 1, hex(0, 0));

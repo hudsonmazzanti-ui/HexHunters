@@ -76,7 +76,7 @@ export const UNITS: Record<string, UnitDef> = {
     defense: 6,
     health: 12,
     range: 3,
-    damage: 4,
+    damage: 3, // was 4
     special: 'brace',
   },
   assassin: {
@@ -122,10 +122,9 @@ export const UNITS: Record<string, UnitDef> = {
     size: 3, // large
     speed: SPEED.normal,
     defense: 3,
-    health: 18,
+    health: 14, // was 18
     range: 1, // melee only
     damage: 5,
-    hitBonus: 1,
     special: 'sweep',
   },
   artillery: {
@@ -199,7 +198,7 @@ export const UNITS: Record<string, UnitDef> = {
     cost: 5,
     size: 3, // large
     speed: SPEED.slow,
-    defense: 6,
+    defense: 5, // was 6
     health: 13,
     range: 1, // melee only
     damage: 4,

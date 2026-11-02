@@ -28,15 +28,15 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Medic     | 3    | small (1)  | 3     | 5   | 4  | 3         | 1   | **Heal**: adjacent damaged ally heals ⌊die/2⌋ (up to max) |
 | Sniper    | 4    | small (1)  | 2     | 5   | 4  | 7         | 4   | **Spot**: mark a visible enemy within 7; your next attack on it gets +2 |
 | Grenadier | 3    | medium (2) | 3     | 6   | 5  | 4         | 2   | **Grenade** (die 10+): 2 damage on impact, 1 to each neighbor |
-| Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 4   | **Brace**: +2 defense until your next turn |
+| Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 3   | **Brace**: +2 defense until your next turn |
 | Flamer    | 4    | medium (2) | 2     | 6   | 9  | 3         | 3   | **Torch**: die vs each model in a 2-hex line, ignores Brace |
-| Monster   | 5    | large (3)  | 3     | 3   | 18 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy. Basic attack +1 to hit |
+| Monster   | 5    | large (3)  | 3     | 3   | 14 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy |
 | Artillery | 3    | medium (2) | 1     | 4   | 8  | 7         | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 | Zombie    | 2    | medium (2) | 3     | 0   | 9  | 1 (melee) | 3   | **Eat** (die 8+): adjacent enemy, normal hit roll; 2 damage and the Zombie heals 2. Crawls once hurt |
 | Skeleton  | 1    | medium (2) | 3     | 2   | 1  | 1 (melee) | 2   | No special. Rests on the second of back-to-back turns |
-| Hill Giant | 5   | large (3)  | 2     | 6   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
+| Hill Giant | 5   | large (3)  | 2     | 5   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
 | Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 4, def 6, HP 12, melee 5, **Pounce** |
 | Hacker    | 3    | small (1)  | 3     | 5   | 6  | 4         | 2   | **Hack**: enemy within 4 in sight gets -2 on its next die (min 1). No roll |
 | Dual Gunner | 4  | medium (2) | 3     | 6   | 7  | 4         | 2   | **Second Shot**: after its attack, attack again with the same die |

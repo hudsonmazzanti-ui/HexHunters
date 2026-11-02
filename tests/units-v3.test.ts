@@ -33,11 +33,18 @@ describe('crawl speed', () => {
 });
 
 describe('Monster', () => {
-  it('gets +1 to hit on its basic attack', () => {
+  it('Heavy deals 3 and the Hill Giant has defense 5 (rebalanced)', () => {
+    expect(UNITS.heavy).toMatchObject({ damage: 3, defense: 6, health: 12 });
+    expect(UNITS.hillgiant).toMatchObject({ defense: 5, health: 13, damage: 4 });
+  });
+
+  it('has 14 health and no bonus to hit (rebalanced)', () => {
+    expect(UNITS.monster).toMatchObject({ health: 14, damage: 5, defense: 3 });
+    expect(UNITS.monster.hitBonus).toBeUndefined();
     const s = makeState();
     const m = addUnit(s, 'monster', 0, hex(0, 0), { die: 5 });
     const inf = addUnit(s, 'infantry', 1, hex(1, 0)); // defense 6
-    expect(previewAttack(s, m, inf)).toMatchObject({ roll: 5, bonus: 1, hitBonus: 1, hit: true, damage: 5 });
+    expect(previewAttack(s, m, inf)).toMatchObject({ roll: 5, bonus: 0, hitBonus: 0, hit: false });
   });
 
   it('Sweep compares one die against every adjacent enemy separately', () => {
