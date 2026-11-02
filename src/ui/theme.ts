@@ -31,18 +31,19 @@ export const COLORS = {
   p0Handoff: '#10264d',
   p1Handoff: '#4d1016',
 
-  // Board
-  boardGlow: '#1c2638',
-  boardEdge: '#080b11',
-  tile: '#2d384c',
-  tileEdge: '#3b4860',
-  cpTile: '#5e4c17',
-  cpEdge: '#f2c443',
-  terrain1: '#5d6a80',
-  terrain1Edge: '#8a97ad',
-  terrain2: '#a3aec0',
-  terrain2Edge: '#dde3ec',
-  terrainLabel: '#0f141d',
+  // Board: light cream tiles on a dark surround, dark terrain (high contrast)
+  boardGlow: '#2b3447',
+  boardEdge: '#11161f',
+  tile: '#e8e2d4',
+  tileEdge: '#b3aa96',
+  cpTile: '#f2d98a',
+  cpEdge: '#b8860b',
+  terrain1: '#8d939e',
+  terrain1Edge: '#5c626d',
+  terrain2: '#474e5c',
+  terrain2Edge: '#2a2f39',
+  /** "Can't see there" shading on the tiles. */
+  hide: '#141a26',
   boulder: '#8c6b45',
   boulderEdge: '#5b4329',
 
