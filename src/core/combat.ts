@@ -93,7 +93,9 @@ export function fireShot(state: GameState, attacker: Unit, target: Unit, p: Atta
  * Every source of damage goes through here, so on-damage rules live here too: the
  * first damage a Zombie survives turns it into a crawler for good.
  */
-export function dealDamage(state: GameState, target: Unit, amount: number): boolean {
+export function dealDamage(state: GameState, target: Unit, amount: number, opts: { burn?: boolean } = {}): boolean {
+  // Remembered for Cracking Armor (applied once per action when it finishes). Burn isn't a hit.
+  if (amount > 0 && !opts.burn && !state.struck.includes(target.id)) state.struck.push(target.id);
   target.hp = Math.max(0, target.hp - amount);
   if (target.hp <= 0) {
     state.units = state.units.filter((u) => u.id !== target.id);

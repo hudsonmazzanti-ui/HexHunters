@@ -47,6 +47,7 @@ function raiseSkeleton(state: GameState, owner: PlayerId, pos: Hex): Unit {
     hacked: false,
     hackPenalty: 0,
     attacked: false,
+    armorCracks: 0,
   };
   state.units.push(unit);
   unit.hp = maxHealth(state, unit);

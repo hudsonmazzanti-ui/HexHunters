@@ -35,7 +35,7 @@ describe('new unit stats', () => {
     expect(UNITS.hacker).toMatchObject({ cost: 3, size: 1, speed: 3, defense: 5, health: 6, range: 4, damage: 2, special: 'hack' });
     expect(UNITS.dualgunner).toMatchObject({ cost: 4, size: 2, speed: 3, defense: 6, health: 7, range: 4, damage: 2, special: 'secondShot' });
     expect(UNITS.dragon).toMatchObject({ cost: 6, size: 3, speed: 4, defense: 6, health: 12, range: 3, damage: 3, special: 'breath', flying: true });
-    expect(UNITS.behemoth).toMatchObject({ cost: 12, size: 3, speed: 2, defense: 10, health: 20, range: 1, damage: 6, special: 'smash', hero: {} });
+    expect(UNITS.behemoth).toMatchObject({ cost: 12, size: 3, speed: 2, defense: 10, health: 15, range: 1, damage: 6, special: 'smash', hero: {}, crackingArmor: { minDefense: 4 } });
   });
 
   it('the Behemoth is a hero: it fits in 16 points but not with another hero', () => {
@@ -268,5 +268,80 @@ describe('Behemoth: Smash', () => {
     const s = makeState();
     const b = addUnit(s, 'behemoth', 0, hex(0, 2));
     expect(specialBlockedReason(s, b)).toBe('no terrain adjacent');
+  });
+});
+
+describe('Behemoth: Cracking Armor', () => {
+  const def = (state: GameState, id: string) => {
+    const u = getUnit(state, id)!;
+    return UNITS[u.type].defense - u.armorCracks;
+  };
+
+  it('each damaging hit permanently lowers its defense by 1, with a log event', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0));
+    const a = addUnit(s, 'heavy', 0, hex(0, 3), { die: 12 });
+    const c = addUnit(s, 'heavy', 0, hex(1, 2), { die: 10 });
+    let r = run(s, { type: 'attack', unitId: a.id, targetId: b.id });
+    expect(r.events).toContainEqual({ type: 'cracked', unitId: b.id, defense: 9, cracks: 1 });
+    expect(def(r.state, b.id)).toBe(9);
+    r = run(r.state, { type: 'attack', unitId: c.id, targetId: b.id }); // 10 vs 9
+    expect(def(r.state, b.id)).toBe(8);
+    expect(r.state.struck).toEqual([]);
+  });
+
+  it('misses and Burn do not crack it', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0), { burning: true });
+    const a = addUnit(s, 'infantry', 0, hex(0, 3), { die: 9 }); // 9 vs 10: miss
+    const r = run(s, { type: 'attack', unitId: a.id, targetId: b.id }, END); // P2's turn: burn ticks
+    expect(r.events).toContainEqual(expect.objectContaining({ type: 'burn', unitId: b.id, damage: 1 }));
+    expect(r.events.some((e) => e.type === 'cracked')).toBe(false);
+    expect(getUnit(r.state, b.id)).toMatchObject({ hp: 14, armorCracks: 0 });
+  });
+
+  it('always-hit damage cracks it: Grenade splash and Hook', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0));
+    const g = addUnit(s, 'grenadier', 0, hex(0, 4), { die: 10 });
+    const h = addUnit(s, 'grappler', 0, hex(2, 0), { die: 7 });
+    let r = run(s, { type: 'special', unitId: g.id, hex: hex(0, 1) }); // splash on the Behemoth
+    expect(getUnit(r.state, b.id)!.hp).toBe(14);
+    expect(def(r.state, b.id)).toBe(9);
+    r = run(r.state, { type: 'special', unitId: h.id, targetId: b.id });
+    expect(def(r.state, b.id)).toBe(8);
+  });
+
+  it('one action cracks it once, even with several hits (two overwatch shots)', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 0, hex(0, 0));
+    addUnit(s, 'sentinel', 1, hex(0, -2), { overwatch: { die: 12, hexes: [hex(0, 0)] } });
+    addUnit(s, 'sentinel', 1, hex(2, -2), { overwatch: { die: 12, hexes: [hex(0, 0)] } });
+    const r = run(s, END);
+    expect(r.events.filter((e) => e.type === 'overwatch' && e.hit)).toHaveLength(2);
+    expect(r.events.filter((e) => e.type === 'cracked')).toHaveLength(1);
+    expect(getUnit(r.state, b.id)).toMatchObject({ hp: 11, armorCracks: 1 });
+  });
+
+  it('stops at defense 4', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0), { armorCracks: 5 }); // defense 5
+    const a = addUnit(s, 'heavy', 0, hex(0, 3), { die: 12 });
+    const c = addUnit(s, 'heavy', 0, hex(1, 2), { die: 12 });
+    let r = run(s, { type: 'attack', unitId: a.id, targetId: b.id });
+    expect(def(r.state, b.id)).toBe(4);
+    r = run(r.state, { type: 'attack', unitId: c.id, targetId: b.id });
+    expect(def(r.state, b.id)).toBe(4);
+    expect(r.events.some((e) => e.type === 'cracked')).toBe(false);
+  });
+
+  it('cracked defense is what attacks roll against (Torch too); Brace still adds on top', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 1), { armorCracks: 3 }); // defense 7
+    const f = addUnit(s, 'flamer', 0, hex(0, 2), { die: 7 });
+    expect(previewSpecial(s, f, { dir: 2 })!.effects[0]).toMatchObject({ defense: 7, hit: true });
+    b.braced = true;
+    const inf = addUnit(s, 'infantry', 0, hex(1, 2), { die: 8 });
+    expect(applyAction(s, { type: 'attack', unitId: inf.id, targetId: b.id }).events[0]).toMatchObject({ defense: 9, hit: false });
   });
 });

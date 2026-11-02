@@ -6,7 +6,7 @@
  */
 import { dealDamage } from '../combat';
 import { type Hex, direction, hexAdd, hexScale } from '../hex';
-import { actionDie, burnsOn, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
+import { actionDie, burnsOn, naturalDefense, onBoard, terrainHeight, unitAt, unitDef } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -30,7 +30,7 @@ export function flames(state: GameState, unit: Unit, dir: number, length?: numbe
   for (const h of line) {
     const target = unitAt(state, h);
     if (!target) continue;
-    const defense = unitDef(state, target).defense; // base defense: ignores Brace and aura bonuses (Warden)
+    const defense = naturalDefense(state, target); // ignores Brace and aura bonuses (Warden), not Cracking Armor
     const hit = roll >= defense;
     effects.push({ unitId: target.id, roll, defense, hit, damage: hit ? damage : 0, killed: hit && target.hp <= damage });
   }

@@ -56,8 +56,9 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Gambler       | 6    | medium (2) | 3     | 6   | 9  | 3            | 3   | Dice aren't rolled at turn start: each rolls d12+2 (max 14) when its action is confirmed |
 | Necromancer   | 7    | medium (2) | 3     | 5   | 8  | 3            | 2   | Skeletons +1 def, never rest; Zombies crawl only at half health; Raise Dead |
 
-**Behemoth** (hero, 12 pts; no passive rule, its ability is its special): large (3), speed 2, def 10, HP 20, melee 6.
-**Smash**: destroy one adjacent terrain hex (either height) for good. No roll.
+**Behemoth** (hero, 12 pts; no passive rule, its ability is its special): large (3), speed 2, def 10, HP 15, melee 6.
+**Smash**: destroy one adjacent terrain hex (either height) for good. No roll. **Cracking Armor**: -1 defense for good
+each time it's hit for damage (min 4).
 
 **The Twins** (hero, 10 pts, bought as one entry that adds both models; no passive rule; both have **Swap**):
 
@@ -239,6 +240,12 @@ without a Pyromancer.
 
 **Behemoth: Smash.** Pick an adjacent terrain hex of either height: it's removed from the map for good. No roll (the
 die is spent). Greyed out with no adjacent terrain.
+
+**Behemoth: Cracking Armor.** Defense starts at 10. Each attack or special that deals it damage permanently lowers it
+by 1, down to a minimum of 4. That includes always-hit damage (Grenade impact and splash, Hook) and overwatch shots;
+misses and Burn don't count. One action cracks it at most once, however many hits it lands (e.g. two overwatch shots
+at the end of a turn). The lower defense is its real defense from then on: Torch and Breath roll against it, and
+Brace still adds +2 on top. The Behemoth's board badge shows "DEF 7 (-3)", and each crack is logged.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).

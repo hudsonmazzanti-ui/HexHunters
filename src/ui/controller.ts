@@ -21,6 +21,7 @@ import {
   actionDie,
   attackDamage,
   baseDefense,
+  naturalDefense,
   canAct,
   canSeeHex,
   effectiveDefense,
@@ -232,6 +233,13 @@ export class Controller {
           this.ui.message = `${this.ui.message ?? ''} ${line}`.trim();
           break;
         }
+        case 'cracked': {
+          this.render();
+          const u = getUnit(this.state, ev.unitId);
+          if (u?.pos) this.board.floatText(u.pos, 'CRACK', '#fca5a5');
+          this.ui.message = `${this.ui.message ?? ''} ${crackText(this.state, ev)}`.trim();
+          break;
+        }
         case 'burn': {
           const pos = getUnit(before, ev.unitId)?.pos;
           if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, '#fb923c');
@@ -375,6 +383,7 @@ export class Controller {
       if (e.type === 'burn') lines.push(burnText(before, this.state, e));
       if (e.type === 'transformed') lines.push(`${PLAYER_NAMES[player]}'s Werewolf transforms into a beast (+${e.healed} HP)!`);
       if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
+      if (e.type === 'cracked') lines.push(crackText(this.state, e));
     }
     if (before.phase === 'play' && before.current === player) {
       lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
@@ -727,7 +736,8 @@ export class Controller {
       const defense = effectiveDefense(s, sel);
       const ownTurn = s.phase === 'play' && sel.owner === s.current;
       const defNotes = [
-        ...(baseDefense(s, sel) > def.defense ? [`+${baseDefense(s, sel) - def.defense} aura`] : []),
+        ...(baseDefense(s, sel) > naturalDefense(s, sel) ? [`+${baseDefense(s, sel) - naturalDefense(s, sel)} aura`] : []),
+        ...(sel.armorCracks ? [`-${sel.armorCracks} cracked`] : []),
         ...(sel.braced ? ['braced'] : []),
       ];
       const damage = attackDamage(s, sel);
@@ -766,6 +776,9 @@ export class Controller {
       if (sel.burning) stats.push(['', `Burning: -${s.config.specials.burnDamage} at its next turn`]);
       if (sel.hacked) stats.push(['', `Hacked: -${s.config.specials.hackPenalty} on its next die`]);
       if (def.flying) stats.push(['', 'Flying: moves over terrain and models']);
+      if (def.crackingArmor) {
+        stats.push(['', `Cracking Armor: -1 def per damaging hit (not Burn), min ${def.crackingArmor.minDefense}`]);
+      }
       if (sel.crawling) stats.push(['', 'Crawling (small, speed 1)']);
       if (sel.resting && ownTurn) stats.push(['', 'Resting (back-to-back turn)']);
       const transformsIn = turnsUntilTransform(s, sel);
@@ -1091,6 +1104,14 @@ export class Controller {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** "Player 2's Behemoth's armor cracks: DEF 9 (-1)." */
+function crackText(state: GameState, ev: Extract<GameEvent, { type: 'cracked' }>): string {
+  const u = getUnit(state, ev.unitId);
+  const who = u ? `${PLAYER_NAMES[u.owner]}'s ${unitDef(state, u).name}` : 'The Behemoth';
+  const floor = u && unitDef(state, u).crackingArmor?.minDefense === ev.defense ? ' It can crack no further.' : '';
+  return `${who}'s armor cracks: DEF ${ev.defense} (-${ev.cracks}).${floor}`;
+}
 
 const attackName = (state: GameState, unit: Unit): string => unitDef(state, unit).attackName ?? 'Attack';
 
