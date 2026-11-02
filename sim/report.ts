@@ -5,7 +5,8 @@
  * "Score" = (wins + draws / 2) / games: a draw counts as half a win. Flags use it.
  */
 import { MISSIONS } from '../src/core/missions';
-import type { GameConfig, MissionId } from '../src/core/types';
+import { CONDITIONS } from '../src/core/conditions';
+import type { ConditionId, GameConfig, MissionId } from '../src/core/types';
 import { entryName } from '../src/core/army';
 import type { GameRecord, Outcome } from './runGame';
 
@@ -69,6 +70,8 @@ export interface Summary {
   flag: { captures: number; pickups: number; drops: number };
   /** The same summary for each mission's games alone (only on the top-level summary). */
   byMission: Partial<Record<MissionId, Summary>>;
+  /** The same summary for each battlefield Condition's games alone (only on the top-level summary). */
+  byCondition: Partial<Record<ConditionId, Summary>>;
 }
 
 export function summarize(records: GameRecord[], config: GameConfig, presetNames: string[], splitMissions = true): Summary {
@@ -93,6 +96,7 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     illegal: 0,
     flag: { captures: 0, pickups: 0, drops: 0 },
     byMission: {},
+    byCondition: {},
   };
   for (const n of presetNames) {
     s.presets[n] = { ...tally(), rounds: 0 };
@@ -173,6 +177,10 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
       const games = records.filter((r) => r.mission === m);
       if (games.length) s.byMission[m] = summarize(games, config, presetNames, false);
     }
+    for (const c of Object.keys(CONDITIONS) as ConditionId[]) {
+      const games = records.filter((r) => r.condition === c);
+      if (games.length) s.byCondition[c] = summarize(games, config, presetNames, false);
+    }
   }
   return s;
 }
@@ -208,11 +216,11 @@ const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join
 
 export function gamesCsv(records: GameRecord[]): string {
   return csv([
-    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'mission', 'shape', 'terrainPieces', 'terrainHexes',
+    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'mission', 'condition', 'shape', 'terrainPieces', 'terrainHexes',
       'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops', 'captureUnit'],
     ...records.map((r) => [
       r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
-      r.seatOfA + 1, r.firstMover, r.mission, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
+      r.seatOfA + 1, r.firstMover, r.mission, r.condition, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
       r.capturesA, r.capturesB, r.flagPickups, r.flagDrops, r.captureUnit ?? '',
     ]),
   ]);
@@ -267,6 +275,31 @@ export interface ReportMeta {
   maxRounds: number;
   /** Set when the run used a balance variant (temporary stat overrides). */
   variant?: string;
+}
+
+/** "By Condition": game flow per battlefield Condition, and preset scores per Condition. */
+function conditionSection(s: Summary, meta: ReportMeta): string {
+  const cs = (Object.keys(s.byCondition) as ConditionId[]).map((id) => ({ id, name: CONDITIONS[id].name, s: s.byCondition[id]! }));
+  if (!cs.length) return '';
+  const decisive = (x: Summary) => x.firstMover.wins + x.firstMover.losses;
+  const objective = (x: Summary) => (x.reasons.points ?? 0) + (x.reasons.capture ?? 0);
+  const draws = (x: Summary) => (x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0);
+  const flow = cs
+    .map(
+      ({ name, s: x }) => `<tr><th>${esc(name)}</th><td>${x.games}</td><td>${p1(pct(x.games, s.games))}</td><td>${x.avgRounds.toFixed(1)}</td>
+      <td>${p1(pct(objective(x), x.games))}</td><td>${p1(pct(x.reasons.elimination ?? 0, x.games))}</td><td>${p1(pct(draws(x), x.games))}</td>
+      <td>${p1(pct(x.firstMover.wins, decisive(x)))}</td></tr>`,
+    )
+    .join('');
+  const cell = (t: Tally | undefined) =>
+    t?.games ? `<td${heat(score(t), t.games, meta.minGames)} title="${t.wins}W ${t.losses}L ${t.draws}D of ${t.games}">${Math.round(100 * score(t))}<span class="muted"> /${t.games}</span></td>` : '<td class="na">–</td>';
+  const grid = s.presetNames.map((n) => `<tr><th>${esc(n)}</th>${cs.map((c) => cell(c.s.presets[n])).join('')}</tr>`).join('');
+  return `<h2>By Condition</h2>
+<section><table><tr><th>Condition</th><th>Games</th><th>Share</th><th>Avg rounds</th><th>Objective wins</th><th>Wipeouts</th><th>Draws</th><th>First mover wins (decisive)</th></tr>${flow}</table>
+<h3>Preset score by Condition (%, then games)</h3>
+<table><tr><th>Army</th>${cs.map((c) => `<th>${esc(c.name)}</th>`).join('')}</tr>${grid}</table>
+<p class="muted">Each game's Condition is random (Clear about half the time; Hot Drop never with Capture the Flag). Most non-Clear
+Conditions have only a handful of games per preset, so treat this grid as a rough guide: pale cells have fewer than ${meta.minGames} games.</p></section>`;
 }
 
 /** Capture the Flag: which unit types made the winning captures, overall and per preset. */
@@ -497,6 +530,8 @@ of ${s.games} games: <b>${p1(pct(s.firstMover.wins, decisive))}</b> of decisive 
 <h3>Preset score by shape (%)</h3><table>${presetShape}</table></section>
 
 ${missionSection(s, config, meta)}
+
+${conditionSection(s, meta)}
 
 <h2>How games end</h2>
 <section><table><tr><th>Win type</th><th>Games</th><th>Share</th></tr>${reasonRows}</table></section>

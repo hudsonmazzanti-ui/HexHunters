@@ -14,8 +14,12 @@ export interface MissionWin {
  */
 export interface MissionDef {
   name: string;
+  /** Icon key for the briefing and the in-game corner button (see src/ui/icons.ts). */
+  icon: string;
   /** One line, shown with the mission's name before deployment. */
   summary(config: GameConfig): string;
+  /** A few words for the briefing card, readable at a glance. */
+  brief(config: GameConfig): string;
   /** The full rules, one line each (the mission info panel). */
   rules(config: GameConfig): string[];
   /** Does the control point exist in this mission (drawn on the board, scored)? */

@@ -17,6 +17,7 @@
  * A preset that becomes illegal under a variant (e.g. over 16 points) is left out of
  * that variant's round robin and reported as "not legal".
  */
+import { CONDITIONS } from '../src/core/conditions';
 import type { GameConfig, SpecialRules, UnitDef } from '../src/core/types';
 import { DEFAULT_CONFIG } from '../src/data/config';
 
@@ -92,6 +93,14 @@ export const VARIANTS: Record<string, Variant> = {
     description: 'Every game is Capture the Flag.',
     settings: { missions: ['ctf'] },
   },
+
+  // ---- Conditions: by default each game's Condition is random; `only-<id>` forces one ----
+  ...Object.fromEntries(
+    Object.values(CONDITIONS).map((c): [string, Variant] => [
+      `only-${c.id}`,
+      { label: `${c.name} only`, description: `Every game has the ${c.name} Condition (if the mission allows it).`, settings: { conditions: { [c.id]: 1 } } },
+    ]),
+  ),
 
   // ---- Pacing experiment ----
   'slow-large': {

@@ -21,6 +21,7 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
       deployZones: deployZones(config.boardRadius, config.deployRows),
     },
     mission: 'koth',
+    condition: 'clear',
     flag: null,
     flagChanges: [],
     units: [],
@@ -79,6 +80,7 @@ export function addUnit(
     attacked: false,
     armorCracks: 0,
     usesLeft: null,
+    free: false,
     ...extra,
   };
   state.units.push(unit);

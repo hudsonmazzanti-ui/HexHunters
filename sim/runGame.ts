@@ -8,7 +8,7 @@
  */
 import { type Action, type GameEvent, applyAction, newGame } from '../src/core/game';
 import { Rng } from '../src/core/rng';
-import type { GameConfig, GameState, MissionId, PlayerId } from '../src/core/types';
+import type { ConditionId, GameConfig, GameState, MissionId, PlayerId } from '../src/core/types';
 import { DEFAULT_CONFIG } from '../src/data/config';
 import { DEPLOY_SHAPES } from '../src/data/deployShapes';
 import type { ArmySpec } from './armies';
@@ -48,6 +48,8 @@ export interface GameRecord {
   shape: string;
   /** This game's mission id ('koth', 'ctf'). */
   mission: MissionId;
+  /** This game's battlefield Condition id ('clear', 'fog', ...). */
+  condition: ConditionId;
   /** Capture the Flag: flag captures by each army (a capture wins, so 0 or 1), pickups and drops (0 in other missions). */
   capturesA: number;
   capturesB: number;
@@ -169,6 +171,7 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     firstMover: state.firstPlayer === job.seatOfA ? 'A' : 'B',
     shape: DEPLOY_SHAPES[state.map.deployShape]?.name ?? state.map.deployShape,
     mission: state.mission,
+    condition: state.condition,
     capturesA: captures[job.seatOfA],
     capturesB: captures[job.seatOfA === 0 ? 1 : 0],
     flagPickups,

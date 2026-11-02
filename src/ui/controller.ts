@@ -27,6 +27,7 @@ import {
   canAct,
   canSeeHex,
   effectiveDefense,
+  effectiveRange,
   getUnit,
   hasDoubleAction,
   livingUnits,
@@ -66,6 +67,8 @@ import { heroName, speedName } from '../data/config';
 import { AURAS, aurasOn } from '../core/auras';
 import { flagCarrier, isCarrier } from '../core/flag';
 import { MISSIONS } from '../core/missions';
+import { CONDITIONS } from '../core/conditions';
+import { icon } from './icons';
 import { BoardView, type BoardOverlay, HEX_SIZE, UNDO_MS } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
@@ -188,7 +191,7 @@ export class Controller {
       switch (ev.type) {
         case 'armyChosen':
           if (ev.next === null) {
-            await this.revealSetup();
+            await this.showBriefing();
             await this.deployHandoff(this.state.current);
           }
           break;
@@ -418,30 +421,95 @@ export class Controller {
 
   /** After both armies are built: this game's mission, with its one-line rule. */
   /**
-   * After both armies are built, one screen: this game's mission (with its one-line
-   * rule) and deployment shape, over a small map of both zones and the objective.
+   * The briefing: after both armies are built (and again from the corner icons), three
+   * picture-first cards: the mission, the deployment (a mini-map of this board) and the
+   * battlefield Condition. Reopened during play, it also offers the mission's full rules.
    */
-  private async revealSetup(): Promise<void> {
-    const m = MISSIONS[this.state.mission];
-    const shape = DEPLOY_SHAPES[this.state.map.deployShape];
+  private async showBriefing(reopened = false): Promise<void> {
+    if (reopened && this.busy) return;
+    const s = this.state;
+    const m = MISSIONS[s.mission];
+    const shape = DEPLOY_SHAPES[s.map.deployShape];
+    const cond = CONDITIONS[s.condition];
+    const card = (label: string, art: Element, name: string, line: string) => {
+      const div = document.createElement('div');
+      div.className = 'brief-card';
+      const pic = document.createElement('div');
+      pic.className = 'brief-art';
+      pic.append(art);
+      const text = document.createElement('div');
+      text.className = 'brief-text';
+      const l = document.createElement('div');
+      l.className = 'brief-label';
+      l.textContent = label;
+      const n = document.createElement('div');
+      n.className = 'brief-name';
+      n.textContent = name;
+      const p = document.createElement('div');
+      p.className = 'brief-line';
+      p.textContent = line;
+      text.append(l, n, p);
+      div.append(pic, text);
+      return div;
+    };
+    const cards = document.createElement('div');
+    cards.className = 'briefing';
+    cards.append(
+      card('Mission', icon(m.icon, 72), m.name, m.brief(s.config)),
+      card('Deployment', zoneMap(s), shape.name, `${PLAYER_NAMES[0]} blue · ${PLAYER_NAMES[1]} red`),
+      card('Condition', icon(cond.icon, 72), cond.name, cond.summary),
+    );
     await showOverlay({
-      title: m.name,
-      lines: [
-        m.summary(this.state.config),
-        `${shape.name} deployment: ${shape.description}`,
-        `${PLAYER_NAMES[0]} deploys in blue, ${PLAYER_NAMES[1]} in red. Tap the mission name at the top any time for the full rules.`,
-      ],
-      art: zoneMap(this.state),
-      tapText: 'Tap to start placing',
+      title: 'Briefing',
+      art: cards,
+      artBelowTitle: true,
+      className: 'wide',
+      ...(reopened
+        ? {
+            buttons: [
+              { label: 'Back to the game', className: 'primary', onClick: () => this.render() },
+              { label: 'Full mission rules', onClick: () => void this.showMissionRules() },
+            ],
+          }
+        : { tapText: 'Tap to start placing' }),
     });
   }
 
-  /** The mission's full rules (tap the mission chip in the top bar). */
+  /** The mission's full rules (from the briefing during play). */
   private async showMissionRules(): Promise<void> {
-    if (this.busy) return;
     const m = MISSIONS[this.state.mission];
     await showOverlay({ title: m.name, lines: m.rules(this.state.config), tapText: 'Tap to close' });
     this.render();
+  }
+
+  /** Small mission and Condition icons in the board's top-left corner; tapping reopens the briefing. */
+  private renderBriefTools(): void {
+    let box = document.getElementById('brief-tools');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'brief-tools';
+      document.getElementById('stage')!.append(box);
+    }
+    const s = this.state;
+    const show = s.phase === 'deploy' || s.phase === 'play' || s.phase === 'over';
+    box.hidden = !show;
+    if (!show) return;
+    const key = `${s.mission}/${s.condition}`;
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    const button = (name: string, label: string) => {
+      const b = document.createElement('button');
+      b.className = 'tool brief-tool';
+      b.setAttribute('aria-label', `${label} (open the briefing)`);
+      b.title = label;
+      b.append(icon(name, 30));
+      b.onclick = () => void this.showBriefing(true);
+      return b;
+    };
+    box.replaceChildren(
+      button(MISSIONS[s.mission].icon, MISSIONS[s.mission].name),
+      button(CONDITIONS[s.condition].icon, CONDITIONS[s.condition].name),
+    );
   }
 
   private async deployHandoff(p: PlayerId): Promise<void> {
@@ -705,7 +773,8 @@ export class Controller {
   // ---------- Rendering ----------
 
   private render(): void {
-    renderTopBar(this.state, () => void this.showMissionRules());
+    renderTopBar(this.state);
+    this.renderBriefTools();
     this.board.render(this.state, this.boardOverlay());
     renderPanel(this.panelModel(), (id) => this.onChip(id));
   }
@@ -762,7 +831,7 @@ export class Controller {
       if (terrainHeight(s, h) > 0 || hexDistance(h, sel.pos) === 0) continue;
       const key = hexKey(h);
       if (def.indirectFire) {
-        if (hexDistance(h, sel.pos) <= def.range) o.shade.set(key, 'range');
+        if (hexDistance(h, sel.pos) <= effectiveRange(s, sel)) o.shade.set(key, 'range');
         continue;
       }
       let hiddenFor = 0;
@@ -771,7 +840,7 @@ export class Controller {
         hiddenFor = size;
       }
       if (hiddenFor > 0) o.shade.set(key, `hide-${hiddenFor}`);
-      else if (hexDistance(h, sel.pos) <= def.range) o.shade.set(key, 'range');
+      else if (hexDistance(h, sel.pos) <= effectiveRange(s, sel)) o.shade.set(key, 'range');
     }
 
     if (s.phase !== 'play' || sel.owner !== s.current) return o;
@@ -860,7 +929,7 @@ export class Controller {
       const stats: [string, string][] = [
         ['HP', `${sel.hp}/${maxHealth(s, sel)}`],
         ['Def', defNotes.length ? `${defense} (${defNotes.join(', ')})` : `${defense}`],
-        ['Range', def.range === 1 ? '1 (melee)' : def.indirectFire ? `${def.range} (indirect)` : `${def.range}`],
+        ['Range', (def.range === 1 ? '1 (melee)' : def.indirectFire ? `${def.range} (indirect)` : `${def.range}`) + (effectiveRange(s, sel) < def.range ? ` (${effectiveRange(s, sel)} in ${CONDITIONS[s.condition].name})` : '')],
         ['Dmg', damage > def.damage ? `${damage} (+${damage - def.damage} aura)` : `${damage}`],
         ['Move', `${ownTurn ? `${sel.movesLeft}/` : ''}${unitSpeed(s, sel)} ${moveNote(s, sel)}`.trim()],
       ];
@@ -876,7 +945,7 @@ export class Controller {
       if (sel.die !== null) {
         const point = sel.acted ? 0 : actionBonus(s, sel);
         const prep =
-          (sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '') + (point ? ` (+${point} on point)` : '');
+          (sel.dieBonus ? ` (${sel.die - sel.dieBonus}${sel.dieBonus > 0 ? '+' : '−'}${Math.abs(sel.dieBonus)} ${dieBonusSource(s, sel)})` : '') + (point ? ` (+${point} on point)` : '');
         stats.unshift(['Die', `${sel.die}${prep}${hackNote}${sel.acted ? ' used' : ''}`]);
       }
       // Dual Gunner: its attack, then Second Shot.
@@ -1263,6 +1332,12 @@ function overwatchText(state: GameState, ev: Extract<GameEvent, { type: 'overwat
 }
 
 /** "normal", or "(slow +1)" when an aura adds movement. */
+/** What a die bonus came from: "bonus", or the Condition's name when that's all of it (Blood Moon, Sandstorm). */
+function dieBonusSource(state: GameState, unit: Unit): string {
+  const cond = CONDITIONS[state.condition];
+  return cond.dieDelta && unit.dieBonus === cond.dieDelta ? cond.name : 'bonus';
+}
+
 function moveNote(state: GameState, unit: Unit): string {
   const def = unitDef(state, unit);
   const name = speedName(def.speed);

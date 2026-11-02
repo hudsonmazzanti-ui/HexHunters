@@ -10,7 +10,7 @@
 import { dealDamage } from '../combat';
 import { type Hex, hexDistance, neighbors } from '../hex';
 import { hasLineOfSight } from '../los';
-import { actionDie, burnsOn, onBoard, terrainHeight, unitAt, unitDef, unitSize } from '../queries';
+import { actionDie, burnsOn, maxReach, onBoard, terrainHeight, unitAt, unitDef, unitSize } from '../queries';
 import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
@@ -25,13 +25,14 @@ export function grenadeArcClear(state: GameState, from: Hex, to: Hex): boolean {
   });
 }
 
-function blast(state: GameState, impact: Hex): SpecialPreview {
+/** The blast at `impact`, thrown from `from`. Fog: models more than 4 from the thrower aren't hit. */
+function blast(state: GameState, impact: Hex, from: Hex): SpecialPreview {
   const { grenadeImpactDamage, grenadeSplashDamage } = state.config.specials;
   const ring = neighbors(impact).filter((h) => onBoard(state, h));
   const effects: Effect[] = [];
   const hitAt = (h: Hex, damage: number) => {
     const u = unitAt(state, h);
-    if (u) effects.push({ unitId: u.id, damage, killed: u.hp <= damage });
+    if (u && hexDistance(from, h) <= maxReach(state)) effects.push({ unitId: u.id, damage, killed: u.hp <= damage });
   };
   hitAt(impact, grenadeImpactDamage);
   ring.forEach((h) => hitAt(h, grenadeSplashDamage));
@@ -58,9 +59,9 @@ export const grenade: SpecialDef = {
     if (terrainHeight(state, hex!) > 0) return 'Cannot target terrain';
     return grenadeArcClear(state, unit.pos!, hex!) ? null : 'Arc blocked';
   },
-  preview: (state, _unit, { hex }) => blast(state, hex!),
+  preview: (state, unit, { hex }) => blast(state, hex!, unit.pos!),
   apply: (state, unit, { hex }) => {
-    const { effects } = blast(state, hex!);
+    const { effects } = blast(state, hex!, unit.pos!);
     const burn = burnsOn(state, unit, 'special');
     for (const e of effects) {
       const u = state.units.find((x) => x.id === e.unitId) as Unit;

@@ -435,10 +435,10 @@ describe('Random missions', () => {
     }
   });
 
-  it('the mission doesn\'t change the map or dice for a seed', () => {
+  it('the mission doesn\'t change the map or dice for a seed (same Condition)', () => {
     for (let seed = 1; seed < 30; seed++) {
-      const a = newGame({ ...DEFAULT_CONFIG, missions: ['koth'] }, seed);
-      const b = newGame({ ...DEFAULT_CONFIG, missions: ['ctf'] }, seed);
+      const a = newGame({ ...DEFAULT_CONFIG, missions: ['koth'], conditions: { clear: 1 } }, seed);
+      const b = newGame({ ...DEFAULT_CONFIG, missions: ['ctf'], conditions: { clear: 1 } }, seed);
       expect(b.map).toEqual(a.map);
       expect(b.rngState).toBe(a.rngState);
     }

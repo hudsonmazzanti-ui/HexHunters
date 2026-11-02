@@ -11,6 +11,7 @@ import { raiseDead } from './necro';
 import { auraEffects } from './auras';
 import { settleFlag } from './flag';
 import { MISSIONS, pickMission } from './missions';
+import { CONDITIONS, mapConfig, pickCondition } from './conditions';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
 import {
@@ -107,11 +108,19 @@ export function newGame(config: GameConfig, seed: number): GameState {
   const problems = validateConfig(config);
   if (problems.length) throw new Error(`Invalid config: ${problems.join('; ')}`);
   const mission = pickMission(config, seed);
+  // The Condition can change the board (Small / Big Map, Hot Drop, room for Bonus Bones).
+  const condition = pickCondition(config, seed, mission);
+  const c = CONDITIONS[condition];
+  const map = generateMap(mapConfig(config, condition), seed, {
+    shape: c.deployShape,
+    extraModels: c.freeUnits?.length ?? 0,
+  });
   const state: GameState = {
     config,
     seed,
-    map: generateMap(config, seed),
+    map,
     mission,
+    condition,
     flag: null,
     flagChanges: [],
     units: [],
@@ -172,6 +181,15 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
           unit.usesLeft = specialUsesFor(state.config, action.units, unit.type); // Premium Shot
         }
       }
+      // Condition (Bonus Bones): free models, added last. They aren't in the army list, so
+      // they don't count toward points or the Mercenary's unspent points.
+      for (const type of CONDITIONS[state.condition].freeUnits ?? []) {
+        const unit = newUnit(state.config, player, type, index++);
+        unit.id = `p${player}-${type}-free-${index}`;
+        unit.free = true;
+        state.units.push(unit);
+        unit.hp = maxHealth(state, unit);
+      }
       if (player === 0) {
         state.current = 1;
       } else {
@@ -185,6 +203,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       if (state.phase !== 'deploy') fail('Not deploying');
       const unit = ownUnit(action.unitId);
       if (unit.pos) fail('Already placed');
+      if (unit.free && unplacedUnits(state, state.current).some((u) => !u.free)) fail('Place your other models first');
       if (!isInDeployZone(state, state.current, action.hex)) fail('Outside your deployment zone');
       if (unitAt(state, action.hex)) fail('Hex occupied');
       const partner = unit.partnerId ? getUnit(state, unit.partnerId) : undefined;
@@ -368,6 +387,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     attacked: false,
     armorCracks: 0,
     usesLeft: null,
+    free: false,
   };
 }
 
@@ -472,7 +492,8 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     }
     // Prep and the Field Marshal's aura both add to the roll, and stack.
     const prep = unit.prepped ? state.config.specials.prepRollBonus : 0;
-    unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0);
+    // A Condition (Blood Moon / Sandstorm) changes every die result too.
+    unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0) + (CONDITIONS[state.condition].dieDelta ?? 0);
     unit.prepped = false;
     // Gambler: no roll yet ("?"); the die rolls when an action is confirmed.
     // Models without a die (Behemoth) never roll: no die, no bonuses, no Gambler.

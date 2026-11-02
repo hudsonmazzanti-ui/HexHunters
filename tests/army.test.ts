@@ -1,3 +1,4 @@
+import { shapeZones } from '../src/core/mapgen';
 import { describe, expect, it } from 'vitest';
 import { addBlockedReason, armyCost, validateArmy } from '../src/core/army';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
@@ -73,8 +74,12 @@ describe('army building', () => {
     };
     expect(validateArmy(config, ['titan', 'titan', 'titan', 'titan', 'grunt', 'grunt'])).toBeNull(); // 30
     expect(validateArmy(config, ['titan', 'titan', 'titan', 'titan', 'grunt', 'grunt', 'grunt'])).toMatch(/limit/);
-    // More models than the deployment zone (17 hexes) can hold.
-    expect(validateArmy(config, Array(18).fill('grunt'))).toMatch(/Too many/);
+    // Deployment zones grow to fit the largest legal army (30 grunts), so it's still legal.
+    expect(validateArmy(config, Array(30).fill('grunt'))).toBeNull();
+    for (const id of config.deployShapes) expect(shapeZones(config, id)[0].length).toBeGreaterThanOrEqual(30);
+    // A zone that can't grow enough still rejects the army (the safety net).
+    const huge = { ...config, armyPointLimit: 200 };
+    expect(validateArmy(huge, Array(200).fill('grunt'))).toMatch(/Too many/);
   });
 });
 

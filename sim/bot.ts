@@ -437,7 +437,9 @@ function isFrontLiner(state: GameState, unit: Unit): boolean {
 /** The bot's next placement during deployment. */
 export function planPlacement(state: GameState, rng: Rng): Action {
   const me: PlayerId = state.current;
-  const todo = unplacedUnits(state, me);
+  // Free models (Bonus Bones) can only go down once the rest of the army is placed.
+  const all = unplacedUnits(state, me);
+  const todo = all.some((u) => !u.free) ? all.filter((u) => !u.free) : all;
   // Front-liners first, so they get the forward hexes.
   const unit = todo.find((u) => isFrontLiner(state, u)) ?? todo[0];
   const front = isFrontLiner(state, unit);

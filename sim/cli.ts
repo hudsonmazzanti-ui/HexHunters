@@ -24,6 +24,10 @@
  * Missions: each game's mission is picked at random (King of the Hill or Capture the Flag,
  * 50/50) and the report breaks results down by mission. To force one:
  *   --mission koth|ctf  same as --variant koth-only / ctf-only
+ *
+ * Conditions: each game's battlefield Condition is random (weights in config.ts), and the
+ * report has a "By Condition" section. To force one: --condition fog (same as
+ * --variant only-fog). Hot Drop can't go with Capture the Flag, so those games are Clear.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -176,6 +180,8 @@ async function main(): Promise<void> {
     ids = [a.variant];
   } else if (a.mission) {
     ids = [`${a.mission}-only`];
+  } else if (a.condition) {
+    ids = [`only-${a.condition}`];
   }
   for (const id of ids) variantConfig(id); // fail fast on an unknown id
 
@@ -191,7 +197,7 @@ async function main(): Promise<void> {
     };
     const r = runGame(job, { keepLog: true, config: variantConfig(ids[0]) });
     console.log(`Seed ${seed}${ids[0] !== 'baseline' ? ` · variant ${ids[0]}` : ''}: ${job.a.name} [${job.a.units.join(' ')}] (P${job.seatOfA + 1}) vs ${job.b.name} [${job.b.units.join(' ')}]`);
-    console.log(`Mission ${r.mission} · shape ${r.shape} · first mover ${r.firstMover}`);
+    console.log(`Mission ${r.mission} · Condition ${r.condition} · shape ${r.shape} · first mover ${r.firstMover}`);
     r.log!.forEach((act, i) => console.log(`${String(i + 1).padStart(4)}. ${JSON.stringify(act)}`));
     console.log(`Result: ${r.winner === 'draw' ? 'draw' : `${r.winner === 'A' ? job.a.name : job.b.name} wins`} (${r.reason}) after ${r.rounds} rounds, ${r.scoreA}-${r.scoreB}`);
     return;

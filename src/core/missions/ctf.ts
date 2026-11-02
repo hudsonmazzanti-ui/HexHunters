@@ -19,6 +19,8 @@ import type { MissionDef } from './types';
 
 export const ctf: MissionDef = {
   name: 'Capture the Flag',
+  icon: 'flag',
+  brief: () => 'Carry the flag home to win.',
   summary: () => 'Grab the flag in the center and carry it into your own deployment zone to win.',
   rules: (c) => {
     const r = c.specials;
