@@ -63,6 +63,10 @@ export const COLORS = {
   hackDark: '#052e16',
   moon: '#fde68a',
   shell: '#f59e0b',
+  /** Capture the Flag: the flag's cloth (neutral magenta, unlike either team) and its pole. */
+  flag: '#e11d8c',
+  flagDark: '#831843',
+  flagPole: '#1f2937',
 
   // Badges
   dieFace: '#ffffff',

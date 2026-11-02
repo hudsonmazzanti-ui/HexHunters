@@ -5,7 +5,8 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
+import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitAt, unitDef, unitSize } from '../core/queries';
+import { isCarrier } from '../core/flag';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 import { getSettings } from './settings';
@@ -58,6 +59,16 @@ export interface BoardOverlay {
   partnerId: string | null;
   /** hexKey -> owner of a Sentinel watching that hex (overwatch, shown to both players). */
   watch: Map<string, PlayerId>;
+  /** Capture the Flag: the zone where the current player's flag carrier scores, outlined. */
+  scoreZone: { player: PlayerId; hexes: Set<string> } | null;
+}
+
+/** A pennant on a pole, pole foot at (0, 0). `dir` 1 = cloth to the right, -1 = left. */
+function pennant(parent: SVGElement, dir: 1 | -1, cls: string): SVGGElement {
+  const g = el('g', { class: cls }, parent);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: -22, class: 'pole' }, g);
+  el('path', { d: `M0 -22L${15 * dir} -16.5L0 -11Z`, class: 'cloth' }, g);
+  return g;
 }
 
 interface UnitNodes {
@@ -81,7 +92,10 @@ interface UnitNodes {
 
 export class BoardView {
   readonly world: SVGGElement;
-  private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'cp' | 'dots' | 'units' | 'fx', SVGGElement>;
+  private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'goal' | 'cp' | 'dots' | 'units' | 'flag' | 'fx', SVGGElement>;
+  private goals = new Map<string, SVGPolygonElement>();
+  /** Capture the Flag: the flag lying on the ground (hidden while carried). */
+  private groundFlag: SVGGElement | null = null;
   private shades = new Map<string, SVGPolygonElement>();
   private watches = new Map<string, SVGPolygonElement>();
   private dots = new Map<string, SVGCircleElement>();
@@ -98,28 +112,36 @@ export class BoardView {
       terrain: el('g', {}, this.world),
       watch: el('g', {}, this.world),
       shade: el('g', {}, this.world),
+      goal: el('g', {}, this.world),
       cp: el('g', {}, this.world),
       dots: el('g', {}, this.world),
       units: el('g', {}, this.world),
+      flag: el('g', {}, this.world),
       fx: el('g', {}, this.world),
     };
   }
 
-  /** Draws the static board and returns its bounds in world units. */
-  setMap(map: GameMap): Bounds {
+  /**
+   * Draws the static board and returns its bounds in world units. The control point is
+   * only drawn in missions that use it (not in Capture the Flag).
+   */
+  setMap(map: GameMap, showControlPoint = true): Bounds {
     for (const layer of Object.values(this.layers)) layer.replaceChildren();
     this.shades.clear();
+    this.goals.clear();
+    this.groundFlag = null;
     this.watches.clear();
     this.dots.clear();
     this.units.clear();
 
-    const cpKeys = new Set(map.controlPoint.map(hexKey));
+    const cpKeys = new Set(showControlPoint ? map.controlPoint.map(hexKey) : []);
     const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
     for (const h of hexagon(map.radius)) {
       const key = hexKey(h);
       el('polygon', { points: points(h), class: `hex-base${cpKeys.has(key) ? ' cp' : ''}` }, this.layers.base);
       this.shades.set(key, el('polygon', { points: points(h), class: 'shade' }, this.layers.shade));
+      this.goals.set(key, el('polygon', { points: points(h, HEX_SIZE - 3), class: 'goal' }, this.layers.goal));
       this.watches.set(key, el('polygon', { points: points(h, HEX_SIZE - 2), class: 'watch' }, this.layers.watch));
       const c = hexToPixel(h, HEX_SIZE);
       const dot = el('circle', { cx: c.x, cy: c.y, r: 6, class: 'reach-dot', visibility: 'hidden' }, this.layers.dots);
@@ -135,7 +157,7 @@ export class BoardView {
     this.drawTerrain(map);
 
     // Thick outline around the 7-hex control point: draw only edges not shared with another CP hex.
-    for (const h of map.controlPoint) {
+    for (const h of showControlPoint ? map.controlPoint : []) {
       const corners = hexCorners(h, HEX_SIZE);
       for (let i = 0; i < 6; i++) {
         const a = corners[i];
@@ -174,6 +196,11 @@ export class BoardView {
       poly.setAttribute('class', owner === undefined ? 'watch' : `watch on watch-${owner}`);
     }
     for (const [key, dot] of this.dots) dot.setAttribute('visibility', overlay.dots.has(key) ? 'visible' : 'hidden');
+    const zone = overlay.scoreZone;
+    for (const [key, poly] of this.goals) {
+      poly.setAttribute('class', zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal');
+    }
+    this.renderFlag(state);
 
     const alive = new Set<string>();
     for (const unit of state.units) {
@@ -193,6 +220,26 @@ export class BoardView {
       nodes.g.classList.add('dead');
       setTimeout(() => nodes.g.remove(), 400);
     }
+  }
+
+  /** Capture the Flag: the flag on the ground, drawn above models (offset to the side if one stands on it). */
+  private renderFlag(state: GameState): void {
+    const at = state.flag?.pos;
+    if (!at) {
+      this.groundFlag?.setAttribute('visibility', 'hidden');
+      return;
+    }
+    if (!this.groundFlag) {
+      this.groundFlag = el('g', { class: 'ground-flag' }, this.layers.flag);
+      el('ellipse', { cx: 0, cy: 0, rx: 7, ry: 2.5, class: 'flag-shadow' }, this.groundFlag);
+      pennant(el('g', { transform: 'scale(1.35)' }, this.groundFlag), 1, 'flag-pennant');
+    }
+    const c = hexToPixel(at, HEX_SIZE);
+    // A model standing on the flag: draw it at the hex's lower left so both stay visible.
+    const dx = unitAt(state, at) ? -HEX_SIZE * 0.55 : 0;
+    const dy = unitAt(state, at) ? HEX_SIZE * 0.55 : 9;
+    this.groundFlag.setAttribute('transform', `translate(${c.x + dx} ${c.y + dy})`);
+    this.groundFlag.setAttribute('visibility', 'visible');
   }
 
   private createUnit(state: GameState, unit: Unit): UnitNodes {
@@ -230,6 +277,10 @@ export class BoardView {
 
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
+
+    // Capture the Flag: the carrier holds a pennant, rising from its upper left.
+    const carry = el('g', { class: 'carry-flag', transform: `translate(${-r * 0.45} ${-r * 0.35}) scale(1.25)` }, g);
+    pennant(carry, -1, 'flag-pennant');
 
     // Hero crown, above the model.
     const crown = el('g', { class: 'crown', transform: `translate(0 ${-r - 3})` }, g);
@@ -306,6 +357,7 @@ export class BoardView {
     cls.toggle('burning', unit.burning);
     cls.toggle('hacked', unit.hacked || (unit.hackPenalty > 0 && (unit.die !== null || unit.gambling)));
     cls.toggle('twin', !!unit.partnerId);
+    cls.toggle('carrier', isCarrier(state, unit));
     cls.toggle('partner', o.partnerId === unit.id);
     const transformsIn = turnsUntilTransform(state, unit);
     cls.toggle('counting', transformsIn !== null);

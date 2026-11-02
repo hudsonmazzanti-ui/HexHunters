@@ -45,4 +45,6 @@ export interface AuraDef {
   effects(rules: SpecialRules, unit: UnitDef): AuraEffects;
   /** Army-wide: points scored for winning the control point at the end of a round (default 1). */
   holdPoints?(rules: SpecialRules): number;
+  /** Army-wide: extra points per flag capture in Capture the Flag (default 0). */
+  captureBonus?(rules: SpecialRules): number;
 }

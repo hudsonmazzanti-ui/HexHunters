@@ -459,6 +459,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   deployShapes: ['standard', 'corners', 'flanks', 'spearhead', 'split', 'close'],
   maxRange: 7,
   dieSides: 12,
+  missions: ['koth', 'ctf'],
   pointsToWin: 5,
   armyPointLimit: 16,
   maxHeroesPerArmy: 1,
@@ -503,5 +504,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     spotRange: 7,
     premiumRange: 7,
     premiumDamage: 4,
+    flagCapturePoints: 2,
+    flagCarrierSlow: 1,
+    standardCaptureBonus: 1,
   },
 };

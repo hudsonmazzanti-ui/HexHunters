@@ -7,6 +7,7 @@ export const pounce: SpecialDef = {
   targeting: 'none',
   tags: ['Then attack'],
   keepsMovement: true,
+  grantsMovement: true,
   allowsAttackAfter: true,
   apply: (state, unit) => {
     unit.movesLeft += state.config.specials.pounceMoves;

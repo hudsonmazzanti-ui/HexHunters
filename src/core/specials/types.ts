@@ -72,6 +72,11 @@ export interface SpecialDef {
   tags?: string[];
   /** Keep the model's unused movement after using this special (it may move on). */
   keepsMovement?: boolean;
+  /**
+   * Adds movement beyond the model's normal move (Dash, Pounce). A flag carrier using it
+   * drops the flag where it stands (Capture the Flag: walking only).
+   */
+  grantsMovement?: boolean;
   /** The model may still make its attack afterwards with the same die (Werewolf's Pounce). */
   allowsAttackAfter?: boolean;
   /** Only usable after the model's basic attack this turn, with the same die (Dual Gunner's Second Shot). */

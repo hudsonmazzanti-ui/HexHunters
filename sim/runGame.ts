@@ -8,7 +8,7 @@
  */
 import { type Action, type GameEvent, applyAction, newGame } from '../src/core/game';
 import { Rng } from '../src/core/rng';
-import type { GameConfig, GameState, PlayerId } from '../src/core/types';
+import type { GameConfig, GameState, MissionId, PlayerId } from '../src/core/types';
 import { DEFAULT_CONFIG } from '../src/data/config';
 import { DEPLOY_SHAPES } from '../src/data/deployShapes';
 import type { ArmySpec } from './armies';
@@ -46,6 +46,13 @@ export interface GameRecord {
   /** Which army won the coin flip and went first in round 1. */
   firstMover: 'A' | 'B';
   shape: string;
+  /** This game's mission id ('koth', 'ctf'). */
+  mission: MissionId;
+  /** Capture the Flag: flag captures by each army, pickups and drops (0 in other missions). */
+  capturesA: number;
+  capturesB: number;
+  flagPickups: number;
+  flagDrops: number;
   /** Terrain on this game's map. */
   terrainPieces: number;
   terrainHexes: number;
@@ -84,6 +91,9 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
   const usage: Record<string, UnitUsage> = {};
   const use = (type: string) => (usage[type] ??= { turns: 0, attacks: 0, specials: 0 });
   let illegal = 0;
+  const captures: [number, number] = [0, 0];
+  let flagPickups = 0;
+  let flagDrops = 0;
 
   let state: GameState = newGame(config, job.seed);
   // Terrain as generated (Hurl and Smash can remove some during the game).
@@ -104,6 +114,9 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     for (const ev of events) {
       if (ev.type === 'attack') use(typeOf(before, ev.unitId)).attacks++;
       else if (ev.type === 'special' || ev.type === 'gambleFailed') use(typeOf(before, ev.unitId)).specials++;
+      else if (ev.type === 'flagCaptured') captures[ev.player]++;
+      else if (ev.type === 'flagPickedUp') flagPickups++;
+      else if (ev.type === 'flagDropped') flagDrops++;
       else if (ev.type === 'turnStart') {
         for (const u of state.units) if (u.owner === ev.player && u.pos && !u.resting) use(u.type).turns++;
       }
@@ -149,6 +162,11 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     seatOfA: job.seatOfA,
     firstMover: state.firstPlayer === job.seatOfA ? 'A' : 'B',
     shape: DEPLOY_SHAPES[state.map.deployShape]?.name ?? state.map.deployShape,
+    mission: state.mission,
+    capturesA: captures[job.seatOfA],
+    capturesB: captures[job.seatOfA === 0 ? 1 : 0],
+    flagPickups,
+    flagDrops,
     terrainPieces,
     terrainHexes,
     winner,

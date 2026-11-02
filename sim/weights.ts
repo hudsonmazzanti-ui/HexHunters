@@ -36,6 +36,28 @@ export const WEIGHTS = {
   /** Danger from enemies that can't see the hex right now counts this much. */
   dangerUnseen: 0.5,
 
+  // ---- Capture the Flag ----
+  /** Per hex closer to a loose flag (only the two own models nearest to it chase it). */
+  flagApproach: 0.45,
+  /** Standing on the loose flag (ready to pick it up). */
+  onFlag: 1.5,
+  /** Picking up the flag. */
+  pickUp: 5.0,
+  /** Carrier: per hex closer to its own deployment zone. */
+  carryHome: 0.9,
+  /** Carrier: standing in its own zone (it scores at the end of the turn). */
+  inZone: 8.0,
+  /** Carrier: the flag counts as this much extra value at stake when judging danger. */
+  flagStake: 4.0,
+  /** Per hex farther than 2 from its own carrier (escort). */
+  escort: 0.25,
+  /** Damage to the enemy carrier counts this many times as much (chase and kill it). */
+  carrierTarget: 1.6,
+  /** Making the enemy carrier drop the flag (Hack, Hook, Shove). */
+  knockFlag: 4.0,
+  /** Making its own carrier drop the flag (Dash, Vault, Pounce, Swap, hooking it). */
+  dropOwnFlag: 6.0,
+
   // ---- Specials without direct damage ----
   brace: 0.25, // per point of expected incoming damage it would block
   prep: 0.6, // when the model has nothing better to do

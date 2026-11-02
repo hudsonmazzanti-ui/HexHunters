@@ -104,3 +104,30 @@ describe('report', () => {
     expect(html).toContain('Twins');
   }, 60_000);
 });
+
+describe('missions in the simulator', () => {
+  it('plays legal Capture the Flag games where the bot picks up, carries and captures the flag', () => {
+    const ctfConfig = { ...config, missions: ['ctf' as const] };
+    const jobs = buildJobs(ctfConfig, { seed: 21, perMatchup: 0, randomGames: 30 });
+    const records = runJobs(jobs, { config: ctfConfig });
+    expect(records.every((r) => r.mission === 'ctf' && r.illegal === 0)).toBe(true);
+    const total = (f: (r: (typeof records)[number]) => number) => records.reduce((n, r) => n + f(r), 0);
+    expect(total((r) => r.flagPickups)).toBeGreaterThan(10);
+    expect(total((r) => r.capturesA + r.capturesB)).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('random missions are mixed in a run and the report breaks results down by mission', () => {
+    const jobs = buildJobs(config, { seed: 4, perMatchup: 1, randomGames: 30 }).filter((_, i) => i % 3 === 0 || i >= 36);
+    const records = runJobs(jobs);
+    const missions = new Set(records.map((r) => r.mission));
+    expect(missions).toEqual(new Set(['koth', 'ctf']));
+    const s = summarize(records, config, PRESETS.map((p) => p.name));
+    expect((s.byMission.koth?.games ?? 0) + (s.byMission.ctf?.games ?? 0)).toBe(records.length);
+    expect(s.byMission.ctf?.byMission).toEqual({}); // only one level deep
+    const html = reportHtml(s, config, { seed: 4, perMatchup: 1, randomGames: 30, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
+    expect(html).toContain('By mission');
+    expect(html).toContain('Capture the Flag');
+    expect(gamesCsv(records).split('\n')[0]).toContain('mission');
+    expect(unitsCsv(s, config).split('\n')[0]).toContain('randomScore_ctf');
+  }, 60_000);
+});

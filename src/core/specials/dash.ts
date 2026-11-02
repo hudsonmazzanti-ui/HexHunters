@@ -9,6 +9,7 @@ export const dash: SpecialDef = {
   describe: (r) => `Move extra hexes equal to die / ${r.dashDivisor} (rounded down).`,
   targeting: 'none',
   keepsMovement: true,
+  grantsMovement: true,
   usable: (state, unit) => (dashAmount(state, actionDie(state, unit)) < 1 ? 'die too low' : null),
   apply: (state, unit) => {
     const amount = dashAmount(state, actionDie(state, unit));

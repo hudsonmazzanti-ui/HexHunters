@@ -1364,3 +1364,88 @@ button.danger {
 .no-anim .overlay-card .tap {
   animation: none;
 }
+
+/* ---- Capture the Flag ---- */
+/* The flag: a magenta pennant on a dark pole (neutral: neither team's color). */
+.flag-pennant .pole {
+  stroke: var(--c-flag-pole);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.flag-pennant .cloth {
+  fill: var(--c-flag);
+  stroke: var(--c-flag-dark);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.ground-flag {
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c-white) 90%, transparent));
+}
+.ground-flag .flag-shadow {
+  fill: color-mix(in srgb, var(--c-black) 30%, transparent);
+}
+.unit .carry-flag {
+  display: none;
+  pointer-events: none;
+}
+.unit.carrier .carry-flag {
+  display: block;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--c-white) 95%, transparent));
+}
+.unit.carrier .body {
+  stroke: var(--c-flag);
+  stroke-width: 3;
+}
+/* Where your carrier scores: your deployment zone, outlined while you hold the flag. */
+.goal {
+  fill: transparent;
+  stroke: none;
+  pointer-events: none;
+}
+.goal.on {
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+  animation: goal-march 1.2s linear infinite;
+}
+.goal.goal-0 {
+  fill: color-mix(in srgb, var(--c-p0) 22%, transparent);
+  stroke: var(--c-p0-dark);
+}
+.goal.goal-1 {
+  fill: color-mix(in srgb, var(--c-p1) 22%, transparent);
+  stroke: var(--c-p1-dark);
+}
+@keyframes goal-march {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal.on {
+    animation: none;
+  }
+}
+.zone-map .flag {
+  fill: var(--c-flag);
+}
+/* Mission chip in the top bar (tap for the rules). */
+.mission-chip {
+  display: block;
+  margin: 2px auto 0;
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+  background: var(--c-accent);
+  box-shadow: none;
+  border-radius: var(--radius-pill);
+  min-height: 0;
+  height: 18px;
+  padding: 0 var(--space-2);
+}
+.mission-chip.ctf {
+  background: var(--c-flag);
+  color: var(--c-white);
+}
