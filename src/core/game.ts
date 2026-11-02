@@ -82,8 +82,8 @@ export type GameEvent =
   | { type: 'flagDropped'; unitId: string; hex: Hex; reason: FlagDropReason; by?: string }
   /** Capture the Flag: a dropped flag buried by new terrain rolled to the nearest open hex. */
   | { type: 'flagShifted'; from: Hex; to: Hex }
-  /** Capture the Flag: `player` scored `points` (scores after); the flag went back to the center. */
-  | { type: 'flagCaptured'; player: PlayerId; unitId: string; points: number; scores: [number, number] }
+  /** Capture the Flag: `player`'s carrier made it home, which wins the game (a gameOver event follows). */
+  | { type: 'flagCaptured'; player: PlayerId; unitId: string }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
@@ -508,9 +508,13 @@ function endTurn(state: GameState, events: GameEvent[]): void {
   flushFlag(state, events);
   if (checkElimination(state, events)) return;
 
-  // Mission scoring at the end of this player's turn (Capture the Flag: a capture).
+  // Mission checks at the end of this player's turn (Capture the Flag: a capture wins).
   const mission = MISSIONS[state.mission];
-  mission.endOfTurn?.(state, state.current, events);
+  const win = mission.endOfTurn?.(state, state.current, events);
+  if (win) {
+    endGame(state, events, win.winner, win.reason);
+    return;
+  }
   if (checkPoints(state, events)) return;
 
   if (state.turnInRound === 0) {

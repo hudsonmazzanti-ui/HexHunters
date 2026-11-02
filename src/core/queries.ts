@@ -117,13 +117,16 @@ export function unitSize(state: GameState, unit: Unit): UnitDef['size'] {
 
 /**
  * Hexes of movement per turn: base (crawl once a Zombie is crawling) plus hero auras
- * (Warlord). The flag carrier (Capture the Flag) is slower, minimum 1.
+ * (Warlord). The flag carrier (Capture the Flag) is slower, minimum 1, unless an aura
+ * says otherwise (Standard Bearer).
  */
 export function unitSpeed(state: GameState, unit: Unit): number {
   const def = unitDef(state, unit);
   const base = unit.crawling && def.woundedForm ? def.woundedForm.speed : def.speed;
-  const speed = base + (auraEffects(state, unit).speedBonus ?? 0);
-  return isCarrier(state, unit) ? Math.max(1, speed - state.config.specials.flagCarrierSlow) : speed;
+  const aura = auraEffects(state, unit);
+  const speed = base + (aura.speedBonus ?? 0);
+  const slowed = isCarrier(state, unit) && !aura.carriesUnslowed;
+  return slowed ? Math.max(1, speed - state.config.specials.flagCarrierSlow) : speed;
 }
 
 /** Why this model can't pick up the flag right now, or null if it can (Capture the Flag). */

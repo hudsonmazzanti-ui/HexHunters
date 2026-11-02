@@ -205,11 +205,8 @@ export interface SpecialRules {
   /** Mercenary's Premium Shot: range and damage (always hits). */
   premiumRange: number;
   premiumDamage: number;
-  /** Capture the Flag: points per capture, and how much slower the carrier moves (minimum 1). */
-  flagCapturePoints: number;
+  /** Capture the Flag: how much slower the carrier moves (minimum 1). */
   flagCarrierSlow: number;
-  /** Capture the Flag with the Standard Bearer: extra points per capture. */
-  standardCaptureBonus: number;
 }
 
 export interface Terrain {
@@ -301,7 +298,8 @@ export type FlagChange =
   /** A dropped flag landing under new terrain (Hurl's boulder) rolls to the nearest open hex. */
   | { kind: 'shifted'; from: Hex; to: Hex };
 
-export type WinReason = 'points' | 'elimination' | 'draw';
+/** 'capture': a flag carrier made it home (Capture the Flag). */
+export type WinReason = 'points' | 'capture' | 'elimination' | 'draw';
 
 export type Phase = 'build' | 'deploy' | 'play' | 'over';
 

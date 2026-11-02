@@ -77,6 +77,9 @@ function hitChance(state: GameState, attacker: Unit, target: Unit): number {
 const onPoint = (state: GameState, h: Hex) =>
   MISSIONS[state.mission].usesControlPoint && state.map.controlPoint.some((c) => hexEquals(c, h));
 
+/** Capture the Flag: how close an enemy carrier is to winning, 0 (5+ hexes from its zone) to 5 (in it). */
+const carrierThreat = (state: GameState, carrier: Unit): number => Math.max(0, 5 - toZone(state, carrier.owner, carrier.pos!));
+
 /** Hexes from `h` to the nearest hex of `player`'s deployment zone (0 inside it). */
 const toZone = (state: GameState, player: PlayerId, h: Hex): number =>
   Math.min(...state.map.deployZones[player].map((z) => hexDistance(z, h)));
@@ -89,8 +92,9 @@ function damageValue(state: GameState, actor: Unit, target: Unit, damage: number
   let v = (w.damage * dealt * value) / maxHealth(state, target);
   if (damage >= target.hp) v += w.kill * value;
   if (target.owner === actor.owner) return -w.friendlyFire * v;
-  // Capture the Flag: hurting the enemy carrier matters more (killing it drops the flag).
-  return isCarrier(state, target) ? v * w.carrierTarget : v;
+  // Capture the Flag: hurting the enemy carrier matters more (killing it drops the flag),
+  // the more so the closer it is to winning.
+  return isCarrier(state, target) ? v * (w.carrierTarget + w.carrierUrgency * carrierThreat(state, target)) : v;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +151,7 @@ function positionScore(state: GameState, unit: Unit, h: Hex, w: Weights): number
 function flagScore(state: GameState, unit: Unit, h: Hex, flag: Hex, w: Weights): number {
   if (isCarrier(state, unit)) {
     const home = toZone(state, unit.owner, h);
-    return home === 0 ? w.inZone : -w.carryHome * home;
+    return home === 0 ? w.captureWin : -w.carryHome * home;
   }
   const carrier = flagCarrier(state);
   if (!carrier) {
@@ -176,7 +180,7 @@ function flagSpecialValue(state: GameState, unit: Unit, choice: SpecialChoice, p
     if (id === 'hook') moved = (preview?.area.length ?? 0) > 0;
   }
   if (!moved) return 0;
-  return carrier.owner === unit.owner ? -w.dropOwnFlag : w.knockFlag;
+  return carrier.owner === unit.owner ? -w.dropOwnFlag : w.knockFlag * (1 + w.carrierUrgency * carrierThreat(state, carrier));
 }
 
 // ---------------------------------------------------------------------------

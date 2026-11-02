@@ -55,6 +55,11 @@ export function renderTopBar(state: GameState, onMission?: () => void): void {
     const div = h('div', `score${p === 1 ? ' right' : ''}`);
     const dot = h('span', 'dot');
     dot.style.background = PLAYER_COLORS[p];
+    // Missions won without points (Capture the Flag) show no score once the mission is revealed.
+    if (state.phase !== 'build' && !MISSIONS[state.mission].usesPoints) {
+      div.append(dot);
+      return div;
+    }
     const pts = h('span', 'pts', String(state.scores[p]));
     const of = h('span', 'of', `/${state.config.pointsToWin}`);
     if (p === 0) div.append(dot, pts, of);

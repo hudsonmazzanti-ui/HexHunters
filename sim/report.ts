@@ -249,11 +249,10 @@ function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): strin
   const flow = [
     row('Games', (x) => String(x.games)),
     row('Avg length (rounds)', (x) => x.avgRounds.toFixed(1)),
-    row('Points wins', (x) => p1(pct(x.reasons.points ?? 0, x.games))),
+    row('Objective wins (points / flag capture)', (x) => p1(pct((x.reasons.points ?? 0) + (x.reasons.capture ?? 0), x.games))),
     row('Wipeout wins', (x) => p1(pct(x.reasons.elimination ?? 0, x.games))),
     row('Draws', (x) => p1(pct((x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0), x.games))),
     row('First mover wins (decisive)', (x) => p1(pct(x.firstMover.wins, decisive(x)))),
-    row('Flag captures / game', (x) => (x.flag.captures || x.flag.pickups ? (x.flag.captures / x.games).toFixed(2) : '–')),
     row('Flag pickups / game', (x) => (x.flag.pickups ? (x.flag.pickups / x.games).toFixed(2) : '–')),
     row('Flag drops / game', (x) => (x.flag.pickups ? (x.flag.drops / x.games).toFixed(2) : '–')),
   ].join('');
@@ -335,7 +334,8 @@ export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): st
     .join('')}`;
 
   const reasonNames: Record<string, string> = {
-    points: 'Points (mission objective)',
+    points: 'Points (King of the Hill)',
+    capture: 'Flag capture (Capture the Flag)',
     elimination: 'Wipeout',
     draw: 'Draw (simultaneous wipeout)',
     roundLimit: `Draw (${meta.maxRounds}-round limit)`,

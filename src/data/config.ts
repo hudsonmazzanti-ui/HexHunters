@@ -504,8 +504,6 @@ export const DEFAULT_CONFIG: GameConfig = {
     spotRange: 7,
     premiumRange: 7,
     premiumDamage: 4,
-    flagCapturePoints: 2,
     flagCarrierSlow: 1,
-    standardCaptureBonus: 1,
   },
 };

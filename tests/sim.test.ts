@@ -41,7 +41,8 @@ describe('simulator games', () => {
     for (const r of runJobs(jobs)) {
       expect(r.illegal).toBe(0); // the rules never refused a bot action
       expect(['A', 'B', 'draw']).toContain(r.winner);
-      expect(['points', 'elimination', 'draw', 'roundLimit']).toContain(r.reason);
+      expect(['points', 'capture', 'elimination', 'draw', 'roundLimit']).toContain(r.reason);
+      if (r.reason === 'capture') expect(r.mission).toBe('ctf');
       expect(r.rounds).toBeGreaterThanOrEqual(1);
       expect(r.rounds).toBeLessThanOrEqual(30);
       if (r.reason === 'points') expect(Math.max(r.scoreA, r.scoreB)).toBeGreaterThanOrEqual(config.pointsToWin);
@@ -114,6 +115,7 @@ describe('missions in the simulator', () => {
     const total = (f: (r: (typeof records)[number]) => number) => records.reduce((n, r) => n + f(r), 0);
     expect(total((r) => r.flagPickups)).toBeGreaterThan(10);
     expect(total((r) => r.capturesA + r.capturesB)).toBeGreaterThan(0);
+    for (const r of records) if (r.capturesA + r.capturesB) expect(r).toMatchObject({ reason: 'capture', winner: r.capturesA ? 'A' : 'B' });
   }, 60_000);
 
   it('random missions are mixed in a run and the report breaks results down by mission', () => {

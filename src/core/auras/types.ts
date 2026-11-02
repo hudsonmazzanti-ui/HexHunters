@@ -26,6 +26,8 @@ export interface AuraEffects {
   noRest?: boolean;
   /** A wounded-form unit only changes once at half health or less (Necromancer's Zombies). */
   crawlAtHalf?: boolean;
+  /** Carrying the flag doesn't slow it (Standard Bearer, Capture the Flag). */
+  carriesUnslowed?: boolean;
   /** Raises a Skeleton when an enemy dies nearby (Necromancer's Zombies and the Necromancer). */
   raisesDead?: boolean;
 }
@@ -45,6 +47,4 @@ export interface AuraDef {
   effects(rules: SpecialRules, unit: UnitDef): AuraEffects;
   /** Army-wide: points scored for winning the control point at the end of a round (default 1). */
   holdPoints?(rules: SpecialRules): number;
-  /** Army-wide: extra points per flag capture in Capture the Flag (default 0). */
-  captureBonus?(rules: SpecialRules): number;
 }

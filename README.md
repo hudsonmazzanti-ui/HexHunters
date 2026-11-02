@@ -51,7 +51,7 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Warlord       | 6    | large (3)  | 2     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
 | Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
-| Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1. Capture the Flag: the carrier gets +2, captures score 3 |
+| Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1. Capture the Flag: the carrier isn't slowed and gets +2 |
 | Pyromancer    | 6    | medium (2) | 3     | 7   | 10 | 3            | 2   | Burn: its attacks, Flamer Torch and Grenadier Grenade set every model they hit burning |
 | Gambler       | 6    | medium (2) | 3     | 6   | 9  | 3            | 3   | Dice aren't rolled at turn start: each rolls d12+2 (max 14) when its action is confirmed |
 | Necromancer   | 7    | medium (2) | 3     | 5   | 8  | 3            | 2   | Skeletons +1 def, never rest; Zombies crawl only at half health; Raise Dead |
@@ -284,13 +284,14 @@ apply to its attacks (Spot isn't used up by them). Enemies can still Spot it as 
 
 **Missions.** After both armies are built, each game's mission is picked at random (50/50, seeded) and shown with
 a one-line rule before deployment. The mission chip in the top bar shows the full rules any time. Missions are data
-(`src/core/missions/`, one module each; the pool is `missions` in `config.ts`). Either way, first to 5 points wins, or
-eliminate every enemy model to win immediately. If one action (Grenade or Torch) wipes out the last models on both
-sides at once, the game is a draw.
+(`src/core/missions/`, one module each; the pool is `missions` in `config.ts`). In every mission, eliminating every
+enemy model wins immediately. If one action (Grenade or Torch) wipes out the last models on both sides at once, the
+game is a draw.
 
 - **King of the Hill.** At the end of each round, whoever has more models on the control point scores 1 point, or 2
-  with the Standard Bearer (ties score nothing).
-- **Capture the Flag.** No control point: one neutral flag (a magenta pennant) starts on the center hex.
+  with the Standard Bearer (ties score nothing). First to 5 points wins.
+- **Capture the Flag.** No control point and no points (the top bar shows no score): one neutral flag (a magenta
+  pennant) starts on the center hex.
   - *Pick up:* a model standing on the flag spends its action to pick it up (the **Pick up flag** button; no roll, so
     the Behemoth can too). Movement ends, like a special; with the Master Ninja it may still attack after.
   - *Carrier:* moves 1 slower (minimum 1, counted after the Warlord's bonus), and can still attack and use its
@@ -303,11 +304,11 @@ sides at once, the game is a draw.
     already hacked or has no die (Behemoth); the die penalty only applies where it normally would.
   - *Death:* the flag drops where the carrier died. If a Hurl boulder lands there, it rolls to the nearest open hex.
     A dropped flag stays until someone picks it up.
-  - *Capture:* if your carrier ends your turn inside your own deployment zone (checked after the enemy's
-    overwatch, which can still stop it), you score 2 and the flag returns to the center hex.
-  - *Standard Bearer:* your carrier gets +2 on its rolls (instead of models on the control point), and each capture
-    scores 3.
-  - Every pickup, drop and capture gets a log line; captures are repeated on the next handoff screen.
+  - *Capture wins:* if your carrier ends your turn inside your own deployment zone (checked after the enemy's
+    overwatch, which can still stop it), you win the game. The other way to win is eliminating the enemy.
+  - *Standard Bearer:* your carrier isn't slowed by the flag and gets +2 on its rolls (instead of models on the
+    control point).
+  - Every pickup, drop and capture gets a log line.
 
 ## Line of sight
 
@@ -357,8 +358,9 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   (game flow, preset scores and unit/hero scores per mission side by side), `games.csv` has mission and flag
   columns, and `units.csv` has per-mission scores. `--mission koth|ctf` forces one; `--experiment missions`
   compares random, King of the Hill only and Capture the Flag only. In Capture the Flag the bot picks up the flag,
-  walks the carrier home (avoiding Dash, Vault, Pounce and Swap), escorts it, and goes after enemy carriers (extra
-  value on damaging them, plus Hack and Hook to knock the flag loose).
+  walks the carrier home (avoiding Dash, Vault, Pounce and Swap) and values reaching its zone as winning the game,
+  escorts it, and goes after enemy carriers, more urgently the closer they are to their zone (extra value on
+  damaging them, plus Hack and Hook to knock the flag loose).
 
 ## Look and feel
 

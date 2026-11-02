@@ -130,7 +130,7 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
       }),
     },
     rate('Wipeout wins', (x) => ({ k: x.reasons.elimination ?? 0, n: x.games })),
-    rate('Points wins', (x) => ({ k: x.reasons.points ?? 0, n: x.games })),
+    rate('Objective wins (points / flag capture)', (x) => ({ k: (x.reasons.points ?? 0) + (x.reasons.capture ?? 0), n: x.games })),
     rate('Draws', (x) => ({ k: (x.reasons.draw ?? 0) + (x.reasons.roundLimit ?? 0), n: x.games })),
     rate('First mover wins (decisive games)', (x) => ({ k: x.firstMover.wins, n: x.firstMover.wins + x.firstMover.losses })),
   ];
@@ -152,18 +152,8 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
         }),
       },
       rate(`${name}: wipeout wins`, (x) => ({ k: of(x)?.reasons.elimination ?? 0, n: of(x)?.games ?? 0 })),
-      rate(`${name}: points wins`, (x) => ({ k: of(x)?.reasons.points ?? 0, n: of(x)?.games ?? 0 })),
+      rate(`${name}: objective wins`, (x) => ({ k: (of(x)?.reasons.points ?? 0) + (of(x)?.reasons.capture ?? 0), n: of(x)?.games ?? 0 })),
     );
-    if (m === 'ctf') {
-      flow.push({
-        label: `${name}: captures per game`,
-        format: 'num',
-        cells: s.map((x) => {
-          const y = of(x);
-          return y?.games ? { value: y.flag.captures / y.games, se: null, n: y.games } : { value: null, se: null, n: 0 };
-        }),
-      });
-    }
   }
 
   const presetNames = [...new Set(results.flatMap((r) => r.summary.presetNames).concat(results.flatMap((r) => r.excluded.map((e) => e.split(':')[0]))))];
