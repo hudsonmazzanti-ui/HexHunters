@@ -373,7 +373,11 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   game in `games.csv` can be replayed exactly. Games still going after 30 rounds are draws.
 - `sim/bot.ts` is a simple heuristic bot: each step it scores every reachable hex and every action (attack,
   special or nothing) for every model, plays the best, and repeats. Weights are in `sim/weights.ts`.
-- `sim/armies.ts` holds the editable preset armies and the random army generator. Every preset plays every other
+- `sim/armies.ts` holds the editable preset armies and the random army generator. A random army with a hero whose
+  rule needs specific units gets at least 2 of them first (Field Marshal: Infantry; Siege Master: Artillery;
+  Necromancer: Zombies/Skeletons; Master Ninja: Assassins/Scouts; Warden: Medics/Sentinels; Pyromancer:
+  Flamers/Grenadiers; Warlord: large models), and a Mercenary army leaves 1–3 points unspent for Premium Shots; the
+  rest is filled at random. The rules live in `sim/synergies.ts` (simulator only; the game's army rules don't change). Every preset plays every other
   (seats alternating), plus random-vs-random games.
 - Output in `sim-results/`: `report.html` (preset win rates, matchup grid, unit/hero win rates in random armies,
   first-mover, deployment shape and win-type stats, game length, ability use, and flags for anything outside
