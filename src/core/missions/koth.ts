@@ -18,6 +18,7 @@ export const koth: MissionDef = {
     `First to ${c.pointsToWin} points wins, or wipe out the enemy.`,
   ],
   usesControlPoint: true,
+  usesPoints: true,
   empowered: (state, unit) => !!unit.pos && state.map.controlPoint.some((h) => hexEquals(h, unit.pos!)),
   endOfRound: (state, events) => {
     const counts: [number, number] = [unitsOnControlPoint(state, 0).length, unitsOnControlPoint(state, 1).length];

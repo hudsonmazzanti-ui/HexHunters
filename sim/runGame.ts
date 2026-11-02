@@ -34,7 +34,7 @@ export interface UnitUsage {
 }
 
 export type Outcome = 'A' | 'B' | 'draw';
-export type EndReason = 'points' | 'elimination' | 'draw' | 'roundLimit';
+export type EndReason = 'points' | 'capture' | 'elimination' | 'draw' | 'roundLimit';
 
 export interface GameRecord {
   index: number;
@@ -48,7 +48,7 @@ export interface GameRecord {
   shape: string;
   /** This game's mission id ('koth', 'ctf'). */
   mission: MissionId;
-  /** Capture the Flag: flag captures by each army, pickups and drops (0 in other missions). */
+  /** Capture the Flag: flag captures by each army (a capture wins, so 0 or 1), pickups and drops (0 in other missions). */
   capturesA: number;
   capturesB: number;
   flagPickups: number;

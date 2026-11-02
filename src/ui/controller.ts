@@ -303,7 +303,7 @@ export class Controller {
           const at = ev.type === 'flagPickedUp' || ev.type === 'flagDropped' ? ev.hex : ev.type === 'flagShifted' ? ev.to : null;
           if (ev.type === 'flagCaptured') {
             const pos = getUnit(this.state, ev.unitId)?.pos;
-            if (pos) this.board.floatText(pos, `CAPTURE +${ev.points}`, COLORS.fxGold);
+            if (pos) this.board.floatText(pos, 'CAPTURED!', COLORS.fxGold);
             haptics.kill();
           } else if (at) {
             this.board.floatText(at, ev.type === 'flagPickedUp' ? 'FLAG!' : ev.type === 'flagDropped' ? 'DROPPED' : 'FLAG', COLORS.flag);
@@ -497,6 +497,7 @@ export class Controller {
   private async gameOverScreen(winner: PlayerId | null, reason: WinReason): Promise<void> {
     const reasons: Record<WinReason, string> = {
       points: `Reached ${this.state.config.pointsToWin} points (${this.state.scores[0]} – ${this.state.scores[1]}).`,
+      capture: 'Carried the flag home to their own deployment zone.',
       elimination: 'Every enemy model was eliminated.',
       draw: 'Both armies were wiped out at the same time.',
     };
@@ -1322,7 +1323,7 @@ export function flagText(
     case 'flagShifted':
       return 'The flag rolls off the boulder to the nearest open hex.';
     case 'flagCaptured':
-      return `${PLAYER_NAMES[ev.player]} captures the flag: +${ev.points} (${ev.scores[0]} – ${ev.scores[1]}). The flag returns to the center.`;
+      return `${PLAYER_NAMES[ev.player]} captures the flag and wins!`;
   }
 }
 

@@ -148,8 +148,8 @@ async function runVariant(id: string, o: RunSettings, out: string): Promise<Vari
   );
   for (const [m, x] of Object.entries(summary.byMission)) {
     const share = (k: string) => `${((100 * (x.reasons[k] ?? 0)) / x.games).toFixed(0)}%`;
-    const caps = m === 'ctf' ? ` · ${(x.flag.captures / x.games).toFixed(2)} captures/game` : '';
-    console.log(`  ${m}: ${x.games} games · ${x.avgRounds.toFixed(1)} rounds · points ${share('points')} · wipeouts ${share('elimination')}${caps}`);
+    const objective = m === 'ctf' ? `captures ${share('capture')}` : `points ${share('points')}`;
+    console.log(`  ${m}: ${x.games} games · ${x.avgRounds.toFixed(1)} rounds · ${objective} · wipeouts ${share('elimination')}`);
   }
   return { id, label: variant.label, description: variant.description, config, summary, excluded, seconds, spreadNoise, sampleMap };
 }

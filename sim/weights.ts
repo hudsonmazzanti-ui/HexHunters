@@ -44,16 +44,18 @@ export const WEIGHTS = {
   /** Picking up the flag. */
   pickUp: 5.0,
   /** Carrier: per hex closer to its own deployment zone. */
-  carryHome: 0.9,
-  /** Carrier: standing in its own zone (it scores at the end of the turn). */
-  inZone: 8.0,
+  carryHome: 1.4,
+  /** Carrier: standing in its own zone at the end of the turn wins the game. */
+  captureWin: 60.0,
   /** Carrier: the flag counts as this much extra value at stake when judging danger. */
   flagStake: 4.0,
   /** Per hex farther than 2 from its own carrier (escort). */
   escort: 0.25,
-  /** Damage to the enemy carrier counts this many times as much (chase and kill it). */
+  /** Damage to the enemy carrier counts this many times as much (chase and kill it)... */
   carrierTarget: 1.6,
-  /** Making the enemy carrier drop the flag (Hack, Hook, Shove). */
+  /** ...plus this much more per hex it is within 5 of its own zone (it's about to win). */
+  carrierUrgency: 0.8,
+  /** Making the enemy carrier drop the flag (Hack, Hook), plus the same urgency. */
   knockFlag: 4.0,
   /** Making its own carrier drop the flag (Dash, Vault, Pounce, Swap, hooking it). */
   dropOwnFlag: 6.0,

@@ -259,10 +259,10 @@ describe('Capture the Flag: drops', () => {
   });
 });
 
-describe('Capture the Flag: scoring', () => {
+describe('Capture the Flag: winning', () => {
   const zoneHex = (s: GameState, p: PlayerId) => s.map.deployZones[p][0];
 
-  it('a carrier ending its turn in its own zone scores 2 and the flag returns to the center', () => {
+  it('a carrier ending its turn in its own zone wins the game at once (no points)', () => {
     const s = ctf();
     const home = zoneHex(s, 0);
     expect(isInDeployZone(s, 0, home)).toBe(true);
@@ -270,30 +270,43 @@ describe('Capture the Flag: scoring', () => {
     addUnit(s, 'infantry', 1, hex(0, -5));
     carry(s, inf.id);
     const { state, events } = run(s, END);
-    expect(state.scores).toEqual([2, 0]);
-    expect(state.flag).toEqual({ pos: ORIGIN, carrierId: null });
-    expect(events).toContainEqual({ type: 'flagCaptured', player: 0, unitId: inf.id, points: 2, scores: [2, 0] });
+    expect(state).toMatchObject({ phase: 'over', winner: 0, winReason: 'capture', scores: [0, 0] });
+    expect(events.slice(-2)).toEqual([
+      { type: 'flagCaptured', player: 0, unitId: inf.id },
+      { type: 'gameOver', winner: 0, reason: 'capture' },
+    ]);
+    expect(state.flag).toEqual({ pos: null, carrierId: inf.id }); // no reset: the game is over
   });
 
-  it('no score outside your own zone (including the enemy\'s zone)', () => {
+  it('player 2 wins the same way in its own zone', () => {
+    const s = ctf();
+    s.current = 1;
+    s.turnInRound = 1;
+    const inf = addUnit(s, 'infantry', 1, zoneHex(s, 1));
+    addUnit(s, 'infantry', 0, hex(0, 5));
+    carry(s, inf.id);
+    expect(run(s, END).state).toMatchObject({ phase: 'over', winner: 1, winReason: 'capture' });
+  });
+
+  it('no win outside your own zone (including the enemy\'s zone)', () => {
     for (const where of [hex(0, 2), zoneHex(makeState(), 1)]) {
       const s = ctf();
       const inf = addUnit(s, 'infantry', 0, where);
       addUnit(s, 'infantry', 1, hex(3, -2));
       carry(s, inf.id);
       const { state } = run(s, END);
-      expect(state.scores).toEqual([0, 0]);
+      expect(state.phase).toBe('play');
       expect(flagCarrier(state)?.id).toBe(inf.id);
     }
   });
 
-  it('only scores at the end of the carrier\'s own turn', () => {
+  it('only at the end of the carrier\'s own turn', () => {
     const s = ctf();
     s.current = 1;
     addUnit(s, 'infantry', 1, hex(0, -5));
     const inf = addUnit(s, 'infantry', 0, zoneHex(s, 0));
     carry(s, inf.id);
-    expect(run(s, END).state.scores).toEqual([0, 0]); // player 2's turn ended
+    expect(run(s, END).state.phase).toBe('play'); // player 2's turn ended
   });
 
   it('enemy overwatch fires first: killing the carrier stops the capture', () => {
@@ -304,29 +317,27 @@ describe('Capture the Flag: scoring', () => {
     addUnit(s, 'sentinel', 1, hex(home.q, home.r - 3), { overwatch: { die: 12, hexes: [home] } });
     carry(s, inf.id);
     const { state, events } = run(s, END);
-    expect(state.scores).toEqual([0, 0]);
+    expect(state.phase).toBe('play');
     expect(state.flag).toEqual({ pos: home, carrierId: null });
     expect(events.some((e) => e.type === 'flagCaptured')).toBe(false);
   });
 
-  it('reaching 5 points wins', () => {
+  it('eliminating the enemy still wins', () => {
     const s = ctf();
-    s.scores = [3, 0];
-    const inf = addUnit(s, 'infantry', 0, zoneHex(s, 0));
-    addUnit(s, 'infantry', 1, hex(0, -5));
-    carry(s, inf.id);
-    const { state, events } = run(s, END);
-    expect(state).toMatchObject({ phase: 'over', winner: 0, winReason: 'points', scores: [5, 0] });
-    expect(events.at(-1)).toEqual({ type: 'gameOver', winner: 0, reason: 'points' });
+    const shooter = addUnit(s, 'infantry', 0, hex(0, 2), { die: 12 });
+    const last = addUnit(s, 'scout', 1, hex(0, -2), { hp: 1 });
+    expect(run(s, { type: 'attack', unitId: shooter.id, targetId: last.id }).state).toMatchObject({ phase: 'over', winner: 0, winReason: 'elimination' });
   });
 
-  it('there is no control point scoring in Capture the Flag', () => {
+  it('there is no scoring at all: no control point, no points', () => {
     const s = ctf();
     addUnit(s, 'infantry', 0, hex(1, 0));
     addUnit(s, 'infantry', 1, hex(-4, -1));
     const { state, events } = run(s, END, END);
     expect(state.scores).toEqual([0, 0]);
     expect(events.some((e) => e.type === 'roundScored')).toBe(false);
+    expect(MISSIONS.ctf.usesPoints).toBe(false);
+    expect(MISSIONS.koth.usesPoints).toBe(true);
   });
 });
 
@@ -342,15 +353,24 @@ describe('Capture the Flag: Standard Bearer', () => {
     expect(actionBonus(s, onPoint)).toBe(0);
   });
 
-  it('each capture scores 1 extra point', () => {
+  it('the carrier isn\'t slowed; without the Standard Bearer it is', () => {
+    const s = ctf();
+    addUnit(s, 'standardbearer', 0, hex(-3, 5));
+    const inf = addUnit(s, 'infantry', 0, hex(0, 3)); // speed 3
+    const enemy = addUnit(s, 'infantry', 1, hex(0, -3));
+    carry(s, inf.id);
+    expect(unitSpeed(s, inf)).toBe(3);
+    carry(s, enemy.id);
+    expect(unitSpeed(s, enemy)).toBe(2);
+  });
+
+  it('a capture with the Standard Bearer wins the same way (no bonus points)', () => {
     const s = ctf();
     addUnit(s, 'standardbearer', 0, hex(-3, 5));
     const inf = addUnit(s, 'infantry', 0, s.map.deployZones[0][0]);
     addUnit(s, 'infantry', 1, hex(0, -5));
     carry(s, inf.id);
-    const { state, events } = run(s, END);
-    expect(state.scores).toEqual([3, 0]);
-    expect(events).toContainEqual(expect.objectContaining({ type: 'flagCaptured', points: 3 }));
+    expect(run(s, END).state).toMatchObject({ phase: 'over', winner: 0, winReason: 'capture', scores: [0, 0] });
   });
 
   it('still works as before in King of the Hill', () => {
