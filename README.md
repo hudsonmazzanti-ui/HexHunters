@@ -117,7 +117,7 @@ reason ("Needs 2 more pts"), and their + is disabled.
 placements. Tapping a hex places the model. If one player runs out of models, the other places the rest.
 
 Each game uses a random **deployment shape**, picked from the seed when the map is generated and revealed (name, short
-description and a mini map of both zones) after both armies are built. Player 2's zone is always Player 1's mirrored
+description and a mini map of both zones) after both armies are built, on the same screen as the mission. Player 2's zone is always Player 1's mirrored
 through the center, terrain stays out of both zones plus a one-hex buffer, and every zone is at least 3 hexes from the
 center (clear of the control point and its ring). During placement your zone is highlighted and the enemy's is shown
 faintly.
@@ -283,7 +283,8 @@ affect it: Hack can't target it, the Gambler doesn't turn its die into "?", and 
 apply to its attacks (Spot isn't used up by them). Enemies can still Spot it as a target.
 
 **Missions.** After both armies are built, each game's mission is picked at random (50/50, seeded) and shown with
-a one-line rule before deployment. The mission chip in the top bar shows the full rules any time. Missions are data
+a one-line rule before deployment, together with the deployment shape on one screen (mission name as the title, the
+mission rule, the shape and its description, over a mini map with both zones and the control point or flag). The mission chip in the top bar shows the full rules any time. Missions are data
 (`src/core/missions/`, one module each; the pool is `missions` in `config.ts`). In every mission, eliminating every
 enemy model wins immediately. If one action (Grenade or Torch) wipes out the last models on both sides at once, the
 game is a draw.
