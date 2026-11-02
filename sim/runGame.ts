@@ -53,6 +53,8 @@ export interface GameRecord {
   capturesB: number;
   flagPickups: number;
   flagDrops: number;
+  /** Capture the Flag: the unit type that made the winning capture (null if none). */
+  captureUnit: string | null;
   /** Terrain on this game's map. */
   terrainPieces: number;
   terrainHexes: number;
@@ -94,6 +96,7 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
   const captures: [number, number] = [0, 0];
   let flagPickups = 0;
   let flagDrops = 0;
+  let captureUnit: string | null = null;
 
   let state: GameState = newGame(config, job.seed);
   // Terrain as generated (Hurl and Smash can remove some during the game).
@@ -114,7 +117,10 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     for (const ev of events) {
       if (ev.type === 'attack') use(typeOf(before, ev.unitId)).attacks++;
       else if (ev.type === 'special' || ev.type === 'gambleFailed') use(typeOf(before, ev.unitId)).specials++;
-      else if (ev.type === 'flagCaptured') captures[ev.player]++;
+      else if (ev.type === 'flagCaptured') {
+        captures[ev.player]++;
+        captureUnit = typeOf(state, ev.unitId);
+      }
       else if (ev.type === 'flagPickedUp') flagPickups++;
       else if (ev.type === 'flagDropped') flagDrops++;
       else if (ev.type === 'turnStart') {
@@ -167,6 +173,7 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     capturesB: captures[job.seatOfA === 0 ? 1 : 0],
     flagPickups,
     flagDrops,
+    captureUnit,
     terrainPieces,
     terrainHexes,
     winner,

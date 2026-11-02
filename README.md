@@ -355,7 +355,7 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   per variant, changes from the baseline marked as real (beyond 2 standard errors) or noise, plus a sample map
   per variant (`sample-map.svg` / `.txt`).
 - **Missions:** each sim game's mission is random (50/50), like the app. The report has a **By mission** section
-  (game flow, preset scores and unit/hero scores per mission side by side), `games.csv` has mission and flag
+  (game flow, preset scores and unit/hero scores per mission side by side, how each preset wins (wipeout vs objective) per mission, and which unit types made the winning flag captures, overall and per preset), `games.csv` has mission and flag
   columns, and `units.csv` has per-mission scores. `--mission koth|ctf` forces one; `--experiment missions`
   compares random, King of the Hill only and Capture the Flag only. In Capture the Flag the bot picks up the flag,
   walks the carrier home (avoiding Dash, Vault, Pounce and Swap) and values reaching its zone as winning the game,
