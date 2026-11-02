@@ -306,6 +306,27 @@ the edge isn't enough, but blockers on both sides are. Lines that don't touch an
 shading = hexes where a model of that size would be hidden from it (light: small models hidden, medium: medium and smaller
 hidden, dark: even large models hidden). Red dashed rings show enemies you can attack now.
 
+## Balance simulator
+
+Bots play thousands of games with the real rules and report what's winning. Nothing in the app changes.
+
+```bash
+npm run sim -- --games 2000                     # ~30 s on 4 cores; writes sim-results/
+npm run sim -- --per-matchup 50 --random 2000 --seed 7
+npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game, printing every action
+```
+
+- `sim/runGame.ts` plays a full game headless (army building, deployment, turns, scoring) from a seed, so any
+  game in `games.csv` can be replayed exactly. Games still going after 30 rounds are draws.
+- `sim/bot.ts` is a simple heuristic bot: each step it scores every reachable hex and every action (attack,
+  special or nothing) for every model, plays the best, and repeats. Weights are in `sim/weights.ts`.
+- `sim/armies.ts` holds the editable preset armies and the random army generator. Every preset plays every other
+  (seats alternating), plus random-vs-random games.
+- Output in `sim-results/`: `report.html` (preset win rates, matchup grid, unit/hero win rates in random armies,
+  first-mover, deployment shape and win-type stats, game length, ability use, and flags for anything outside
+  40–60%), `games.csv` (one row per game, with its seed) and `units.csv`.
+- The bot is simple: units that need clever play (Twins, Sentinel, Hacker…) may test weaker than they really are.
+
 ## Look and feel
 
 - **Theme:** all colors, fonts (Rajdhani for headings, buttons and numbers; Inter for text), spacing and
@@ -338,6 +359,7 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
   game.ts        newGame + applyAction(state, action) -> { state, events }
 src/data/config.ts   unit stats, costs, game settings
 src/data/deployShapes.ts   deployment shapes (zone rules)
+sim/             balance simulator: headless runner, bot, armies, report (npm run sim)
 src/ui/          SVG board, pan/zoom camera, HUD, army builder, overlays, controller
 src/ui/theme.ts  every color, font, spacing step and radius (applied as CSS variables)
 src/ui/settings.ts, haptics.ts   menu settings (animations, haptics) and vibration
