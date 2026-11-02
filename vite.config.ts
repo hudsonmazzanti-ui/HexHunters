@@ -5,5 +5,7 @@ export default defineConfig({
   base: './',
   test: {
     include: ['tests/**/*.test.ts'],
+    // Let tests read style.css (as ?raw) to check it only uses theme variables.
+    css: { include: [/style\.css/] },
   },
 });

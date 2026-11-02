@@ -1,20 +1,27 @@
+/*
+ * All colors, fonts, spacing and radii come from src/ui/theme.ts, which sets them
+ * as CSS variables at startup (--c-*, --font-*, --space-*, --radius-*, --tap).
+ * Don't put raw color values in this file: add a token to theme.ts instead.
+ */
 :root {
-  --bg: #1c2230;
-  --panel: #262d3d;
-  --panel-2: #303849;
-  --text: #eef1f6;
-  --muted: #9aa4b6;
-  --p0: #3b82f6;
-  --p0-dark: #1d4ed8;
-  --p1: #ef4444;
-  --p1-dark: #b91c1c;
-  --accent: #facc15;
-  --good: #22c55e;
-  --bad: #f87171;
-  --radius: 12px;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Short aliases used throughout this file. */
+  --bg: var(--c-bg);
+  --panel: var(--c-panel);
+  --panel-2: var(--c-panel2);
+  --text: var(--c-text);
+  --muted: var(--c-muted);
+  --p0: var(--c-p0);
+  --p0-dark: var(--c-p0-dark);
+  --p1: var(--c-p1);
+  --p1-dark: var(--c-p1-dark);
+  --accent: var(--c-accent);
+  --good: var(--c-good);
+  --bad: var(--c-bad);
+  --radius: var(--radius-md);
+  font-family: var(--font-body);
   color: var(--text);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -32,16 +39,70 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ---------- Type ---------- */
+
+/* Headings, buttons and numbers use the display font; everything else the body font. */
+h1,
+h2,
+.overlay-card h1,
+.builder-title,
+.turn-label .who,
+.info .title,
+.unit-name,
+.builder-tab,
+.builder-section,
+.hero-badge {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Numbers: bold, tabular, display font. */
+.score .pts,
+.builder-points,
+.unit-cost,
+.unit-count,
+.tab-count,
+.chip .d,
+.chip .h,
+.info .stats b,
+.result-hit,
+.result-miss,
+.unit .label,
+.badge text,
+.terrain-label,
+.float-text,
+.moon text,
+.uses text,
+.hack-mark text,
+.coin {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Buttons ---------- */
+
 button {
-  font: inherit;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   color: inherit;
   border: 0;
-  border-radius: var(--radius);
-  min-height: 48px;
-  padding: 0 16px;
+  border-radius: var(--radius-md);
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
   background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent);
   cursor: pointer;
   touch-action: manipulation;
+  transition:
+    transform 80ms ease-out,
+    background-color 120ms;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 button:disabled {
@@ -51,14 +112,14 @@ button:disabled {
 
 button.primary {
   background: var(--accent);
-  color: #1c2230;
-  font-weight: 700;
+  color: var(--c-ink);
+  box-shadow: none;
 }
 
 button.danger {
   background: var(--bad);
-  color: #1c2230;
-  font-weight: 700;
+  color: var(--c-ink);
+  box-shadow: none;
 }
 
 #app {
@@ -74,8 +135,8 @@ button.danger {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--panel);
   border-bottom: 4px solid var(--turn-color, transparent);
 }
@@ -137,7 +198,7 @@ button.danger {
   width: 100%;
   height: 100%;
   touch-action: none;
-  background: radial-gradient(circle at 50% 50%, #2b3447, #161b26);
+  background: radial-gradient(circle at 50% 50%, var(--c-board-glow), var(--c-board-edge));
 }
 
 #board-tools {
@@ -154,23 +215,23 @@ button.danger {
   min-height: 44px;
   padding: 0;
   font-size: 20px;
-  background: rgba(38, 45, 61, 0.85);
+  background: color-mix(in srgb, var(--c-panel) 85%, transparent);
 }
 
 .hex-base {
-  fill: #e6e0d2;
-  stroke: #b9b19f;
+  fill: var(--c-tile);
+  stroke: var(--c-tile-edge);
   stroke-width: 1;
 }
 
 .hex-base.cp {
-  fill: #f2d98a;
-  stroke: #c9a94a;
+  fill: var(--c-cp-tile);
+  stroke: var(--c-cp-edge);
 }
 
 .cp-outline {
   fill: none;
-  stroke: #b8860b;
+  stroke: var(--c-cp-edge);
   stroke-width: 3;
   stroke-linejoin: round;
 }
@@ -181,19 +242,19 @@ button.danger {
 }
 
 .terrain.h1 {
-  fill: #8d939e;
-  stroke: #5c626d;
+  fill: var(--c-terrain1);
+  stroke: var(--c-terrain1-edge);
 }
 
 .terrain.h2 {
-  fill: #474e5c;
-  stroke: #2a2f39;
+  fill: var(--c-terrain2);
+  stroke: var(--c-terrain2-edge);
 }
 
 .terrain-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  fill: rgba(255, 255, 255, 0.75);
+  fill: color-mix(in srgb, var(--c-white) 85%, transparent);
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
@@ -207,33 +268,39 @@ button.danger {
 }
 
 .shade.deploy-0 {
-  fill: rgba(59, 130, 246, 0.3);
+  fill: color-mix(in srgb, var(--c-p0) 35%, transparent);
 }
 .shade.deploy-1 {
-  fill: rgba(239, 68, 68, 0.3);
+  fill: color-mix(in srgb, var(--c-p1) 35%, transparent);
 }
 .shade.range {
-  fill: rgba(250, 204, 21, 0.22);
+  fill: color-mix(in srgb, var(--c-accent) 22%, transparent);
 }
 .shade.hide-1 {
-  fill: rgba(20, 26, 38, 0.2);
+  fill: color-mix(in srgb, var(--c-black) 36%, transparent);
 }
 .shade.hide-2 {
-  fill: rgba(20, 26, 38, 0.36);
+  fill: color-mix(in srgb, var(--c-black) 56%, transparent);
 }
 .shade.hide-3 {
-  fill: rgba(20, 26, 38, 0.52);
+  fill: color-mix(in srgb, var(--c-black) 74%, transparent);
 }
 
 .reach-dot {
   fill: var(--good);
-  stroke: #fff;
+  stroke: var(--c-white);
   stroke-width: 1.5;
   pointer-events: none;
 }
 
+/* Movement is tweened in JS (board.ts); anything else (Swap, Undo) snaps instantly. */
 .unit {
-  transition: transform 160ms ease-out, opacity 300ms;
+  transition: opacity 300ms;
+}
+
+/* The Dragon lifts off while flying. */
+.unit.airborne .body {
+  filter: drop-shadow(0 7px 5px color-mix(in srgb, var(--c-black) 55%, transparent));
 }
 
 .unit.dead {
@@ -241,7 +308,7 @@ button.danger {
 }
 
 .unit .body {
-  stroke: #fff;
+  stroke: var(--c-white);
   stroke-width: 2.5;
 }
 
@@ -257,8 +324,8 @@ button.danger {
 }
 
 .unit .label {
-  fill: #fff;
-  font-weight: 800;
+  fill: var(--c-white);
+  font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
@@ -277,14 +344,14 @@ button.danger {
 
 .unit.target .ring.tgt {
   display: block;
-  stroke: #ff2d2d;
+  stroke: var(--c-target);
   stroke-dasharray: 6 4;
   animation: spin 3s linear infinite;
 }
 
 .unit.special-target .ring.tgt {
   display: block;
-  stroke: #a855f7;
+  stroke: var(--c-special);
   stroke-dasharray: 6 4;
   animation: spin 3s linear infinite;
 }
@@ -296,7 +363,7 @@ button.danger {
 
 .unit .brace {
   fill: none;
-  stroke: #fff;
+  stroke: var(--c-white);
   stroke-width: 2;
   stroke-dasharray: 3 3;
   display: none;
@@ -313,38 +380,38 @@ button.danger {
 }
 
 .badge rect {
-  stroke: #1c2230;
+  stroke: var(--c-ink);
   stroke-width: 1.5;
 }
 
 .badge text {
-  font-weight: 800;
+  font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
 }
 
 .die rect {
-  fill: #fff;
+  fill: var(--c-die-face);
 }
 .die text {
-  fill: #111;
-  font-size: 13px;
+  fill: var(--c-ink);
+  font-size: 16px;
 }
 .die.boosted rect {
-  fill: #bbf7d0;
+  fill: var(--c-die-boosted);
 }
 .die.hacked rect {
-  fill: #fecaca;
+  fill: var(--c-die-hacked);
 }
 .die.used rect {
-  fill: #6b7280;
+  fill: var(--c-die-used);
 }
 .die.used text {
-  fill: #d1d5db;
+  fill: var(--c-die-used-text);
 }
 .die.rolling text {
-  fill: #9ca3af;
+  fill: var(--c-muted);
 }
 .die.pop {
   animation: pop 300ms ease-out;
@@ -353,18 +420,18 @@ button.danger {
 }
 
 .hp rect {
-  fill: #111827;
+  fill: var(--c-hp-badge);
 }
 .hp text {
-  fill: #fff;
-  font-size: 11px;
+  fill: var(--c-white);
+  font-size: 13px;
 }
 .hp.low rect {
-  fill: #b91c1c;
+  fill: var(--c-hp-low);
 }
 
 .shot {
-  stroke: #fff;
+  stroke: var(--c-white);
   stroke-width: 3;
   stroke-linecap: round;
   pointer-events: none;
@@ -372,11 +439,11 @@ button.danger {
 }
 
 .float-text {
-  font-weight: 900;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 22px;
   text-anchor: middle;
   paint-order: stroke;
-  stroke: #111;
+  stroke: var(--c-ink);
   stroke-width: 4px;
   pointer-events: none;
   animation: rise 1100ms ease-out forwards;
@@ -421,20 +488,26 @@ button.danger {
 
 #panel {
   background: var(--panel);
-  padding: 10px 12px 12px;
+  padding: var(--space-3) var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
+  border-top: 1px solid color-mix(in srgb, var(--c-white) 6%, transparent);
   /* Fixed height so the board area doesn't jump around as the panel content changes. */
   height: clamp(230px, 36dvh, 320px);
   overflow-y: auto;
 }
 
+/* The panel scrolls as a whole; its sections keep their natural height. */
+#panel > * {
+  flex-shrink: 0;
+}
+
 .roster {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 2px 0;
 }
 
 .chip {
@@ -443,11 +516,11 @@ button.danger {
   align-items: center;
   gap: 4px;
   min-height: 44px;
-  padding: 0 8px 0 4px;
-  border-radius: 999px;
+  padding: 0 var(--space-3) 0 var(--space-1);
+  border-radius: var(--radius-pill);
   background: var(--panel-2);
   border: 2px solid transparent;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .chip.selected {
@@ -464,27 +537,29 @@ button.danger {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 12px;
-  color: #fff;
+  color: var(--c-white);
 }
 
 .chip .d {
-  background: #fff;
-  color: #111;
-  font-weight: 800;
-  border-radius: 6px;
-  padding: 1px 6px;
+  background: var(--c-white);
+  color: var(--c-ink);
+  font-weight: 700;
+  font-size: 17px;
+  border-radius: var(--radius-sm);
+  padding: 0 7px;
   font-variant-numeric: tabular-nums;
 }
 
 .chip.spent .d {
-  background: #6b7280;
-  color: #ddd;
+  background: var(--c-die-used);
+  color: var(--c-die-used-text);
 }
 
 .chip .h {
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 17px;
 }
 
 .info {
@@ -495,8 +570,8 @@ button.danger {
 }
 
 .info .title {
-  font-weight: 700;
-  font-size: 15px;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
 .info .stats {
@@ -508,6 +583,7 @@ button.danger {
 
 .info .stats b {
   color: var(--text);
+  font-size: 15px;
 }
 
 .hint {
@@ -522,19 +598,27 @@ button.danger {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
+  /* Always visible: the info above scrolls under it if the panel overflows. */
+  position: sticky;
+  bottom: calc(-1 * var(--space-3));
+  margin-top: auto;
+  padding: var(--space-2) 0 var(--space-3);
+  margin-bottom: calc(-1 * var(--space-3));
+  background: var(--panel);
 }
 
 .actions button {
   flex: 1 1 0;
   min-width: 0;
-  padding: 0 8px;
-  font-size: 15px;
+  padding: 0 var(--space-2);
+  font-size: 17px;
+  line-height: 1.1;
 }
 
 .result-hit,
 .result-miss {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .result-hit {
@@ -555,7 +639,7 @@ button.danger {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--overlay-bg, rgba(12, 15, 22, 0.94));
+  background: var(--overlay-bg, color-mix(in srgb, var(--c-overlay) 94%, transparent));
   text-align: center;
 }
 
@@ -574,19 +658,20 @@ button.danger {
 
 .overlay-card h1 {
   margin: 0;
-  font-size: 34px;
+  font-size: 38px;
+  line-height: 1.05;
 }
 
 .overlay-card p {
   margin: 0;
-  color: #d8dde7;
+  color: color-mix(in srgb, var(--c-text) 88%, transparent);
   line-height: 1.4;
 }
 
 .overlay-card .tap {
   margin-top: 12px;
   font-size: 15px;
-  color: rgba(255, 255, 255, 0.8);
+  color: color-mix(in srgb, var(--c-white) 80%, transparent);
   animation: pulse 1.6s ease-in-out infinite;
 }
 
@@ -627,22 +712,22 @@ button.danger {
 /* ---------- Special targeting & effects ---------- */
 
 .shade.option {
-  fill: rgba(168, 85, 247, 0.3);
+  fill: color-mix(in srgb, var(--c-special) 30%, transparent);
 }
 .shade.impact {
-  fill: rgba(239, 68, 68, 0.7);
+  fill: color-mix(in srgb, var(--c-target) 70%, transparent);
 }
 .shade.splash {
-  fill: rgba(249, 115, 22, 0.45);
+  fill: color-mix(in srgb, var(--c-fire) 45%, transparent);
 }
 .shade.flame {
-  fill: rgba(249, 115, 22, 0.7);
+  fill: color-mix(in srgb, var(--c-fire) 70%, transparent);
 }
 .shade.path {
-  fill: rgba(168, 85, 247, 0.35);
+  fill: color-mix(in srgb, var(--c-special) 35%, transparent);
 }
 .shade.landing {
-  fill: rgba(168, 85, 247, 0.75);
+  fill: color-mix(in srgb, var(--c-special) 75%, transparent);
 }
 
 .flash {
@@ -650,10 +735,10 @@ button.danger {
   animation: fade 700ms ease-out forwards;
 }
 .flash-impact {
-  fill: rgba(255, 196, 0, 0.9);
+  fill: color-mix(in srgb, var(--c-accent) 90%, transparent);
 }
 .flash-splash {
-  fill: rgba(249, 115, 22, 0.6);
+  fill: color-mix(in srgb, var(--c-fire) 60%, transparent);
 }
 
 /* ---------- Army builder ---------- */
@@ -678,14 +763,13 @@ button.danger {
 }
 
 .builder-title {
-  font-weight: 800;
-  font-size: 18px;
+  font-size: 21px;
   color: var(--player);
 }
 
 .builder-points {
-  font-size: 26px;
-  font-weight: 800;
+  font-size: 30px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .builder-points.over {
@@ -739,11 +823,11 @@ button.danger {
 
 .unit-card {
   background: var(--panel);
-  border-radius: var(--radius);
-  padding: 12px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   border: 2px solid transparent;
 }
 .unit-card.picked {
@@ -762,25 +846,24 @@ button.danger {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 13px;
-  color: #fff;
+  color: var(--c-white);
   background: var(--player);
 }
 
 .unit-name {
-  font-weight: 700;
-  font-size: 17px;
+  font-size: 20px;
   flex: 1;
 }
 
 .unit-cost {
   background: var(--accent);
-  color: #1c2230;
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 14px;
+  color: var(--c-ink);
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  padding: 2px 10px;
+  font-size: 16px;
 }
 
 .unit-stats {
@@ -810,8 +893,8 @@ button.danger {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(249, 115, 22, 0.2);
-  color: #fdba74;
+  background: color-mix(in srgb, var(--c-fire) 20%, transparent);
+  color: color-mix(in srgb, var(--c-fire) 55%, var(--c-white));
 }
 
 .unit-controls {
@@ -832,7 +915,7 @@ button.danger {
   min-width: 24px;
   text-align: center;
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -866,15 +949,15 @@ button.danger {
   stroke-dasharray: 5 4;
 }
 .watch-0 {
-  fill: rgba(34, 211, 238, 0.18);
-  stroke: rgba(14, 116, 144, 0.9);
+  fill: color-mix(in srgb, var(--c-watch) 18%, transparent);
+  stroke: color-mix(in srgb, var(--c-watch-dark) 90%, transparent);
 }
 .watch-1 {
-  fill: rgba(244, 114, 182, 0.2);
-  stroke: rgba(157, 23, 77, 0.9);
+  fill: color-mix(in srgb, var(--c-watch-enemy) 20%, transparent);
+  stroke: color-mix(in srgb, var(--c-watch-enemy-dark) 90%, transparent);
 }
 .shade.watch {
-  fill: rgba(34, 211, 238, 0.45);
+  fill: color-mix(in srgb, var(--c-watch) 45%, transparent);
 }
 
 .unit .ow,
@@ -886,23 +969,23 @@ button.danger {
   display: block;
 }
 .ow rect {
-  fill: #22d3ee;
+  fill: var(--c-watch);
 }
 .ow .eye {
-  fill: #fff;
-  stroke: #111;
+  fill: var(--c-white);
+  stroke: var(--c-ink);
   stroke-width: 1.2;
 }
 .ow .pupil {
-  fill: #111;
+  fill: var(--c-ink);
 }
 .ow text {
-  fill: #111;
+  fill: var(--c-ink);
   font-size: 11px;
 }
 .shell path {
-  fill: #f59e0b;
-  stroke: #111;
+  fill: var(--c-shell);
+  stroke: var(--c-ink);
   stroke-width: 1.5;
 }
 
@@ -923,9 +1006,9 @@ button.danger {
 
 /* Units under a friendly hero aura glow gold (visible to both players). */
 .unit.aura .body {
-  stroke: #facc15;
+  stroke: var(--c-accent);
   stroke-width: 3;
-  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.9));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-accent) 90%, transparent));
 }
 .unit .crown {
   display: none;
@@ -934,8 +1017,8 @@ button.danger {
   display: block;
 }
 .crown path {
-  fill: #facc15;
-  stroke: #111;
+  fill: var(--c-accent);
+  stroke: var(--c-ink);
   stroke-width: 1.3;
   stroke-linejoin: round;
 }
@@ -943,24 +1026,24 @@ button.danger {
 .builder-section {
   grid-column: 1 / -1;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
   margin-top: 4px;
 }
 .unit-card.hero {
-  background: linear-gradient(160deg, rgba(250, 204, 21, 0.14), var(--panel) 55%);
-  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.45);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c-accent) 14%, transparent), var(--panel) 55%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
 .unit-card.hero.picked {
   box-shadow: none;
 }
 .hero-badge {
-  background: #1c2230;
+  background: var(--c-ink);
   color: var(--accent);
   border: 2px solid var(--accent);
-  font-weight: 900;
+  font-weight: 700;
   font-size: 11px;
   letter-spacing: 0.08em;
   border-radius: 6px;
@@ -983,20 +1066,20 @@ button.danger {
 }
 .unit.resting .zz {
   display: block;
-  fill: #e5e7eb;
+  fill: var(--c-fx-miss);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   font-style: italic;
   paint-order: stroke;
-  stroke: #111;
+  stroke: var(--c-ink);
   stroke-width: 3px;
 }
 .unit.burning .flame-icon {
   display: block;
 }
 .flame-icon path {
-  fill: #f97316;
-  stroke: #7c2d12;
+  fill: var(--c-fire);
+  stroke: var(--c-fire-dark);
   stroke-width: 1.2;
 }
 
@@ -1009,19 +1092,19 @@ button.danger {
   display: block;
 }
 .twin-link .twin-bg {
-  fill: #a855f7;
-  stroke: #111;
+  fill: var(--c-special);
+  stroke: var(--c-ink);
   stroke-width: 1.2;
 }
 .twin-link ellipse {
   fill: none;
-  stroke: #fff;
+  stroke: var(--c-white);
   stroke-width: 1.4;
 }
 /* The selected twin's partner gets a solid purple outline. */
 .unit.partner .ring.tgt {
   display: block;
-  stroke: #a855f7;
+  stroke: var(--c-special);
   stroke-dasharray: none;
   stroke-width: 2.5;
 }
@@ -1035,20 +1118,20 @@ button.danger {
   display: block;
 }
 .moon circle {
-  fill: #1e293b;
-  stroke: #fde68a;
+  fill: var(--c-panel);
+  stroke: var(--c-moon);
   stroke-width: 1.5;
 }
 .moon text {
-  fill: #fde68a;
+  fill: var(--c-moon);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
 }
 .terrain.boulder {
-  fill: #a8835a;
-  stroke: #5b4329;
+  fill: var(--c-boulder);
+  stroke: var(--c-boulder-edge);
 }
 
 .coin {
@@ -1058,10 +1141,10 @@ button.danger {
   display: grid;
   place-items: center;
   font-size: 34px;
-  font-weight: 900;
-  color: #1c2230;
-  background: radial-gradient(circle at 35% 30%, #fde68a, #d4a017);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  font-weight: 700;
+  color: var(--c-ink);
+  background: radial-gradient(circle at 35% 30%, var(--c-moon), var(--c-accent));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--c-black) 50%, transparent);
   animation: coin-flip 1.4s ease-out;
 }
 @keyframes coin-flip {
@@ -1084,43 +1167,43 @@ button.danger {
   display: block;
 }
 .hack-mark rect {
-  fill: #052e16;
-  stroke: #4ade80;
+  fill: var(--c-hack-dark);
+  stroke: var(--c-hack);
   stroke-width: 1.2;
 }
 .hack-mark text {
-  fill: #4ade80;
+  fill: var(--c-hack);
   font-size: 7px;
-  font-weight: 900;
+  font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
 }
 
 /* Cracking Armor (Behemoth): current defense under the health badge, red once cracked. */
 .armor rect {
-  fill: #e5e7eb;
-  stroke: #111827;
+  fill: var(--c-armor-face);
+  stroke: var(--c-ink);
   stroke-width: 1;
 }
 .armor text {
-  fill: #111827;
-  font-size: 12px;
-  font-weight: 800;
+  fill: var(--c-ink);
+  font-size: 13px;
+  font-weight: 700;
 }
 .armor .armor-text {
   text-anchor: start;
 }
 .armor .shield {
-  fill: #64748b;
-  stroke: #111827;
+  fill: var(--c-armor-shield);
+  stroke: var(--c-ink);
   stroke-width: 1;
 }
 .armor.cracked .shield {
-  fill: #b91c1c;
+  fill: var(--c-hp-low);
 }
 .armor.cracked rect {
-  fill: #fecaca;
-  stroke: #b91c1c;
+  fill: var(--c-die-hacked);
+  stroke: var(--c-hp-low);
 }
 
 /* Builder tabs: Units / Heroes. */
@@ -1134,7 +1217,7 @@ button.danger {
 .builder-tab {
   min-height: 44px;
   border-radius: 10px 10px 0 0;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 15px;
   display: flex;
   align-items: center;
@@ -1153,7 +1236,7 @@ button.danger {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--player);
-  color: #fff;
+  color: var(--c-white);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1198,30 +1281,30 @@ button.danger {
   height: auto;
 }
 .zone-map polygon {
-  stroke: rgba(15, 23, 42, 0.9);
+  stroke: color-mix(in srgb, var(--c-bg) 90%, transparent);
   stroke-width: 1;
 }
 .zone-map .open {
-  fill: #e7e2d3;
+  fill: var(--c-tile);
 }
 .zone-map .wall {
-  fill: #64748b;
+  fill: var(--c-terrain2);
 }
 .zone-map .cp {
-  fill: #facc15;
+  fill: var(--c-accent);
 }
 .zone-map .z0 {
-  fill: #3b82f6;
+  fill: var(--c-p0);
 }
 .zone-map .z1 {
-  fill: #ef4444;
+  fill: var(--c-p1);
 }
 /* During deployment the enemy's zone is shown faintly. */
 .shade.deploy-0.faint {
-  fill: rgba(59, 130, 246, 0.12);
+  fill: color-mix(in srgb, var(--c-p0) 14%, transparent);
 }
 .shade.deploy-1.faint {
-  fill: rgba(239, 68, 68, 0.12);
+  fill: color-mix(in srgb, var(--c-p1) 14%, transparent);
 }
 
 /* Limited-use special (Mercenary): shots left, at the lower right. */
@@ -1232,25 +1315,55 @@ button.danger {
   display: block;
 }
 .uses rect {
-  fill: #facc15;
-  stroke: #111827;
+  fill: var(--c-accent);
+  stroke: var(--c-ink);
   stroke-width: 1;
 }
 .uses text {
-  fill: #111827;
+  fill: var(--c-ink);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
 }
 .unit.limited.empty-uses .uses rect {
-  fill: #6b7280;
+  fill: var(--c-die-used);
 }
 
 .unit-uses {
   font-size: 14px;
-  color: #facc15;
+  color: var(--c-accent);
 }
 .unit-uses.none {
   color: var(--bad);
+}
+
+/* ---------- Polish: markers, input lock, reduced motion ---------- */
+
+.terrain-label.h2 {
+  fill: color-mix(in srgb, var(--c-terrain-label) 75%, transparent);
+}
+.spot-bg {
+  fill: var(--c-fire);
+  stroke: var(--c-ink);
+  stroke-width: 1.5;
+}
+.spot-cross {
+  stroke: var(--c-ink);
+  stroke-width: 1.5;
+}
+
+/* While an animation plays, the panel ignores taps (the board does too). */
+#app.busy #panel {
+  pointer-events: none;
+}
+#app.busy .actions {
+  opacity: 0.7;
+}
+
+/* Animations off (menu setting): skip decorative motion. */
+.no-anim .die.pop,
+.no-anim .coin,
+.no-anim .overlay-card .tap {
+  animation: none;
 }

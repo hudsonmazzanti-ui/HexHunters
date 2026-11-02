@@ -306,6 +306,20 @@ the edge isn't enough, but blockers on both sides are. Lines that don't touch an
 shading = hexes where a model of that size would be hidden from it (light: small models hidden, medium: medium and smaller
 hidden, dark: even large models hidden). Red dashed rings show enemies you can attack now.
 
+## Look and feel
+
+- **Theme:** all colors, fonts (Rajdhani for headings, buttons and numbers; Inter for text), spacing and
+  radii live in `src/ui/theme.ts`, which sets them as CSS variables at startup. `style.css` contains no raw colors
+  (a test enforces this).
+- **Movement:** models glide hex by hex along their real path (never through walls), about 130 ms per hex with
+  eased start and stop. Hook pulls, Shove and Vault glide too; the Dragon lifts off while flying. Swap and Undo are
+  instant. Input is locked while an animation plays.
+- **Haptics:** a short tap when selecting a model or confirming a move or placement, a buzz on a hit, and a
+  stronger pattern when a model dies (`navigator.vibrate`; silently does nothing where unsupported, e.g. iOS
+  Safari).
+- **Settings:** the ☰ menu has Animations and Haptics toggles, remembered in the browser. Animations default to
+  off when the device asks for reduced motion.
+
 ## Code layout
 
 ```
@@ -325,6 +339,8 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
 src/data/config.ts   unit stats, costs, game settings
 src/data/deployShapes.ts   deployment shapes (zone rules)
 src/ui/          SVG board, pan/zoom camera, HUD, army builder, overlays, controller
+src/ui/theme.ts  every color, font, spacing step and radius (applied as CSS variables)
+src/ui/settings.ts, haptics.ts   menu settings (animations, haptics) and vibration
 tests/           Vitest unit tests
 ```
 

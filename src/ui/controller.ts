@@ -67,11 +67,14 @@ import { BoardView, type BoardOverlay, HEX_SIZE } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
 import { PLAYER_COLORS, PLAYER_NAMES, type PanelAction, type PanelModel, renderPanel, renderTopBar } from './hud';
+import { COLORS, HANDOFF_COLORS } from './theme';
+import { haptics } from './haptics';
+import { applySettingsClasses, getSettings, updateSettings } from './settings';
 import { showOverlay } from './overlay';
 
 // Opaque, so the next player's freshly rolled dice (or army) aren't visible during handoff.
-const HANDOFF_BG = ['#172e5c', '#5c1717'];
-const NEUTRAL_BG = '#2a2f3a';
+const HANDOFF_BG = HANDOFF_COLORS;
+const NEUTRAL_BG = COLORS.raised;
 
 const SIZE_NAMES = ['', 'small', 'medium', 'large'];
 
@@ -96,6 +99,8 @@ export class Controller {
   private board: BoardView;
   private camera!: Camera;
   private busy = false;
+  /** The action whose events are playing (Undo snaps instead of gliding). */
+  private action: Action | null = null;
 
   constructor(
     private config: GameConfig,
@@ -134,6 +139,7 @@ export class Controller {
   // ---------- Dispatch & events ----------
 
   private async dispatch(action: Action): Promise<boolean> {
+    if (this.busy) return false; // an animation is still playing
     let result;
     try {
       result = applyAction(this.state, action);
@@ -152,11 +158,13 @@ export class Controller {
       this.ui.pendingChoice = null;
       this.ui.specialMode = false;
     }
-    this.busy = true;
+    if (action.type === 'move' || action.type === 'place') haptics.tap();
+    this.action = action;
+    this.setBusy(true);
     try {
       await this.playEvents(before, result.events);
     } finally {
-      this.busy = false;
+      this.setBusy(false);
     }
     const crawl = crawlText(before, this.state);
     if (crawl) this.ui.message = `${this.ui.message ?? ''} ${crawl}`.trim();
@@ -164,8 +172,16 @@ export class Controller {
     return true;
   }
 
+  /** Locks input (board, chips, panel) while events animate. */
+  private setBusy(busy: boolean): void {
+    this.busy = busy;
+    document.getElementById('app')?.classList.toggle('busy', busy);
+  }
+
   private async playEvents(before: GameState, events: GameEvent[]): Promise<void> {
     for (const ev of events) {
+      const feel = eventFeel(ev);
+      if (feel) haptics[feel]();
       switch (ev.type) {
         case 'armyChosen':
           if (ev.next === null) {
@@ -180,15 +196,22 @@ export class Controller {
           if (ev.next !== null && ev.next !== placer) await this.deployHandoff(ev.next);
           break;
         }
-        case 'move':
-          await this.board.animateMove(ev.unitId, ev.path);
+        case 'move': {
+          const mover = getUnit(before, ev.unitId);
+          // Undo jumps straight back; real moves glide along their path.
+          if (this.action?.type === 'undoMove' || !mover?.pos) {
+            this.render();
+            break;
+          }
+          await this.board.animateMove(ev.unitId, mover.pos, ev.path, { airborne: !!unitDef(before, mover).flying });
           break;
+        }
         case 'attack': {
           const attacker = getUnit(before, ev.unitId)!;
           const target = getUnit(before, ev.targetId)!;
           this.board.shot(attacker.pos!, target.pos!, PLAYER_COLORS[attacker.owner]);
           const roll = `${ev.roll}${ev.bonus ? `+${ev.bonus}` : ''} vs ${ev.defense}`;
-          this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? '#fca5a5' : '#e5e7eb');
+          this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? COLORS.fxDamage : COLORS.fxMiss);
           this.ui.message = ev.hit
             ? `${unitDef(before, attacker).name} hits ${unitDef(before, target).name} (${roll}) for ${ev.damage}${ev.killed ? ' — destroyed!' : '.'}`
             : `${unitDef(before, attacker).name} misses ${unitDef(before, target).name} (${roll}).`;
@@ -221,19 +244,19 @@ export class Controller {
           break;
         case 'gambleFailed': {
           const u = getUnit(this.state, ev.unitId);
-          if (u?.pos) this.board.floatText(u.pos, 'BUST', '#f87171');
+          if (u?.pos) this.board.floatText(u.pos, 'BUST', COLORS.fxBust);
           this.ui.message = `Gamble failed: rolled ${ev.roll} (${ev.reason}). The action is wasted.`;
           break;
         }
         case 'transformed': {
           const u = getUnit(this.state, ev.unitId);
           this.render();
-          if (u?.pos) this.board.floatText(u.pos, 'TRANSFORMS!', '#fde68a');
+          if (u?.pos) this.board.floatText(u.pos, 'TRANSFORMS!', COLORS.fxGold);
           break;
         }
         case 'raised': {
           this.render();
-          this.board.floatText(ev.at, 'RISEN', '#c4b5fd');
+          this.board.floatText(ev.at, 'RISEN', COLORS.fxInfo);
           const line = `A Skeleton rises for ${PLAYER_NAMES[getUnit(this.state, ev.unitId)?.owner ?? 0]}!`;
           this.ui.message = `${this.ui.message ?? ''} ${line}`.trim();
           break;
@@ -241,20 +264,20 @@ export class Controller {
         case 'cracked': {
           this.render();
           const u = getUnit(this.state, ev.unitId);
-          if (u?.pos) this.board.floatText(u.pos, 'CRACK', '#fca5a5');
+          if (u?.pos) this.board.floatText(u.pos, 'CRACK', COLORS.fxDamage);
           this.ui.message = `${this.ui.message ?? ''} ${crackText(this.state, ev)}`.trim();
           break;
         }
         case 'burn': {
           const pos = getUnit(before, ev.unitId)?.pos;
-          if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, '#fb923c');
+          if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, COLORS.fire);
           break;
         }
         case 'overwatch': {
           const sentinel = getUnit(before, ev.unitId)!;
           const target = getUnit(before, ev.targetId)!;
-          this.board.shot(sentinel.pos!, target.pos!, '#22d3ee');
-          this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? '#fca5a5' : '#e5e7eb');
+          this.board.shot(sentinel.pos!, target.pos!, COLORS.watch);
+          this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? COLORS.fxDamage : COLORS.fxMiss);
           this.ui.message = overwatchText(before, ev);
           this.render();
           await sleep(700);
@@ -293,15 +316,15 @@ export class Controller {
       smash: 'SMASH',
     };
     const label = labels[ev.special];
-    if (label) this.board.floatText((target ?? unit).pos!, label, '#c4b5fd');
+    if (label) this.board.floatText((target ?? unit).pos!, label, COLORS.fxInfo);
 
     if (ev.special === 'grenade' && ev.hex) {
-      this.board.shot(unit.pos!, ev.hex, '#f97316');
+      this.board.shot(unit.pos!, ev.hex, COLORS.fire);
       this.board.flash([ev.hex], 'flash-impact');
       this.board.flash(neighbors(ev.hex), 'flash-splash');
     }
-    if (ev.special === 'secondShot' && target?.pos) this.board.shot(unit.pos!, target.pos, '#fde68a');
-    if (ev.special === 'hack' && target?.pos) this.board.shot(unit.pos!, target.pos, '#4ade80');
+    if (ev.special === 'secondShot' && target?.pos) this.board.shot(unit.pos!, target.pos, COLORS.fxGold);
+    if (ev.special === 'hack' && target?.pos) this.board.shot(unit.pos!, target.pos, COLORS.hack);
     if ((ev.special === 'torch' || ev.special === 'breath') && ev.dir !== undefined) {
       const preview = previewSpecial(before, unit, { dir: ev.dir });
       if (preview) this.board.flash(preview.area.map((a) => a.hex), 'flash-impact');
@@ -309,8 +332,8 @@ export class Controller {
     for (const e of ev.effects ?? []) {
       const pos = getUnit(before, e.unitId)?.pos;
       if (!pos) continue;
-      if (e.hit === false) this.board.floatText(pos, 'MISS', '#e5e7eb');
-      else this.board.floatText(pos, `-${e.damage}`, '#fca5a5');
+      if (e.hit === false) this.board.floatText(pos, 'MISS', COLORS.fxMiss);
+      else this.board.floatText(pos, `-${e.damage}`, COLORS.fxDamage);
     }
 
     if (ev.special === 'smash' && ev.hex) {
@@ -320,17 +343,19 @@ export class Controller {
     if (ev.special === 'hurl' && ev.hex) {
       // The map changed: the chunk is gone (and a boulder may have landed).
       const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
-      if (target?.pos) this.board.shot(ev.hex, target.pos, '#a8835a');
+      if (target?.pos) this.board.shot(ev.hex, target.pos, COLORS.fxBoulder);
       this.board.drawTerrain(this.state.map);
     }
 
-    if (ev.special === 'swap' && ev.movedId && ev.from && ev.to && ev.targetId) {
-      // Both twins slide across at once.
+    if (ev.special === 'swap') {
+      // The twins teleport: they just flip places.
       this.render();
-      await Promise.all([this.board.animateMove(ev.movedId, [ev.to]), this.board.animateMove(ev.targetId, [ev.from])]);
     } else if (ev.movedId && ev.to) {
+      // Hook pulls, Shove, Vault: glide along the forced path.
+      const moved = getUnit(before, ev.movedId);
       this.render();
-      await this.board.animateMove(ev.movedId, ev.path ?? [ev.to]);
+      const from = ev.from ?? moved?.pos;
+      if (from) await this.board.animateMove(ev.movedId, from, ev.path ?? [ev.to]);
     }
 
     const kills = (ev.effects ?? []).filter((e) => e.killed).length;
@@ -442,6 +467,7 @@ export class Controller {
 
   private openMenu(): void {
     if (this.busy) return;
+    const settings = getSettings();
     void showOverlay({
       title: 'HexHunters',
       lines: [`Map seed: ${this.state.seed}`],
@@ -449,6 +475,23 @@ export class Controller {
         { label: 'Resume', className: 'primary', onClick: () => {} },
         { label: 'New game (new map)', className: 'danger', onClick: () => void this.start(randomSeed()) },
         { label: 'Restart (same map)', onClick: () => void this.start(this.state.seed) },
+        {
+          label: `Animations: ${settings.animations ? 'On' : 'Off'}`,
+          className: 'toggle',
+          onClick: () => {
+            applySettingsClasses(updateSettings({ animations: !settings.animations }));
+            this.openMenu();
+          },
+        },
+        {
+          label: `Haptics: ${settings.haptics ? 'On' : 'Off'}`,
+          className: 'toggle',
+          onClick: () => {
+            const next = updateSettings({ haptics: !settings.haptics });
+            if (next.haptics) haptics.tap();
+            this.openMenu();
+          },
+        },
       ],
     });
   }
@@ -484,6 +527,8 @@ export class Controller {
   }
 
   private selectUnit(id: string | null): void {
+    const unit = id ? getUnit(this.state, id) : undefined;
+    if (unit && id !== this.ui.selectedId && unit.owner === this.state.current) haptics.tap();
     this.ui.selectedId = id;
     this.ui.pendingTwin = null;
     this.ui.pendingTargetId = null;
@@ -1202,4 +1247,22 @@ function zoneMap(state: GameState): HTMLElement {
   const wrap = document.createElement('div');
   wrap.append(svg);
   return wrap;
+}
+
+/** Haptic feedback for an event: a kill beats a hit; misses and non-damage events are silent. */
+export function eventFeel(ev: GameEvent): 'kill' | 'hit' | null {
+  switch (ev.type) {
+    case 'attack':
+    case 'overwatch':
+      return ev.killed ? 'kill' : ev.hit ? 'hit' : null;
+    case 'special': {
+      const fx = ev.effects ?? [];
+      if (fx.some((e) => e.killed)) return 'kill';
+      return fx.some((e) => e.damage > 0) ? 'hit' : null;
+    }
+    case 'burn':
+      return ev.killed ? 'kill' : null;
+    default:
+      return null;
+  }
 }
