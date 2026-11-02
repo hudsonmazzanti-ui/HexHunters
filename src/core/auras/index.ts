@@ -2,7 +2,7 @@
  * Hero auras. Each lives in its own module; to add one, write the module, add its id
  * to AuraId (types.ts), list it here, and give a unit `hero: { aura: '<id>' }`.
  */
-import type { AuraId, GameState, PlayerId, Unit } from '../types';
+import type { AuraId, GameConfig, GameState, PlayerId, Unit } from '../types';
 import { gambler } from './gambler';
 import { marshal } from './marshal';
 import { necro } from './necro';
@@ -21,6 +21,39 @@ export const AURAS: Record<AuraId, AuraDef> = { marshal, siege, warlord, warden,
 /** Points a player scores for winning the control point at the end of a round (Standard Bearer: 2). */
 export const holdPoints = (state: GameState, player: PlayerId): number =>
   Math.max(1, ...state.auras[player].map((id) => AURAS[id].holdPoints?.(state.config.specials) ?? 1));
+
+/** One stat's change from auras for the army builder: total, and the hero it comes from. */
+export interface StatChange {
+  total: number;
+  /** Hero name(s) responsible, e.g. "Warlord". */
+  from: string;
+}
+
+/**
+ * Army builder: how hero auras change a unit type's move, defense and max health before the
+ * game starts, judged from the data alone (AuraDef.appliesToType). `auraIds` are the auras
+ * the army will have; `heroNames` names each for display.
+ */
+export function typeStatChanges(
+  config: GameConfig,
+  auraIds: Iterable<AuraId>,
+  unitType: string,
+  heroNames: (id: AuraId) => string = (id) => id,
+): { speed: StatChange; defense: StatChange; health: StatChange } {
+  const def = config.units[unitType];
+  const out = { speed: { total: 0, from: '' }, defense: { total: 0, from: '' }, health: { total: 0, from: '' } };
+  for (const id of new Set(auraIds)) {
+    const aura = AURAS[id];
+    if (!aura.appliesToType?.(def)) continue;
+    const e = aura.effects(config.specials, def);
+    for (const [key, v] of [['speed', e.speedBonus], ['defense', e.defenseBonus], ['health', e.healthBonus]] as const) {
+      if (!v) continue;
+      out[key].total += v;
+      out[key].from = out[key].from ? `${out[key].from}, ${heroNames(id)}` : heroNames(id);
+    }
+  }
+  return out;
+}
 
 /** Auras of the unit's own army that affect it. */
 export const aurasOn = (state: GameState, unit: Unit): AuraId[] =>

@@ -190,7 +190,7 @@ export interface SpecialRules {
   warlordSpeedBonus: number;
   /**
    * Warlord aura: defense and max-health changes for large models (0 = none; negative
-   * values are a cost, e.g. for balance experiments in the simulator).
+   * values are a cost). Max health: -2, applied from the start of the game.
    */
   warlordDefenseBonus: number;
   warlordHealthBonus: number;

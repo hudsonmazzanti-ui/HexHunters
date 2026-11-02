@@ -9,6 +9,7 @@ export const warden: AuraDef = {
       ? `+${r.wardenDefenseBonus} def, +${r.wardenMedicDamageBonus} dmg`
       : `+${r.wardenDefenseBonus} def, +${r.wardenSentinelHealthBonus} HP`,
   affects: (_s, unit) => unit.type === 'medic' || unit.type === 'sentinel',
+  appliesToType: (unit) => unit.special === 'heal' || unit.special === 'overwatch',
   effects: (r, unit) =>
     unit.special === 'heal'
       ? { defenseBonus: r.wardenDefenseBonus, damageBonus: r.wardenMedicDamageBonus }

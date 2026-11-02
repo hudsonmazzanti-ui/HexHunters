@@ -43,6 +43,11 @@ export interface AuraDef {
   short(rules: SpecialRules, unit: UnitDef): string;
   /** Does it affect this friendly unit? (Ownership is checked by the registry.) */
   affects(state: GameState, unit: Unit): boolean;
+  /**
+   * Which unit types it changes, judged from the data alone (the army builder shows their
+   * effective stats before the game starts). Leave out for auras that depend on the board.
+   */
+  appliesToType?(unit: UnitDef): boolean;
   /** What it grants a given affected unit type. */
   effects(rules: SpecialRules, unit: UnitDef): AuraEffects;
   /** Army-wide: points scored for winning the control point at the end of a round (default 1). */

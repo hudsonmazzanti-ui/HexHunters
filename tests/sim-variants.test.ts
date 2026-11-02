@@ -202,15 +202,18 @@ describe('Warlord variants', () => {
     return { s, monster, inf };
   };
 
-  it('the real game is unchanged: +1 speed only', () => {
-    expect(DEFAULT_CONFIG.specials).toMatchObject({ warlordSpeedBonus: 1, warlordDefenseBonus: 0, warlordHealthBonus: 0 });
+  it('the real game now has the health cost: +1 speed and -2 max health', () => {
+    expect(DEFAULT_CONFIG.specials).toMatchObject({ warlordSpeedBonus: 1, warlordDefenseBonus: 0, warlordHealthBonus: -2 });
     const { s, monster } = board(DEFAULT_CONFIG);
-    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense, UNITS.monster.health]);
+    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense, UNITS.monster.health - 2]);
+    // The old rule, kept as a variant for comparison.
+    const old = board(variantConfig('warlord-speed-only'));
+    expect(maxHealth(old.s, old.monster)).toBe(UNITS.monster.health);
   });
 
   it('Warlord-Armor: large models +1 speed and -1 defense; others untouched', () => {
     const { s, monster, inf } = board(variantConfig('warlord-armor'));
-    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense - 1, UNITS.monster.health]);
+    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense - 1, UNITS.monster.health]); // no health cost
     expect([unitSpeed(s, inf), baseDefense(s, inf)]).toEqual([3, UNITS.infantry.defense]);
   });
 
@@ -219,6 +222,6 @@ describe('Warlord variants', () => {
     const { s, monster } = board(cfg);
     expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense, UNITS.monster.health - 2]);
     expect(monster.hp).toBe(UNITS.monster.health - 2);
-    expect(EXPERIMENTS.warlord.variants).toEqual(['baseline', 'warlord-armor', 'warlord-health']);
+    expect(EXPERIMENTS.warlord.variants).toEqual(['warlord-speed-only', 'warlord-armor', 'baseline']);
   });
 });

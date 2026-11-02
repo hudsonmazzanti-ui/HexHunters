@@ -496,7 +496,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     marshalRollBonus: 2,
     warlordSpeedBonus: 1,
     warlordDefenseBonus: 0,
-    warlordHealthBonus: 0,
+    warlordHealthBonus: -2, // the cost of the +1 speed
     wardenDefenseBonus: 1,
     wardenMedicDamageBonus: 1,
     wardenSentinelHealthBonus: 2,
