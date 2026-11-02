@@ -63,7 +63,7 @@ import {
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/types';
 import { heroName, speedName } from '../data/config';
 import { AURAS, aurasOn } from '../core/auras';
-import { BoardView, type BoardOverlay, HEX_SIZE } from './board';
+import { BoardView, type BoardOverlay, HEX_SIZE, UNDO_MS } from './board';
 import { showBuilder } from './builder';
 import { Camera } from './camera';
 import { PLAYER_COLORS, PLAYER_NAMES, type PanelAction, type PanelModel, renderPanel, renderTopBar } from './hud';
@@ -198,11 +198,16 @@ export class Controller {
         }
         case 'move': {
           const mover = getUnit(before, ev.unitId);
-          // Undo jumps straight back; real moves glide along their path.
-          if (this.action?.type === 'undoMove' || !mover?.pos) {
+          if (!mover?.pos) {
             this.render();
             break;
           }
+          // Undo: a quick straight slide back (no need to retrace the path).
+          if (this.action?.type === 'undoMove') {
+            await this.board.animateMove(ev.unitId, mover.pos, ev.path, { durationMs: UNDO_MS });
+            break;
+          }
+          // Real moves glide along their path.
           await this.board.animateMove(ev.unitId, mover.pos, ev.path, { airborne: !!unitDef(before, mover).flying });
           break;
         }

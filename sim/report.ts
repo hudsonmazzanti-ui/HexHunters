@@ -195,6 +195,8 @@ export interface ReportMeta {
   seconds: number;
   minGames: number;
   maxRounds: number;
+  /** Set when the run used a balance variant (temporary stat overrides). */
+  variant?: string;
 }
 
 export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): string {
@@ -307,7 +309,7 @@ export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): st
   ul.flags { margin:0; padding-left:18px; } li.hi b { color:var(--hi); } li.lo b { color:var(--lo); }
   tr.rare td, tr.rare th { color:var(--lo); }
 </style></head><body><main>
-<h1>HexHunters balance report</h1>
+<h1>HexHunters balance report${meta.variant ? `: ${esc(meta.variant)}` : ''}</h1>
 <div class="muted">${s.games} games · seed ${meta.seed} · ${meta.perMatchup} per preset matchup + ${meta.randomGames} random-vs-random ·
 ${meta.workers} workers · ${meta.seconds.toFixed(1)} s</div>
 <p class="note"><b>Read with care:</b> these games are played by a simple heuristic bot (one step of look-ahead,

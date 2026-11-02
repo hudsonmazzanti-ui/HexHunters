@@ -15,6 +15,11 @@
  *   --min-games N    smallest sample that gets flagged (default 25)
  *   --replay SEED    play one game and print every action; --a/--b take preset names or
  *                    space-separated unit ids; --seat 1|2 is army A's seat (default 1)
+ *
+ * Balance variants (temporary stat overrides, see sim/variants.ts; the real data is untouched):
+ *   --variant ID       run one variant instead of the current data
+ *   --variants A,B,C   run several with the same seed and write a comparison (out/compare.html)
+ *   --experiment NAME  run a named group from EXPERIMENTS (e.g. "monster")
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -24,11 +29,12 @@ import { validateConfig } from '../src/core/army';
 import type { PlayerId } from '../src/core/types';
 import { DEFAULT_CONFIG } from '../src/data/config';
 import { type ArmySpec, PRESETS, checkPresets } from './armies';
+import { type VariantResult, compareCsv, compareHtml, spreads } from './compare';
 import { findFlags, gamesCsv, reportHtml, summarize, unitsCsv } from './report';
 import { type GameJob, type GameRecord, runGame } from './runGame';
 import { buildJobs, splitGames } from './schedule';
+import { EXPERIMENTS, type Experiment, VARIANTS, variantConfig } from './variants';
 
-const config = DEFAULT_CONFIG;
 const MAX_ROUNDS = 30;
 
 function args(): Record<string, string> {
@@ -51,7 +57,7 @@ function armyArg(v: string | undefined, fallback: ArmySpec): ArmySpec {
   return preset ?? { name: 'Custom', units: v.split(/[\s,+]+/).filter(Boolean) };
 }
 
-async function runParallel(jobs: GameJob[], workers: number): Promise<GameRecord[]> {
+async function runParallel(jobs: GameJob[], workers: number, variant: string): Promise<GameRecord[]> {
   const chunks: GameJob[][] = Array.from({ length: workers }, () => []);
   jobs.forEach((j, i) => chunks[i % workers].push(j)); // interleaved, so every worker gets a fair mix
   let done = 0;
@@ -84,7 +90,7 @@ async function runParallel(jobs: GameJob[], workers: number): Promise<GameRecord
               }
             });
             w.on('error', reject);
-            w.postMessage(chunk);
+            w.postMessage({ jobs: chunk, variant });
           }),
       ),
   );
@@ -92,13 +98,64 @@ async function runParallel(jobs: GameJob[], workers: number): Promise<GameRecord
   return parts.flat().sort((a, b) => a.index - b.index);
 }
 
+interface RunSettings {
+  seed: number;
+  perMatchup: number;
+  randomGames: number;
+  workers: number;
+  minGames: number;
+}
+
+/** Runs the full schedule under one variant and writes its report into `out`. */
+async function runVariant(id: string, o: RunSettings, out: string): Promise<VariantResult> {
+  const config = variantConfig(id);
+  const variant = VARIANTS[id];
+  const bad = validateConfig(config);
+  if (bad.length) throw new Error(`Variant "${id}" breaks the unit data:\n  ${bad.join('\n  ')}`);
+  // Presets that aren't legal under this variant sit out its round robin.
+  const excluded = checkPresets(config);
+  const presets = PRESETS.filter((p) => !excluded.some((e) => e.startsWith(`${p.name}:`)));
+  const jobs = buildJobs(config, { seed: o.seed, perMatchup: o.perMatchup, randomGames: o.randomGames, presets });
+  console.log(`\n[${variant.label}] ${jobs.length} games (${o.perMatchup} per preset matchup, ${o.randomGames} random)`);
+  for (const e of excluded) console.log(`  left out (not legal): ${e}`);
+  const t0 = Date.now();
+  const records = await runParallel(jobs, o.workers, id);
+  const seconds = (Date.now() - t0) / 1000;
+
+  const summary = summarize(records, config, presets.map((p) => p.name));
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, 'games.csv'), gamesCsv(records));
+  writeFileSync(join(out, 'units.csv'), unitsCsv(summary, config));
+  writeFileSync(
+    join(out, 'report.html'),
+    reportHtml(summary, config, { ...o, seconds, maxRounds: MAX_ROUNDS, variant: id === 'baseline' ? undefined : variant.label }),
+  );
+  console.log(`  done in ${seconds.toFixed(1)} s · avg ${summary.avgRounds.toFixed(1)} rounds · illegal bot moves: ${summary.illegal}`);
+  return { id, label: variant.label, description: variant.description, config, summary, excluded, seconds };
+}
+
 async function main(): Promise<void> {
   const a = args();
-  const problems = [...validateConfig(config), ...checkPresets(config)];
+  const problems = [...validateConfig(DEFAULT_CONFIG), ...checkPresets(DEFAULT_CONFIG)];
   if (problems.length) {
     console.error(`Fix these first:\n  ${problems.join('\n  ')}`);
     process.exit(1);
   }
+
+  // Which variants to run.
+  let experiment: Experiment | null = null;
+  let ids = ['baseline'];
+  if (a.experiment) {
+    experiment = EXPERIMENTS[a.experiment];
+    if (!experiment) throw new Error(`Unknown experiment "${a.experiment}". Known: ${Object.keys(EXPERIMENTS).join(', ')}`);
+    ids = experiment.variants;
+  } else if (a.variants) {
+    ids = a.variants.split(',').map((x) => x.trim()).filter(Boolean);
+    experiment = { title: 'Balance variants', variants: ids, focusUnits: [], focusPresets: [] };
+  } else if (a.variant) {
+    ids = [a.variant];
+  }
+  for (const id of ids) variantConfig(id); // fail fast on an unknown id
 
   if (a.replay) {
     const seed = int(a.replay, 1);
@@ -110,8 +167,8 @@ async function main(): Promise<void> {
       b: armyArg(a.b, PRESETS[1]),
       seatOfA: (a.seat === '2' ? 1 : 0) as PlayerId,
     };
-    const r = runGame(job, { keepLog: true });
-    console.log(`Seed ${seed}: ${job.a.name} [${job.a.units.join(' ')}] (P${job.seatOfA + 1}) vs ${job.b.name} [${job.b.units.join(' ')}]`);
+    const r = runGame(job, { keepLog: true, config: variantConfig(ids[0]) });
+    console.log(`Seed ${seed}${ids[0] !== 'baseline' ? ` · variant ${ids[0]}` : ''}: ${job.a.name} [${job.a.units.join(' ')}] (P${job.seatOfA + 1}) vs ${job.b.name} [${job.b.units.join(' ')}]`);
     console.log(`Shape ${r.shape} · first mover ${r.firstMover}`);
     r.log!.forEach((act, i) => console.log(`${String(i + 1).padStart(4)}. ${JSON.stringify(act)}`));
     console.log(`Result: ${r.winner === 'draw' ? 'draw' : `${r.winner === 'A' ? job.a.name : job.b.name} wins`} (${r.reason}) after ${r.rounds} rounds, ${r.scoreA}-${r.scoreB}`);
@@ -119,33 +176,37 @@ async function main(): Promise<void> {
   }
 
   const seed = a.seed !== undefined ? int(a.seed, 1) : 1 + Math.floor(Math.random() * 2 ** 30);
+  // The split is based on the full preset list, so every variant plays the same number of games per matchup.
   const split = splitGames(int(a.games, 2000), PRESETS.length);
-  const perMatchup = a['per-matchup'] !== undefined ? int(a['per-matchup'], split.perMatchup) : split.perMatchup;
-  const randomGames = a.random !== undefined ? int(a.random, split.randomGames) : split.randomGames;
-  const workers = Math.max(1, int(a.workers, availableParallelism()));
-  const minGames = int(a['min-games'], 25);
+  const settings: RunSettings = {
+    seed,
+    perMatchup: a['per-matchup'] !== undefined ? int(a['per-matchup'], split.perMatchup) : split.perMatchup,
+    randomGames: a.random !== undefined ? int(a.random, split.randomGames) : split.randomGames,
+    workers: Math.max(1, int(a.workers, availableParallelism())),
+    minGames: int(a['min-games'], 25),
+  };
   const out = resolve(a.out ?? 'sim-results');
+  console.log(`HexHunters balance sim · seed ${seed} · ${settings.workers} workers · variants: ${ids.join(', ')}`);
 
-  const jobs = buildJobs(config, { seed, perMatchup, randomGames });
-  console.log(`HexHunters balance sim · seed ${seed} · ${jobs.length} games (${perMatchup} per preset matchup, ${randomGames} random) · ${workers} workers`);
-  const t0 = Date.now();
-  const records = await runParallel(jobs, workers);
-  const seconds = (Date.now() - t0) / 1000;
+  if (ids.length === 1) {
+    const r = await runVariant(ids[0], settings, out);
+    const flags = findFlags(r.summary, r.config, settings.minGames);
+    console.log(flags.length ? `Flags (${flags.length}):` : 'No flags.');
+    for (const f of flags.slice(0, 15)) console.log(`  ${(100 * f.score).toFixed(1).padStart(5)}%  ${f.what} (${f.games} games)`);
+    console.log(`Wrote ${join(out, 'report.html')}, games.csv, units.csv`);
+    return;
+  }
 
-  const summary = summarize(records, config, PRESETS.map((p) => p.name));
-  mkdirSync(out, { recursive: true });
-  writeFileSync(join(out, 'games.csv'), gamesCsv(records));
-  writeFileSync(join(out, 'units.csv'), unitsCsv(summary, config));
-  writeFileSync(
-    join(out, 'report.html'),
-    reportHtml(summary, config, { seed, perMatchup, randomGames, workers, seconds, minGames, maxRounds: MAX_ROUNDS }),
-  );
-
-  console.log(`Done in ${seconds.toFixed(1)} s · avg ${summary.avgRounds.toFixed(1)} rounds · illegal bot moves: ${summary.illegal}`);
-  const flags = findFlags(summary, config, minGames);
-  console.log(flags.length ? `Flags (${flags.length}):` : 'No flags.');
-  for (const f of flags.slice(0, 15)) console.log(`  ${(100 * f.score).toFixed(1).padStart(5)}%  ${f.what} (${f.games} games)`);
-  console.log(`Wrote ${join(out, 'report.html')}, games.csv, units.csv`);
+  const results: VariantResult[] = [];
+  for (const id of ids) results.push(await runVariant(id, settings, join(out, id)));
+  writeFileSync(join(out, 'compare.html'), compareHtml(results, experiment!, settings));
+  writeFileSync(join(out, 'compare.csv'), compareCsv(results, experiment!, settings.minGames));
+  console.log('\nSpread (SD of scores): presets / units+heroes');
+  for (const r of results) {
+    const sp = spreads(r.summary, settings.minGames);
+    console.log(`  ${r.label.padEnd(36)} ${(100 * sp.presets.sd).toFixed(1).padStart(5)} / ${(100 * sp.entries.sd).toFixed(1)}`);
+  }
+  console.log(`Wrote ${join(out, 'compare.html')} and compare.csv (each variant's full report in its own folder)`);
 }
 
 void main();
