@@ -1,5 +1,5 @@
 /** Point-based army building. An army is a list of builder entries: unit ids or squad ids. */
-import { deployZones } from './mapgen';
+import { shapeZones } from './mapgen';
 import type { GameConfig } from './types';
 
 const entryCost = (config: GameConfig, t: string): number => config.squads[t]?.cost ?? config.units[t]?.cost ?? 0;
@@ -34,7 +34,8 @@ export function validateArmy(config: GameConfig, types: string[]): string | null
     return `Only ${max === 1 ? 'one hero' : `${max} heroes`} per army (you have ${heroes})`;
   }
   const models = types.reduce((n, t) => n + entryModels(config, t).length, 0);
-  const room = deployZones(config.boardRadius, config.deployRows)[0].length;
+  // The deployment shape isn't known yet: the army must fit the smallest one.
+  const room = Math.min(...config.deployShapes.map((id) => shapeZones(config, id)[0].length));
   if (models > room) return `Too many models to deploy (max ${room})`;
   return null;
 }
@@ -52,4 +53,30 @@ export function addBlockedReason(config: GameConfig, army: string[], entry: stri
     return config.maxHeroesPerArmy === 1 ? 'You already have a hero' : 'Hero limit reached';
   }
   return reason;
+}
+
+/** How many uses a limited special gets (Mercenary's Premium Shot): unspent points, capped. */
+export function specialUsesFor(config: GameConfig, army: string[], unitType: string): number | null {
+  const uses = config.units[unitType]?.specialUses;
+  if (!uses) return null;
+  return Math.max(0, Math.min(uses.max, config.armyPointLimit - armyCost(config, army)));
+}
+
+/** Range-type settings of specials, checked against maxRange. */
+const SPECIAL_RANGES = ['hookRange', 'hackRange', 'hurlRange', 'spotRange', 'premiumRange'] as const;
+
+/**
+ * Checks the unit data: no attack or special may reach farther than `maxRange`.
+ * Returns the problems found (empty if the config is fine).
+ */
+export function validateConfig(config: GameConfig): string[] {
+  const problems: string[] = [];
+  for (const [id, def] of Object.entries(config.units)) {
+    if (def.range > config.maxRange) problems.push(`${id}: range ${def.range} is above the cap of ${config.maxRange}`);
+  }
+  for (const key of SPECIAL_RANGES) {
+    const value = config.specials[key];
+    if (value > config.maxRange) problems.push(`specials.${key}: ${value} is above the cap of ${config.maxRange}`);
+  }
+  return problems;
 }

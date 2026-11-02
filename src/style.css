@@ -1180,3 +1180,66 @@ button.danger {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Deployment reveal: a mini map of both zones. */
+.zone-map {
+  width: min(70vw, 280px);
+  height: auto;
+}
+.zone-map polygon {
+  stroke: rgba(15, 23, 42, 0.9);
+  stroke-width: 1;
+}
+.zone-map .open {
+  fill: #e7e2d3;
+}
+.zone-map .wall {
+  fill: #64748b;
+}
+.zone-map .cp {
+  fill: #facc15;
+}
+.zone-map .z0 {
+  fill: #3b82f6;
+}
+.zone-map .z1 {
+  fill: #ef4444;
+}
+/* During deployment the enemy's zone is shown faintly. */
+.shade.deploy-0.faint {
+  fill: rgba(59, 130, 246, 0.12);
+}
+.shade.deploy-1.faint {
+  fill: rgba(239, 68, 68, 0.12);
+}
+
+/* Limited-use special (Mercenary): shots left, at the lower right. */
+.unit .uses {
+  display: none;
+}
+.unit.limited .uses {
+  display: block;
+}
+.uses rect {
+  fill: #facc15;
+  stroke: #111827;
+  stroke-width: 1;
+}
+.uses text {
+  fill: #111827;
+  font-size: 9px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.unit.limited.empty-uses .uses rect {
+  fill: #6b7280;
+}
+
+.unit-uses {
+  font-size: 14px;
+  color: #facc15;
+}
+.unit-uses.none {
+  color: var(--bad);
+}

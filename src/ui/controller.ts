@@ -4,6 +4,7 @@
  * resulting events as animations, and re-renders.
  */
 import { previewAttack } from '../core/combat';
+import { DEPLOY_SHAPES } from '../data/deployShapes';
 import {
   type Action,
   type GameEvent,
@@ -15,7 +16,7 @@ import {
   newGame,
   unplacedUnits,
 } from '../core/game';
-import { type Hex, type Point, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
+import { type Hex, type Point, hexCorners, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
   actionBonus,
   actionDie,
@@ -166,7 +167,10 @@ export class Controller {
     for (const ev of events) {
       switch (ev.type) {
         case 'armyChosen':
-          if (ev.next === null) await this.deployHandoff(this.state.current);
+          if (ev.next === null) {
+            await this.revealDeployShape();
+            await this.deployHandoff(this.state.current);
+          }
           break;
         case 'placed': {
           this.ui = this.freshUi();
@@ -361,14 +365,25 @@ export class Controller {
     }
   }
 
+  /** After both armies are built: name this game's deployment shape and show both zones. */
+  private async revealDeployShape(): Promise<void> {
+    const shape = DEPLOY_SHAPES[this.state.map.deployShape];
+    await showOverlay({
+      title: `Deployment: ${shape.name}`,
+      lines: [shape.description, `${PLAYER_NAMES[0]} deploys in blue, ${PLAYER_NAMES[1]} in red.`],
+      art: zoneMap(this.state),
+      tapText: 'Tap to start placing',
+    });
+  }
+
   private async deployHandoff(p: PlayerId): Promise<void> {
     const mine = unplacedUnits(this.state, p).length;
     const theirs = unplacedUnits(this.state, other(p)).length;
-    const rows = this.state.config.deployRows;
+    const shape = DEPLOY_SHAPES[this.state.map.deployShape];
     await showOverlay({
       title: `${PLAYER_NAMES[p]}: place a model`,
       lines: [
-        `Place one model in the back ${rows} rows on your side (${p === 0 ? 'bottom' : 'top'}).`,
+        `Deployment: ${shape.name}. Place one model in your highlighted zone.`,
         `You have ${mine} left to place; ${PLAYER_NAMES[other(p)]} has ${theirs}.`,
       ],
       color: HANDOFF_BG[p],
@@ -628,6 +643,8 @@ export class Controller {
         for (const h of freePartnerHexes(s, twin.hex)) o.shade.set(hexKey(h), 'option');
         return o;
       }
+      // The enemy's zone faintly, then yours (where you can place).
+      for (const h of s.map.deployZones[other(s.current)]) o.shade.set(hexKey(h), `deploy-${other(s.current)} faint`);
       for (const h of s.map.deployZones[s.current]) {
         if (!unitAt(s, h)) o.shade.set(hexKey(h), `deploy-${s.current}`);
       }
@@ -776,6 +793,7 @@ export class Controller {
       if (sel.burning) stats.push(['', `Burning: -${s.config.specials.burnDamage} at its next turn`]);
       if (sel.hacked) stats.push(['', `Hacked: -${s.config.specials.hackPenalty} on its next die`]);
       if (def.flying) stats.push(['', 'Flying: moves over terrain and models']);
+      if (sel.usesLeft !== null && sp) stats.push([`${sp.name}s`, `${sel.usesLeft} left`]);
       if (def.crackingArmor) {
         stats.push(['', `Cracking Armor: -1 def per damaging hit (not Burn), min ${def.crackingArmor.minDefense}`]);
       }
@@ -819,7 +837,7 @@ export class Controller {
     const next = sel && sel.owner === s.current && !sel.pos ? sel : unplacedUnits(s, s.current)[0];
     const pairNote = next?.partnerId ? ' The Twins are placed together: pick a hex, then one next to it.' : '';
     model.hint =
-      `Tap a highlighted hex to place your ${next ? unitDef(s, next).name : 'model'} (or pick a different model above).${pairNote} ` +
+      `${DEPLOY_SHAPES[s.map.deployShape].name} deployment. Tap a highlighted hex to place your ${next ? unitDef(s, next).name : 'model'} (or pick a different model above).${pairNote} ` +
       `You have ${mine} left; ${PLAYER_NAMES[other(s.current)]} has ${theirs}.`;
     if (!sel && next) {
       const chip = model.roster.find((c) => c.id === next.id);
@@ -923,6 +941,14 @@ export class Controller {
               ? `Same die: ${unitDef(s, t).name} HIT −${e.damage} (${e.roll} vs ${e.defense})${e.killed ? ', destroyed' : ''}`
               : `Same die: ${unitDef(s, t).name} miss (${e.roll} vs ${e.defense})`,
             good: !!e.hit,
+          };
+        } else if (id === 'premiumShot') {
+          const e = effects[0];
+          const t = getUnit(s, choice.targetId!)!;
+          const after = (unit.usesLeft ?? 1) - 1;
+          model.preview = {
+            text: `Always hits: ${unitDef(s, t).name} −${e.damage}${e.killed ? ', destroyed' : ''}. ${after} shot${after === 1 ? '' : 's'} left after this.`,
+            good: true,
           };
         } else if (id === 'hack') {
           const t = getUnit(s, choice.targetId!)!;
@@ -1073,6 +1099,7 @@ export class Controller {
       else if (reason) label += ` (${reason})`;
       else if (noTargets) label += ' (no targets)';
       else if (id === 'dash') label += ` (+${dashAmount(s, actionDie(s, unit))})`;
+      if (unit.usesLeft !== null && !reason && !unit.specialUsed) label += ` (${unit.usesLeft} left)`;
       else if (id === 'heal') label += ` (+${healAmount(s, actionDie(s, unit))})`;
       actions.push({
         label,
@@ -1146,4 +1173,26 @@ function crawlText(before: GameState, after: GameState): string {
     .filter((u) => u.crawling && getUnit(before, u.id)?.crawling === false)
     .map((u) => unitDef(after, u).name);
   return names.length ? `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} now crawling!` : '';
+}
+
+/** A small picture of the board for the deployment reveal: both zones, the control point and terrain. */
+function zoneMap(state: GameState): HTMLElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const size = 10;
+  const svg = document.createElementNS(NS, 'svg');
+  const extent = size * Math.sqrt(3) * (state.map.radius + 1);
+  svg.setAttribute('viewBox', `${-extent} ${-extent} ${extent * 2} ${extent * 2}`);
+  svg.setAttribute('class', 'zone-map');
+  const zone = (h: Hex, p: PlayerId) => state.map.deployZones[p].some((z) => hexEquals(z, h));
+  const cp = (h: Hex) => state.map.controlPoint.some((c) => hexEquals(c, h));
+  for (const h of hexagon(state.map.radius)) {
+    const poly = document.createElementNS(NS, 'polygon');
+    poly.setAttribute('points', hexCorners(h, size).map((p) => `${p.x},${p.y}`).join(' '));
+    const kind = zone(h, 0) ? 'z0' : zone(h, 1) ? 'z1' : cp(h) ? 'cp' : state.map.heights[hexKey(h)] ? 'wall' : 'open';
+    poly.setAttribute('class', kind);
+    svg.append(poly);
+  }
+  const wrap = document.createElement('div');
+  wrap.append(svg);
+  return wrap;
 }

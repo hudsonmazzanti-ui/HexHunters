@@ -26,12 +26,12 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Assassin  | 2    | small (1)  | 4     | 5   | 3  | 1 (melee) | 4   | **Vault**: leap an adjacent wall, then keep moving |
 | Infantry  | 3    | medium (2) | 3     | 6   | 6  | 5         | 2   | **Prep**: +2 on this model's die roll next turn |
 | Medic     | 3    | small (1)  | 3     | 5   | 4  | 3         | 1   | **Heal**: adjacent damaged ally heals ⌊die/2⌋ (up to max) |
-| Sniper    | 4    | small (1)  | 2     | 5   | 4  | 10        | 4   | **Spot**: mark a visible enemy; your next attack on it gets +2 |
+| Sniper    | 4    | small (1)  | 2     | 5   | 4  | 7         | 4   | **Spot**: mark a visible enemy within 7; your next attack on it gets +2 |
 | Grenadier | 3    | medium (2) | 3     | 6   | 5  | 4         | 2   | **Grenade** (die 10+): 2 damage on impact, 1 to each neighbor |
 | Heavy     | 4    | large (3)  | 2     | 6   | 12 | 3         | 4   | **Brace**: +2 defense until your next turn |
 | Flamer    | 4    | medium (2) | 2     | 6   | 9  | 3         | 3   | **Torch**: die vs each model in a 2-hex line, ignores Brace |
 | Monster   | 5    | large (3)  | 3     | 3   | 18 | 1 (melee) | 5   | **Sweep**: one die vs every adjacent enemy. Basic attack +1 to hit |
-| Artillery | 3    | medium (2) | 1     | 4   | 8  | 10        | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
+| Artillery | 3    | medium (2) | 1     | 4   | 8  | 7         | 4   | **Load**: needed before each Fire. Fire is indirect (ignores line of sight) |
 | Sentinel  | 3    | medium (2) | 2     | 6   | 8  | 3         | 2   | **Overwatch**: lock the die, shoot an enemy ending its turn in view |
 | Grappler  | 5    | large (3)  | 2     | 7   | 12 | 1 (melee) | 3   | **Hook** (die 7+): 1 damage to any model within 3 and pull it in |
 | Zombie    | 2    | medium (2) | 3     | 0   | 9  | 1 (melee) | 3   | **Eat** (die 8+): adjacent enemy, normal hit roll; 2 damage and the Zombie heals 2. Crawls once hurt |
@@ -55,6 +55,15 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Pyromancer    | 6    | medium (2) | 3     | 7   | 10 | 3            | 2   | Burn: its attacks, Flamer Torch and Grenadier Grenade set every model they hit burning |
 | Gambler       | 6    | medium (2) | 3     | 6   | 9  | 3            | 3   | Dice aren't rolled at turn start: each rolls d12+2 (max 14) when its action is confirmed |
 | Necromancer   | 7    | medium (2) | 3     | 5   | 8  | 3            | 2   | Skeletons +1 def, never rest; Zombies crawl only at half health; Raise Dead |
+
+**Mercenary** (hero, 5 pts; no passive rule, its ability is its special): medium (2), speed 3, def 6, HP 8, the
+Infantry's basic attack (range 5, 2 damage). **Premium Shot**: an enemy within 7 in line of sight, no roll, always hits
+for 4. Uses per game = the points your army leaves unspent (limit minus army cost, Mercenary included), max 3; at 0 it's
+greyed out. The builder shows "Premium Shots: X" live as you change the army, and the model carries a gold "★X" tag.
+
+**Range cap.** No attack or special reaches farther than 7 (`maxRange` in the config). `validateConfig` checks every
+unit range and special range setting when a game starts, so a unit with range 8 fails loudly. Sniper and Artillery
+went from 10 to 7, and Spot (previously any range) is now 7. Swap is exempt: it targets nothing.
 
 **Behemoth** (hero, 12 pts; no passive rule, its ability is its special): large (3), speed 2, def 10, HP 15, melee 6.
 **Smash**: destroy one adjacent terrain hex (either height) for good. No roll. **Cracking Armor**: -1 defense for good
@@ -105,8 +114,25 @@ cheapest first; the ones that don't fit your remaining points (or a second hero)
 reason ("Needs 2 more pts"), and their + is disabled.
 
 **Deployment.** Players alternate placing one model at a time, starting with Player 1, with a handoff screen between
-placements. Player 1 places in the bottom two rows, Player 2 in the top two. Tapping a hex places the model. If one player
-runs out of models, the other places the rest.
+placements. Tapping a hex places the model. If one player runs out of models, the other places the rest.
+
+Each game uses a random **deployment shape**, picked from the seed when the map is generated and revealed (name, short
+description and a mini map of both zones) after both armies are built. Player 2's zone is always Player 1's mirrored
+through the center, terrain stays out of both zones plus a one-hex buffer, and every zone is at least 3 hexes from the
+center (clear of the control point and its ring). During placement your zone is highlighted and the enemy's is shown
+faintly.
+
+| Shape | Player 1's zone (Player 2's is the mirror) | Hexes each |
+|-------|--------------------------------------------|------------|
+| Standard | the 2 rows nearest your edge | 17 |
+| Close Quarters | like Standard, 2 rows closer to the center | 21 |
+| Corners | within 4 of the bottom-left corner, at least 5 from the center | 21 |
+| Flanks | a strip along the left edge | 21 |
+| Spearhead | a wedge from your edge (8, 5, 4, 1 hexes per row) pointing at the center | 18 |
+| Split | two 10-hex pockets in the back 3 rows, left and right, with a 3-hex gap | 20 |
+
+Shapes live in `src/data/deployShapes.ts` (one entry each, describing Player 1's zone); the random pool is
+`deployShapes` in the config. Every shape must fit the largest legal army (16 models); the army check uses the smallest.
 
 **Rounds.** Each round both players take one turn. A coin flip at the end of deployment (seeded, so `?seed=` replays
 it) decides who goes first in round 1; after that, who goes first flips every two rounds: the winner in rounds 1–2,
@@ -280,7 +306,7 @@ hidden, dark: even large models hidden). Red dashed rings show enemies you can a
 src/core/        pure game logic, no DOM (ready for AI / online play later)
   hex.ts         axial hex math, lines, mirroring, pixel conversion
   rng.ts         seeded PRNG (state lives in GameState)
-  mapgen.ts      mirrored terrain generation
+  mapgen.ts      deployment shape pick + mirrored terrain generation
   los.ts         line-of-sight rule + edge rule
   pathfinding.ts BFS movement range / paths
   queries.ts     read-only questions about a state (who's where, can X see Y, move range)
@@ -291,6 +317,7 @@ src/core/        pure game logic, no DOM (ready for AI / online play later)
   specials/      one module per special (Shove is unused for now, kept for future factions) + registry
   game.ts        newGame + applyAction(state, action) -> { state, events }
 src/data/config.ts   unit stats, costs, game settings
+src/data/deployShapes.ts   deployment shapes (zone rules)
 src/ui/          SVG board, pan/zoom camera, HUD, army builder, overlays, controller
 tests/           Vitest unit tests
 ```

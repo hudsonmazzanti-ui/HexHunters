@@ -5,7 +5,7 @@
  * the game by producing the same actions as the UI.
  */
 import { type Hex, hexEquals, neighbors } from './hex';
-import { entryModels, validateArmy } from './army';
+import { entryModels, specialUsesFor, validateArmy, validateConfig } from './army';
 import { type AttackResult, dealDamage, previewAttack, resolveAttack } from './combat';
 import { raiseDead } from './necro';
 import { auraEffects, holdPoints } from './auras';
@@ -91,6 +91,9 @@ export const firstPlayerOfRound = (round: number, swapEvery: number, first: Play
 
 /** Starts in the army-building phase: player 1 builds, then player 2. */
 export function newGame(config: GameConfig, seed: number): GameState {
+  // Bad unit data (e.g. a range above the cap) fails loudly at the start of a game.
+  const problems = validateConfig(config);
+  if (problems.length) throw new Error(`Invalid config: ${problems.join('; ')}`);
   return {
     config,
     seed,
@@ -148,6 +151,7 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
         for (const unit of units) {
           state.units.push(unit);
           unit.hp = maxHealth(state, unit); // aura health bonuses (Warden) apply from the start
+          unit.usesLeft = specialUsesFor(state.config, action.units, unit.type); // Premium Shot
         }
       }
       if (player === 0) {
@@ -318,6 +322,7 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     hackPenalty: 0,
     attacked: false,
     armorCracks: 0,
+    usesLeft: null,
   };
 }
 
