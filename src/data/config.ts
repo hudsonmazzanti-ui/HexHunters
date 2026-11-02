@@ -495,6 +495,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     hookDamage: 1,
     marshalRollBonus: 2,
     warlordSpeedBonus: 1,
+    warlordDefenseBonus: 0,
+    warlordHealthBonus: 0,
     wardenDefenseBonus: 1,
     wardenMedicDamageBonus: 1,
     wardenSentinelHealthBonus: 2,

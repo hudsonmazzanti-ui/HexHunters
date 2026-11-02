@@ -102,6 +102,18 @@ export const VARIANTS: Record<string, Variant> = {
     ]),
   ),
 
+  // ---- Warlord experiment: the aura's +1 speed for large models gets a cost ----
+  'warlord-armor': {
+    label: 'Warlord-Armor',
+    description: 'Warlord aura: large models get +1 speed and -1 defense.',
+    specials: { warlordDefenseBonus: -1 },
+  },
+  'warlord-health': {
+    label: 'Warlord-Health',
+    description: 'Warlord aura: large models get +1 speed and -2 max health.',
+    specials: { warlordHealthBonus: -2 },
+  },
+
   // ---- Pacing experiment ----
   'slow-large': {
     label: 'Slow-Large',
@@ -156,6 +168,12 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     variants: ['baseline', 'koth-only', 'ctf-only'],
     focusUnits: ['monster', 'heavy', 'werewolf', 'dragon', 'grappler', 'hacker', 'sniper', 'infantry', 'assassin', 'scout', ...allHeroes()],
     focusPresets: [],
+  },
+  warlord: {
+    title: 'Warlord: a cost for the +1 speed',
+    variants: ['baseline', 'warlord-armor', 'warlord-health'],
+    focusUnits: ['warlord', 'heavy', 'monster', 'hillgiant', 'dragon', 'grappler'],
+    focusPresets: ['Big Guys'],
   },
   pacing: {
     title: 'Pacing: slower large models and taller walls',

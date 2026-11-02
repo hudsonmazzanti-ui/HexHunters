@@ -188,6 +188,12 @@ export interface SpecialRules {
   marshalRollBonus: number;
   /** Warlord aura: extra movement for large models. */
   warlordSpeedBonus: number;
+  /**
+   * Warlord aura: defense and max-health changes for large models (0 = none; negative
+   * values are a cost, e.g. for balance experiments in the simulator).
+   */
+  warlordDefenseBonus: number;
+  warlordHealthBonus: number;
   /** Warden aura: defense for Medics and Sentinels, damage for Medics, max health for Sentinels. */
   wardenDefenseBonus: number;
   wardenMedicDamageBonus: number;

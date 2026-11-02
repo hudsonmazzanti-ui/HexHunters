@@ -385,7 +385,7 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
 - The bot is simple: units that need clever play (Twins, Sentinel, Hacker…) may test weaker than they really are.
 - **Balance variants** (`sim/variants.ts`): temporary overrides of unit stats, special-rule numbers or rule/map
   settings (e.g. `terrainPairs`), applied to a copy of the data. `--variant ID`, `--variants A,B` or
-  `--experiment NAME` (e.g. `monster`, `terrain`) run them with the same seed and write `compare.html`: one row
+  `--experiment NAME` (e.g. `monster`, `terrain`, `warlord`) run them with the same seed and write `compare.html`: one row
   per variant, changes from the baseline marked as real (beyond 2 standard errors) or noise, plus a sample map
   per variant (`sample-map.svg` / `.txt`).
 - **Missions:** each sim game's mission is random (50/50), like the app. The report has a **By mission** section
