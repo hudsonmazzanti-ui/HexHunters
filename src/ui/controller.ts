@@ -19,6 +19,7 @@ import {
 import { type Hex, type Point, hexCorners, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
   actionBonus,
+  armorLabel,
   actionDie,
   attackDamage,
   baseDefense,
@@ -737,7 +738,10 @@ export class Controller {
           id: u.id,
           label: def.label,
           owner: u.owner,
-          die: (u.gambling ? '?' : u.die) === null ? null : `${u.gambling ? '?' : u.die}${u.hackPenalty ? ` (-${u.hackPenalty})` : ''}`,
+          // The Behemoth has no die: its chip shows its armor instead.
+          die:
+            armorLabel(s, u) ??
+            ((u.gambling ? '?' : u.die) === null ? null : `${u.gambling ? '?' : u.die}${u.hackPenalty ? ` (-${u.hackPenalty})` : ''}`),
           hp: u.hp,
           maxHp: maxHealth(s, u),
           spent: s.phase === 'play' && u.acted && u.movesLeft === 0,
@@ -773,6 +777,7 @@ export class Controller {
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
       const hackNote = sel.hackPenalty ? ` (-${sel.hackPenalty} hacked)` : '';
       if (sel.gambling) stats.unshift(['Die', `? (rolls on action)${hackNote}`]);
+      if (def.noDie) stats.unshift(['Die', 'none: melee always hits, Smash needs no roll']);
       if (sel.die !== null) {
         const point = sel.acted ? 0 : actionBonus(s, sel);
         const prep =
@@ -1049,7 +1054,9 @@ export class Controller {
         `${p.hitBonus ? ` +${p.hitBonus}` : ''}${p.spotBonus ? ` +${p.spotBonus} spot` : ''}` +
         `${p.pointBonus ? ` +${p.pointBonus} point` : ''}`;
       model.preview = {
-        text: `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
+        text: unitDef(s, unit).noDie
+          ? `Always hits (no die): ${unitDef(s, pending).name} −${p.damage}${pending.hp <= p.damage ? ', destroyed' : ''}`
+          : `Roll ${p.roll}${mods} vs defense ${p.defense}: ${p.hit ? `HIT for ${p.damage}` : 'MISS'}`,
         good: p.hit,
       };
       if (unit.gambling) {

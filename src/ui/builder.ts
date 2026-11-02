@@ -180,6 +180,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         ...(def.crackingArmor
           ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]
           : []),
+        ...(def.noDie ? ['No die: melee always hits, no roll modifiers apply'] : []),
         ...(def.flying ? ['Flying: moves over terrain and models, lands on an open hex'] : []),
         ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
         ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),

@@ -429,8 +429,11 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     unit.dieBonus = prep + (auraEffects(state, unit).rollBonus ?? 0);
     unit.prepped = false;
     // Gambler: no roll yet ("?"); the die rolls when an action is confirmed.
-    unit.gambling = !!auraEffects(state, unit).rollsOnAction;
-    unit.die = unit.gambling ? null : hackedDie(rollDie(state) + unit.dieBonus, unit.hackPenalty);
+    // Models without a die (Behemoth) never roll: no die, no bonuses, no Gambler.
+    const noDie = !!unitDef(state, unit).noDie;
+    if (noDie) unit.dieBonus = 0;
+    unit.gambling = !noDie && !!auraEffects(state, unit).rollsOnAction;
+    unit.die = unit.gambling || noDie ? null : hackedDie(rollDie(state) + unit.dieBonus, unit.hackPenalty);
     unit.movesLeft = unitSpeed(state, unit);
     unit.acted = false;
     unit.specialUsed = false;

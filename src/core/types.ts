@@ -86,6 +86,11 @@ export interface UnitDef {
    */
   crackingArmor?: { minDefense: number };
   /**
+   * Never rolls a die (Behemoth): its basic attack always hits and its special needs no
+   * roll. Die modifiers (Hack, Gambler, Standard Bearer, Prep/Marshal, Spot) don't apply.
+   */
+  noDie?: boolean;
+  /**
    * The special has limited uses per game (Mercenary's Premium Shot): one per point the
    * army left unspent, up to `max`. Set when the army is confirmed.
    */

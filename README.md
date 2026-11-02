@@ -67,7 +67,7 @@ went from 10 to 7, and Spot (previously any range) is now 7. Swap is exempt: it 
 
 **Behemoth** (hero, 12 pts; no passive rule, its ability is its special): large (3), speed 2, def 10, HP 15, melee 6.
 **Smash**: destroy one adjacent terrain hex (either height) for good. No roll. **Cracking Armor**: -1 defense for good
-each time it's hit for damage (min 4).
+each time it's hit for damage (min 4). **No die**: its melee always hits for 6.
 
 **The Twins** (hero, 10 pts, bought as one entry that adds both models; no passive rule; both have **Swap**):
 
@@ -274,7 +274,13 @@ die is spent). Greyed out with no adjacent terrain.
 by 1, down to a minimum of 4. That includes always-hit damage (Grenade impact and splash, Hook) and overwatch shots;
 misses and Burn don't count. One action cracks it at most once, however many hits it lands (e.g. two overwatch shots
 at the end of a turn). The lower defense is its real defense from then on: Torch and Breath roll against it, and
-Brace still adds +2 on top. The Behemoth's board badge shows "DEF 7 (-3)", and each crack is logged.
+Brace still adds +2 on top. Each crack is logged.
+
+**Behemoth: no die.** The Behemoth never rolls: no die at the start of its turn, its melee basic attack always hits
+for 6, and Smash needs no roll. Where other models show their die, it shows a shield with its current armor ("DEF 8",
+red once cracked), on the board and on its roster chip, so both players can track the countdown. Die modifiers don't
+affect it: Hack can't target it, the Gambler doesn't turn its die into "?", and the Standard Bearer's +2 and Spot don't
+apply to its attacks (Spot isn't used up by them). Enemies can still Spot it as a target.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).
