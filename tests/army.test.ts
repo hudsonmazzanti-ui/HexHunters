@@ -35,6 +35,10 @@ describe('army building', () => {
       werewolf: 5,
       gambler: 6,
       necromancer: 7,
+      hacker: 3,
+      dualgunner: 4,
+      dragon: 6,
+      behemoth: 12,
     });
   });
 
@@ -57,7 +61,7 @@ describe('army building', () => {
 
   it('rejects empty armies and unknown units', () => {
     expect(validateArmy(DEFAULT_CONFIG, [])).toMatch(/at least one/);
-    expect(validateArmy(DEFAULT_CONFIG, ['dragon'])).toMatch(/Unknown/);
+    expect(validateArmy(DEFAULT_CONFIG, ['unicorn'])).toMatch(/Unknown/);
   });
 
   it('follows the configured limit and supports any cost', () => {

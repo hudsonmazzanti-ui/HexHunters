@@ -334,6 +334,9 @@ button.danger {
 .die.boosted rect {
   fill: #bbf7d0;
 }
+.die.hacked rect {
+  fill: #fecaca;
+}
 .die.used rect {
   fill: #6b7280;
 }
@@ -1071,4 +1074,24 @@ button.danger {
   100% {
     transform: rotateY(1800deg) scale(1);
   }
+}
+
+/* Hacker: hacked models carry a green "</>" chip until their hacked turn is over. */
+.unit .hack-mark {
+  display: none;
+}
+.unit.hacked .hack-mark {
+  display: block;
+}
+.hack-mark rect {
+  fill: #052e16;
+  stroke: #4ade80;
+  stroke-width: 1.2;
+}
+.hack-mark text {
+  fill: #4ade80;
+  font-size: 7px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: central;
 }

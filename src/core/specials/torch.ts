@@ -11,9 +11,9 @@ import type { GameState, Unit } from '../types';
 import type { Effect, SpecialDef, SpecialPreview } from './types';
 
 /** Hexes the flame reaches in direction `dir`, stopping at terrain or the board edge. */
-export function torchLine(state: GameState, from: Hex, dir: number): Hex[] {
+export function torchLine(state: GameState, from: Hex, dir: number, length = state.config.specials.torchLength): Hex[] {
   const out: Hex[] = [];
-  for (let i = 1; i <= state.config.specials.torchLength; i++) {
+  for (let i = 1; i <= length; i++) {
     const h = hexAdd(from, hexScale(direction(dir), i));
     if (!onBoard(state, h) || terrainHeight(state, h) > 0) break;
     out.push(h);
@@ -21,8 +21,9 @@ export function torchLine(state: GameState, from: Hex, dir: number): Hex[] {
   return out;
 }
 
-function flames(state: GameState, unit: Unit, dir: number): SpecialPreview {
-  const line = torchLine(state, unit.pos!, dir);
+/** Shared with the Dragon's Breath: the line and who it would hit. */
+export function flames(state: GameState, unit: Unit, dir: number, length?: number): SpecialPreview {
+  const line = torchLine(state, unit.pos!, dir, length);
   const roll = actionDie(state, unit);
   const damage = unitDef(state, unit).damage;
   const effects: Effect[] = [];
@@ -50,13 +51,17 @@ export const torch: SpecialDef = {
   preview: (state, unit, { dir }) => flames(state, unit, dir!),
   apply: (state, unit, { dir }) => {
     const { effects } = flames(state, unit, dir!);
-    const burn = burnsOn(state, unit, 'special');
-    for (const e of effects) {
-      if (!e.hit) continue;
-      const u = state.units.find((x) => x.id === e.unitId) as Unit;
-      e.killed = dealDamage(state, u, e.damage);
-      if (burn && !e.killed) u.burning = e.burned = true;
-    }
+    burnLine(state, effects, burnsOn(state, unit, 'special'));
     return { dir, effects };
   },
 };
+
+/** Damages every model the flame hit; survivors start burning if `burn`. */
+export function burnLine(state: GameState, effects: Effect[], burn: boolean): void {
+  for (const e of effects) {
+    if (!e.hit) continue;
+    const u = state.units.find((x) => x.id === e.unitId) as Unit;
+    e.killed = dealDamage(state, u, e.damage);
+    if (burn && !e.killed) u.burning = e.burned = true;
+  }
+}

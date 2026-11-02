@@ -180,7 +180,9 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         }
         // Callouts: hero rules, the unit's attack quirks, then the special's.
         const callouts = [
-          ...(def.hero ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
+          ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
+          ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
+          ...(def.flying ? ['Flying: moves over terrain and models, lands on an open hex'] : []),
           ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
           ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
           ...(def.woundedForm ? ['Crawls when first hurt: small, speed 1, for good'] : []),

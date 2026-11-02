@@ -24,7 +24,11 @@ export type SpecialId =
   | 'eat'
   | 'swap'
   | 'hurl'
-  | 'pounce';
+  | 'pounce'
+  | 'hack'
+  | 'secondShot'
+  | 'breath'
+  | 'smash';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
 export type AuraId =
@@ -73,6 +77,8 @@ export interface UnitDef {
   woundedForm?: { size: Size; speed: number };
   /** Can't move or act on the second of back-to-back turns (Skeleton). */
   restsOnDoubleTurn?: boolean;
+  /** Moves over terrain and models; must still end on an empty, non-terrain hex (Dragon). */
+  flying?: boolean;
 }
 
 export interface GameConfig {
@@ -157,6 +163,11 @@ export interface SpecialRules {
   hurlBaseDamage: number;
   /** Werewolf's Pounce: extra hexes of movement before its attack. */
   pounceMoves: number;
+  /** Hacker's Hack: range, and how much the target's next die is reduced (minimum 1). */
+  hackRange: number;
+  hackPenalty: number;
+  /** How many hexes the Dragon's Breath reaches. */
+  breathLength: number;
 }
 
 export interface Terrain {
@@ -214,6 +225,12 @@ export interface Unit {
   partnerId: string | null;
   /** Gambler: this turn's die hasn't been rolled yet; it rolls when an action is confirmed ("?"). */
   gambling: boolean;
+  /** Hacked: its owner's next die is reduced (see SpecialRules.hackPenalty). Cleared when that turn starts. */
+  hacked: boolean;
+  /** How much this turn's die was reduced by a hack, for display ("7 (-2)"). */
+  hackPenalty: number;
+  /** Used its basic attack this turn (Dual Gunner's Second Shot needs it). */
+  attacked: boolean;
 }
 
 export interface Overwatch {

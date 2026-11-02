@@ -30,7 +30,11 @@ export interface AttackPreview {
   damage: number;
 }
 
-export function previewAttack(state: GameState, attacker: Unit, target: Unit): AttackPreview {
+/**
+ * `secondShot`: the Dual Gunner's Second Shot, a repeat of the basic attack after it was
+ * already used this turn (otherwise a model that has attacked can't attack again).
+ */
+export function previewAttack(state: GameState, attacker: Unit, target: Unit, secondShot = false): AttackPreview {
   const def = unitDef(state, attacker);
   const roll = attacker.die ?? 0;
   const hitBonus = def.hitBonus ?? 0;
@@ -41,6 +45,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit): A
 
   let blockedReason: string | null = null;
   if (!canAct(state, attacker)) blockedReason = 'This model cannot act';
+  else if (attacker.attacked && !secondShot) blockedReason = 'Already attacked';
   else if (needsLoading(state, attacker) && !attacker.loaded) blockedReason = 'Not loaded';
   else if (!target.pos || target.owner === attacker.owner) blockedReason = 'Not an enemy';
   else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
@@ -65,13 +70,19 @@ export function resolveAttack(state: GameState, attacker: Unit, target: Unit): A
   if (p.blockedReason) throw new Error(p.blockedReason);
 
   // Attacking ends the unit's turn: no more moving or specials (even with Master Ninja).
+  // The Dual Gunner's Second Shot is the exception: game.ts re-opens the turn for it.
   attacker.acted = true;
+  attacker.attacked = true;
   attacker.movesLeft = 0;
   // Firing uses the shell (with the Siege Master's aura, no shell is needed or used).
   if (needsLoading(state, attacker)) attacker.loaded = false;
+  return fireShot(state, attacker, target, p);
+}
+
+/** Resolves a validated shot: Spot is used up, damage, Burn (Pyromancer). Shared with Second Shot. */
+export function fireShot(state: GameState, attacker: Unit, target: Unit, p: AttackPreview): AttackResult {
   // Spot is used up by the attack, hit or miss.
   if (p.spotBonus > 0) target.spottedBy = null;
-
   const killed = p.hit && dealDamage(state, target, p.damage);
   if (p.hit && !killed && burnsOn(state, attacker, 'attack')) target.burning = true;
   return { roll: p.roll, bonus: p.bonus, defense: p.defense, hit: p.hit, damage: p.hit ? p.damage : 0, killed };

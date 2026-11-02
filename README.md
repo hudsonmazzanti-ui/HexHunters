@@ -38,6 +38,9 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Skeleton  | 1    | medium (2) | 3     | 2   | 1  | 1 (melee) | 2   | No special. Rests on the second of back-to-back turns |
 | Hill Giant | 5   | large (3)  | 2     | 6   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
 | Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 4, def 6, HP 12, melee 5, **Pounce** |
+| Hacker    | 3    | small (1)  | 3     | 5   | 6  | 4         | 2   | **Hack**: enemy within 4 in sight gets -2 on its next die (min 1). No roll |
+| Dual Gunner | 4  | medium (2) | 3     | 6   | 7  | 4         | 2   | **Second Shot**: after its attack, attack again with the same die |
+| Dragon    | 6    | large (3)  | 4     | 6   | 12 | 3         | 3   | **Breath**: like Torch, and everything hit burns. Flying |
 
 **Heroes** (max one per army, optional; no special, their die is only for attacking):
 
@@ -53,6 +56,9 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Gambler       | 6    | medium (2) | 3     | 6   | 9  | 3            | 3   | Dice aren't rolled at turn start: each rolls d12+2 (max 14) when its action is confirmed |
 | Necromancer   | 7    | medium (2) | 3     | 5   | 8  | 3            | 2   | Skeletons +1 def, never rest; Zombies crawl only at half health; Raise Dead |
 
+**Behemoth** (hero, 12 pts; no passive rule, its ability is its special): large (3), speed 2, def 10, HP 20, melee 6.
+**Smash**: destroy one adjacent terrain hex (either height) for good. No roll.
+
 **The Twins** (hero, 10 pts, bought as one entry that adds both models; no passive rule; both have **Swap**):
 
 | Model          | Size      | Speed | Def | HP | Range     | Dmg |
@@ -66,7 +72,7 @@ defense values are placeholders.
 Optional unit fields: `hitBonus` (added to basic attacks), `attackName` (e.g. "Fire"), `needsLoading` (attack only
 while loaded; firing unloads), `indirectFire` (attack ignores line of sight), `woundedForm` (size and speed it
 switches to for good the first time it takes damage: Zombie), `restsOnDoubleTurn` (sits out the second of
-back-to-back turns: Skeleton).
+back-to-back turns: Skeleton), `flying` (moves over terrain and models: Dragon).
 
 Game settings: army point limit 16, board radius 7 (15 hexes across), 3 mirrored terrain pairs of length 2–4,
 2 deployment rows, d12, first to 5 points, first player flips every 2 rounds (`firstPlayerSwapEvery`). Special-action
@@ -213,6 +219,26 @@ kill drops a height-1 boulder on the target's hex. Greyed out with no adjacent t
 **Werewolf.** A moon badge counts down its owner's turns. At the start of its owner's 3rd turn it permanently becomes
 the beast form (large, fast, def 6, max HP 12, melee 5) and heals 5. **Pounce** gives +2 hexes of movement, then it may
 still make its melee attack with the same die.
+
+**Hacker: Hack.** Target an enemy within 4 the Hacker can see; no roll, the die is just spent. At the start of that
+model's owner's next turn its die is reduced by 2 (minimum 1), for attacks and specials alike, then the hack is gone.
+The die shows "7 (-2)" and hacked models carry a green "</>" chip. It doesn't stack: an already-hacked model isn't a
+valid target. With the Gambler, the -2 is applied to the delayed roll after the cap of 14 (so 1–12). A Sentinel
+already on overwatch keeps its locked die.
+
+**Dual Gunner: Second Shot.** The one exception to "attacking ends the turn": after the basic attack (hit or miss), the
+Dual Gunner may fire another basic attack with the same die, at the same or another enemy (range 4, 2 damage, normal
+hit roll; Spot, Standard Bearer, Brace and Pyromancer burn all count). It can't move between shots, and its move can't
+be undone after the first. If no enemy is left to shoot, the turn ends right away. Second Shot is greyed out before
+the attack.
+
+**Dragon.** Flying: when moving it passes over terrain and any models, friend or foe, but must end on an empty hex with
+no terrain. **Breath** works like Torch (2-hex line in one of 6 directions, die vs each model's base defense, friendly
+fire, stopped by terrain, the Dragon's 3 damage), and every model it hits and doesn't kill starts burning, with or
+without a Pyromancer.
+
+**Behemoth: Smash.** Pick an adjacent terrain hex of either height: it's removed from the map for good. No roll (the
+die is spent). Greyed out with no adjacent terrain.
 
 **Scoring.** At the end of each round, whoever has more models on the control point scores 1 point, or 2 with the
 Standard Bearer (ties score nothing).

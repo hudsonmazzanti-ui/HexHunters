@@ -10,9 +10,11 @@ import { DIRECTIONS, hexagon, neighbors } from '../hex';
 import { canAct, getUnit, hasDoubleAction } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
 import { brace } from './brace';
+import { breath } from './breath';
 import { dash } from './dash';
 import { eat } from './eat';
 import { grenade } from './grenade';
+import { hack } from './hack';
 import { heal } from './heal';
 import { hurl } from './hurl';
 import { hook } from './hook';
@@ -20,7 +22,9 @@ import { load } from './load';
 import { overwatch } from './overwatch';
 import { pounce } from './pounce';
 import { prep } from './prep';
+import { secondShot } from './secondshot';
 import { shove } from './shove';
+import { smash } from './smash';
 import { spot } from './spot';
 import { sweep } from './sweep';
 import { swap } from './swap';
@@ -39,6 +43,7 @@ export { hookPath } from './hook';
 export { eatHeal } from './eat';
 export { partnerOf } from './swap';
 export { hurlChunks } from './hurl';
+export { hackedDie } from './hack';
 
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   brace,
@@ -58,6 +63,10 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   swap,
   hurl,
   pounce,
+  hack,
+  secondShot,
+  breath,
+  smash,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */
@@ -103,6 +112,8 @@ export function specialBlockedReason(state: GameState, unit: Unit, choice?: Spec
   const sp = specialOf(state, unit);
   if (!sp) return 'No special action';
   if (unit.specialUsed) return 'already used';
+  // Only Second Shot may follow the basic attack.
+  if (unit.attacked && !sp.afterAttack) return 'already attacked';
   const general = sp.usable?.(state, unit);
   if (general) return general;
   if (!choice) return null;
@@ -161,7 +172,8 @@ export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
   unit.specialUsed = true;
   // Normally the special uses up the die. With Master Ninja's aura the unit may still attack afterwards.
-  unit.acted = !hasDoubleAction(state, unit) && !sp.allowsAttackAfter;
+  // A follow-up to the attack (Second Shot) always ends the turn.
+  unit.acted = sp.afterAttack || (!hasDoubleAction(state, unit) && !sp.allowsAttackAfter);
   // Using the die ends movement, unless the special says otherwise (Dash, Vault).
   if (!sp.keepsMovement) unit.movesLeft = 0;
   return { special: specialIdOf(state, unit)!, ...sp.apply(state, unit, resolved) };

@@ -230,6 +230,43 @@ export const UNITS: Record<string, UnitDef> = {
     special: 'pounce',
     formOnly: true,
   },
+  hacker: {
+    name: 'Hacker',
+    label: 'Hk',
+    cost: 3,
+    size: 1, // small
+    speed: SPEED.normal,
+    defense: 5,
+    health: 6,
+    range: 4,
+    damage: 2,
+    special: 'hack',
+  },
+  dualgunner: {
+    name: 'Dual Gunner',
+    label: 'DG',
+    cost: 4,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 7,
+    range: 4,
+    damage: 2,
+    special: 'secondShot',
+  },
+  dragon: {
+    name: 'Dragon',
+    label: 'Dr',
+    cost: 6,
+    size: 3, // large
+    speed: SPEED.fast,
+    defense: 6,
+    health: 12,
+    range: 3,
+    damage: 3,
+    special: 'breath',
+    flying: true,
+  },
 
   // ---- Heroes: max one per army, no special; grant a permanent army-wide aura ----
   marshal: {
@@ -342,6 +379,20 @@ export const UNITS: Record<string, UnitDef> = {
     hero: { aura: 'necro' },
   },
 
+  behemoth: {
+    name: 'Behemoth',
+    label: 'Bh',
+    cost: 12,
+    size: 3, // large
+    speed: SPEED.slow,
+    defense: 10,
+    health: 20,
+    range: 1, // melee only
+    damage: 6,
+    special: 'smash', // no passive: its hero ability is its special (like the Twins)
+    hero: {},
+  },
+
   // ---- The Twins: bought together as one hero (see SQUADS), never on their own ----
   twintank: {
     name: 'Twin (Tank)',
@@ -428,5 +479,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     hurlRange: 4,
     hurlBaseDamage: 2,
     pounceMoves: 2,
+    hackRange: 4,
+    hackPenalty: 2,
+    breathLength: 2,
   },
 };
