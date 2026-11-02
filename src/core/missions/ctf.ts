@@ -3,14 +3,15 @@
  *
  *  - Pick up: a model standing on the flag spends its action to pick it up (the
  *    'pickUp' action; no roll). Any model can carry it.
- *  - The carrier moves 1 slower (minimum 1) and can still attack and use specials.
+ *  - The carrier ignores every speed bonus (e.g. the Warlord's +1) and moves 1 slower than
+ *    its own speed (minimum 1). It can still attack and use specials.
  *  - Walking only: if the carrier moves any other way than its own normal move
  *    (Vault, Dash, Pounce, Swap, a Hook pull...), the flag drops on the hex it stood on
  *    just before. A Dragon carrying the flag walks instead of flying.
  *  - Hack on the carrier, or its death, drops the flag on its hex.
  *  - Capture: a carrier that ends its owner's turn inside its own deployment zone (after
  *    the opponent's overwatch) wins the game. Or eliminate the enemy.
- *  - Standard Bearer: the carrier isn't slowed and gets +2 on its rolls.
+ *  - Standard Bearer: the carrier isn't slowed (its own speed, still no bonuses) and gets +2 on its rolls.
  */
 import { hexEquals } from '../hex';
 import { flagCarrier } from '../flag';
@@ -24,7 +25,7 @@ export const ctf: MissionDef = {
     return [
       'The flag starts on the center hex. There is no control point and no points.',
       'A model standing on the flag spends its action to pick it up. Any model can carry it.',
-      `The carrier moves ${r.flagCarrierSlow} slower (minimum 1) but can still attack and use its special.`,
+      `The carrier gets no speed bonuses (such as the Warlord's) and moves ${r.flagCarrierSlow} slower than its own speed (minimum 1), but can still attack and use its special.`,
       'Walking only: if the carrier moves any other way (Vault, Dash, Pounce, Swap, a Hook pull...), the flag drops where it stood. A Dragon carrying it walks.',
       'A Hack on the carrier, or killing it, drops the flag on its hex. A dropped flag stays until someone picks it up.',
       'Win: end your turn with your carrier inside your own deployment zone, or wipe out the enemy.',

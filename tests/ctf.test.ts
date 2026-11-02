@@ -87,12 +87,39 @@ describe('Capture the Flag: the carrier', () => {
     expect(unitSpeed(s, inf)).toBe(3);
   });
 
-  it('the -1 counts after the Warlord: a Monster carrying with the Warlord moves 2', () => {
+  it('ignores the Warlord\'s +1: a Monster carrying with the Warlord moves 1, and 3 again once it drops it', () => {
     const s = ctf();
-    addUnit(s, 'warlord', 0, hex(3, 3));
+    const warlord = addUnit(s, 'warlord', 0, hex(3, 3));
     const monster = addUnit(s, 'monster', 0, hex(0, 3));
+    expect(unitSpeed(s, monster)).toBe(3); // 2 + 1 (Warlord)
     carry(s, monster.id);
-    expect(unitSpeed(s, monster)).toBe(2); // 2 + 1 (Warlord) - 1 (flag)
+    expect(unitSpeed(s, monster)).toBe(1); // own speed 2 - 1 (flag); the +1 doesn't apply
+    carry(s, warlord.id);
+    expect(unitSpeed(s, warlord)).toBe(1); // the Warlord itself too
+    expect(unitSpeed(s, monster)).toBe(3); // not carrying: bonus back
+  });
+
+  it('the move range on the board follows the carrier\'s speed (Warlord bonus ignored)', () => {
+    const s = ctf({ flagAt: hex(5, -5) });
+    addUnit(s, 'warlord', 0, hex(-5, 5));
+    const monster = addUnit(s, 'monster', 0, ORIGIN, { movesLeft: 3 });
+    const far = (n: number) => [...moveReach(s, monster).costs.values()].some((c) => c === n);
+    expect(far(3)).toBe(true);
+    carry(s, monster.id);
+    monster.movesLeft = unitSpeed(s, monster); // as at the start of its turn
+    expect(far(1)).toBe(true);
+    expect(far(2)).toBe(false);
+  });
+
+  it('a Warlord-boosted carrier gets the reduced movement at the start of its turn', () => {
+    const s = ctf({ flagAt: hex(5, -5) });
+    addUnit(s, 'warlord', 0, hex(-5, 5));
+    const monster = addUnit(s, 'monster', 0, hex(0, 3));
+    addUnit(s, 'infantry', 1, hex(0, -5));
+    carry(s, monster.id);
+    const { state } = run(s, END, END);
+    expect(state.current).toBe(0);
+    expect(getUnit(state, monster.id)!.movesLeft).toBe(1);
   });
 
   it('gets the reduced movement at the start of its turn', () => {
@@ -362,6 +389,16 @@ describe('Capture the Flag: Standard Bearer', () => {
     expect(unitSpeed(s, inf)).toBe(3);
     carry(s, enemy.id);
     expect(unitSpeed(s, enemy)).toBe(2);
+  });
+
+  it('the Standard Bearer\'s carrier moves at its own speed: not slowed, but no speed bonuses either', () => {
+    const s = ctf();
+    addUnit(s, 'standardbearer', 0, hex(-3, 5));
+    const monster = addUnit(s, 'monster', 0, hex(0, 3)); // speed 2
+    s.auras[0].push('warlord'); // test only: both auras on one army
+    expect(unitSpeed(s, monster)).toBe(3);
+    carry(s, monster.id);
+    expect(unitSpeed(s, monster)).toBe(2);
   });
 
   it('a capture with the Standard Bearer wins the same way (no bonus points)', () => {

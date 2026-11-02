@@ -1198,8 +1198,8 @@ export class Controller {
       actions.push({ label: 'Pick up flag', className: 'primary', onClick: () => void this.dispatch({ type: 'pickUp', unitId: unit.id }) });
     }
     if (isCarrier(s, unit)) {
-      const slow = s.config.specials.flagCarrierSlow;
-      hints.push(`carrying the flag (move −${slow}): end your turn inside your zone to score`);
+      const free = unitSpeed({ ...s, flag: null }, unit);
+      hints.push(`carrying the flag (move ${unitSpeed(s, unit)} instead of ${free}): end your turn inside your zone to win`);
     }
     // Heroes have no special: their die is only for attacking.
     if (canAct(s, unit) && sp) {
@@ -1264,14 +1264,16 @@ function overwatchText(state: GameState, ev: Extract<GameEvent, { type: 'overwat
 
 /** "normal", or "(slow +1)" when an aura adds movement. */
 function moveNote(state: GameState, unit: Unit): string {
-  const base = unitDef(state, unit).speed;
-  // Capture the Flag: the carrier's slowdown, shown separately from aura bonuses.
-  const free = unitSpeed({ ...state, flag: null }, unit);
-  const flagCut = free - unitSpeed(state, unit);
-  const bonus = free - base;
-  const notes = [...(bonus ? [`+${bonus}`] : []), ...(flagCut ? [`flag −${flagCut}`] : [])];
-  if (!notes.length) return speedName(base);
-  return bonus ? `(${speedName(base)} ${notes.join(', ')})` : `(${speedName(base)}, ${notes.join(', ')})`;
+  const def = unitDef(state, unit);
+  const name = speedName(def.speed);
+  const own = unit.crawling && def.woundedForm ? def.woundedForm.speed : def.speed;
+  const free = unitSpeed({ ...state, flag: null }, unit); // with aura bonuses, no flag
+  const bonus = free - own;
+  if (!isCarrier(state, unit)) return bonus ? `(${name} +${bonus})` : name;
+  // Capture the Flag: the carrier ignores speed bonuses and is slowed (unless Standard Bearer).
+  const cut = own - unitSpeed(state, unit);
+  const notes = [...(bonus ? [`+${bonus} ignored`] : []), ...(cut ? [`flag −${cut}`] : [])];
+  return notes.length ? `(${name}, ${notes.join(', ')})` : name;
 }
 
 /** "Infantry burns for 1." / "... destroyed!" / "... now crawling!" */

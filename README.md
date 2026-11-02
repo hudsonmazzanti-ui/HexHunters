@@ -295,7 +295,8 @@ game is a draw.
   pennant) starts on the center hex.
   - *Pick up:* a model standing on the flag spends its action to pick it up (the **Pick up flag** button; no roll, so
     the Behemoth can too). Movement ends, like a special; with the Master Ninja it may still attack after.
-  - *Carrier:* moves 1 slower (minimum 1, counted after the Warlord's bonus), and can still attack and use its
+  - *Carrier:* ignores every speed bonus (e.g. the Warlord's +1) and moves 1 slower than its own speed (minimum 1;
+    a Monster carrying the flag with the Warlord moves 1). It can still attack and use its
     special. It carries a pennant on the board, and your deployment zone is outlined (dashed) as the scoring zone.
   - *Walking only:* if the carrier moves any way other than its own normal move, the flag drops on the hex it stood
     on just before: Vault, Swap (either twin), a Hook pull (by friend or foe; a hook that doesn't move it doesn't
@@ -307,7 +308,7 @@ game is a draw.
     A dropped flag stays until someone picks it up.
   - *Capture wins:* if your carrier ends your turn inside your own deployment zone (checked after the enemy's
     overwatch, which can still stop it), you win the game. The other way to win is eliminating the enemy.
-  - *Standard Bearer:* your carrier isn't slowed by the flag and gets +2 on its rolls (instead of models on the
+  - *Standard Bearer:* your carrier isn't slowed by the flag (it moves at its own speed, still without bonuses) and gets +2 on its rolls (instead of models on the
     control point).
   - Every pickup, drop and capture gets a log line.
 
