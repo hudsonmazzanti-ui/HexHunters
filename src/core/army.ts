@@ -38,3 +38,18 @@ export function validateArmy(config: GameConfig, types: string[]): string | null
   if (models > room) return `Too many models to deploy (max ${room})`;
   return null;
 }
+
+/**
+ * Why one more of `entry` can't be added to `army` (over the point limit, hero limit...),
+ * or null if it can. The builder lists addable entries first.
+ */
+export function addBlockedReason(config: GameConfig, army: string[], entry: string): string | null {
+  const reason = validateArmy(config, [...army, entry]);
+  if (!reason) return null;
+  const left = config.armyPointLimit - armyCost(config, army);
+  if (entryCost(config, entry) > left) return `Needs ${entryCost(config, entry) - left} more pt${entryCost(config, entry) - left === 1 ? '' : 's'}`;
+  if (isHeroEntry(config, entry) && army.filter((t) => isHeroEntry(config, t)).length >= config.maxHeroesPerArmy) {
+    return config.maxHeroesPerArmy === 1 ? 'You already have a hero' : 'Hero limit reached';
+  }
+  return reason;
+}

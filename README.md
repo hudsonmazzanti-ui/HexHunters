@@ -99,7 +99,10 @@ height 1 or 2) are generated in pairs mirrored through the center, kept out of t
 one-row buffer) and off the control point and the ring around it, and never touch each other, so every open hex is reachable.
 
 **Army building.** Player 1 builds an army from the full unit roster, then (after a handoff screen) Player 2 does the
-same without seeing Player 1's choices. Duplicates are allowed; the total cost must be at most the point limit (16).
+same without seeing Player 1's choices. Duplicates are allowed; the total cost must be at most the point limit (16). The
+builder has Units and Heroes tabs (each remembers its scroll position). Entries you can still add are listed first,
+cheapest first; the ones that don't fit your remaining points (or a second hero) sink to the bottom, dimmed, with the
+reason ("Needs 2 more pts"), and their + is disabled.
 
 **Deployment.** Players alternate placing one model at a time, starting with Player 1, with a handoff screen between
 placements. Player 1 places in the bottom two rows, Player 2 in the top two. Tapping a hex places the model. If one player

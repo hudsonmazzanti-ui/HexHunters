@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armyCost, validateArmy } from '../src/core/army';
+import { addBlockedReason, armyCost, validateArmy } from '../src/core/army';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 
 describe('army building', () => {
@@ -74,5 +74,20 @@ describe('army building', () => {
     expect(validateArmy(config, ['titan', 'titan', 'titan', 'titan', 'grunt', 'grunt', 'grunt'])).toMatch(/limit/);
     // More models than the deployment zone (17 hexes) can hold.
     expect(validateArmy(config, Array(18).fill('grunt'))).toMatch(/Too many/);
+  });
+});
+
+describe('addBlockedReason (builder sorting)', () => {
+  it('allows entries that fit, and says how many points are missing otherwise', () => {
+    const army = ['monster', 'heavy', 'grenadier']; // 12 of 16
+    expect(addBlockedReason(DEFAULT_CONFIG, army, 'sniper')).toBeNull(); // 4: exactly fits
+    expect(addBlockedReason(DEFAULT_CONFIG, army, 'grappler')).toBe('Needs 1 more pt');
+    expect(addBlockedReason(DEFAULT_CONFIG, army, 'dragon')).toBe('Needs 2 more pts');
+  });
+
+  it('blocks a second hero even when it is affordable', () => {
+    expect(addBlockedReason(DEFAULT_CONFIG, ['warlord'], 'gambler')).toBe('You already have a hero');
+    expect(addBlockedReason(DEFAULT_CONFIG, ['warlord'], 'twins')).toBe('You already have a hero'); // 16 pts fits
+    expect(addBlockedReason(DEFAULT_CONFIG, ['scout'], 'twins')).toBeNull();
   });
 });

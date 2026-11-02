@@ -3,7 +3,7 @@
  * stats and special. Tap + / − to add or remove; Confirm is blocked while the
  * army is empty or over the point limit. Resolves with the chosen unit type ids.
  */
-import { armyCost, entryModels, entryName, validateArmy } from '../core/army';
+import { addBlockedReason, armyCost, entryModels, entryName, validateArmy } from '../core/army';
 import { AURAS } from '../core/auras';
 import { SPECIALS } from '../core/specials';
 import type { GameConfig, PlayerId } from '../core/types';
@@ -19,28 +19,56 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
   return node;
 }
 
+type Tab = 'unit' | 'hero';
+
 export function showBuilder(config: GameConfig, player: PlayerId): Promise<string[]> {
   const army: string[] = [];
-  // Heroes first (their own section), then regular units; each by cost, then name.
-  const types = Object.keys(config.units)
-    .filter((t) => !config.units[t].squadOnly && !config.units[t].formOnly) // squad members / alternate forms
-    .sort(
-    (a, b) =>
-      Number(!!config.units[b].hero) - Number(!!config.units[a].hero) ||
-      config.units[a].cost - config.units[b].cost ||
-      config.units[a].name.localeCompare(config.units[b].name),
-  );
+  // Every buyable entry: unit types (not squad members or alternate forms) plus squads (the Twins).
+  const unitTypes = Object.keys(config.units).filter((t) => !config.units[t].squadOnly && !config.units[t].formOnly);
+  const entries: { id: string; tab: Tab; cost: number; name: string; squad: boolean }[] = [
+    ...unitTypes.map((t) => {
+      const def = config.units[t];
+      return { id: t, tab: (def.hero ? 'hero' : 'unit') as Tab, cost: def.cost, name: def.name, squad: false };
+    }),
+    ...Object.keys(config.squads).map((id) => {
+      const sq = config.squads[id];
+      return { id, tab: (sq.hero ? 'hero' : 'unit') as Tab, cost: sq.cost, name: sq.name, squad: true };
+    }),
+  ];
+  let tab: Tab = 'unit';
+  // Each tab keeps its own scroll position.
+  const scrollOf: Record<Tab, number> = { unit: 0, hero: 0 };
 
   const root = h('div', 'builder');
   root.style.setProperty('--player', PLAYER_COLORS[player]);
   document.body.append(root);
 
   return new Promise((resolve) => {
+    /** − count + controls. `blocked`: why + is disabled (can't afford, hero limit). */
+    const controls = (id: string, count: number, blocked: string | null): HTMLElement => {
+      const box = h('div', 'unit-controls');
+      if (blocked) box.append(h('span', 'unit-blocked', blocked));
+      const minus = h('button', 'step', '−');
+      minus.disabled = count === 0;
+      minus.onclick = () => {
+        army.splice(army.lastIndexOf(id), 1);
+        render();
+      };
+      const plus = h('button', 'step', '+');
+      plus.disabled = !!blocked;
+      plus.onclick = () => {
+        army.push(id);
+        render();
+      };
+      box.append(minus, h('span', 'unit-count', String(count)), plus);
+      return box;
+    };
+
     /** One card for a squad (the Twins): both models' stats and their shared special. */
-    const squadCard = (id: string): HTMLElement => {
+    const squadCard = (id: string, blocked: string | null): HTMLElement => {
       const squad = config.squads[id];
       const count = army.filter((x) => x === id).length;
-      const card = h('div', `unit-card hero${count ? ' picked' : ''}`);
+      const card = h('div', `unit-card hero${count ? ' picked' : ''}${blocked ? ' blocked' : ''}`);
       const top = h('div', 'unit-card-top');
       top.append(
         h('span', 'unit-tag', 'TT'),
@@ -79,26 +107,84 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
         for (const t of ['No passive rule', ...(sp.tags ?? [])]) tags.append(h('span', 'unit-pill', t));
         card.append(tags);
       }
-      const controls = h('div', 'unit-controls');
-      const minus = h('button', 'step', '−');
-      minus.disabled = count === 0;
-      minus.onclick = () => {
-        army.splice(army.lastIndexOf(id), 1);
-        render();
-      };
-      const plus = h('button', 'step', '+');
-      plus.onclick = () => {
-        army.push(id);
-        render();
-      };
-      controls.append(minus, h('span', 'unit-count', String(count)), plus);
-      card.append(controls);
+      card.append(controls(id, count, blocked));
+      return card;
+    };
+
+    const unitCard = (t: string, blocked: string | null): HTMLElement => {
+      const def = config.units[t];
+      const sp = def.special ? SPECIALS[def.special] : undefined;
+      const count = army.filter((x) => x === t).length;
+
+      const card = h('div', `unit-card${count ? ' picked' : ''}${def.hero ? ' hero' : ''}${blocked ? ' blocked' : ''}`);
+      const top = h('div', 'unit-card-top');
+      top.append(h('span', 'unit-tag', def.label), h('span', 'unit-name', def.name));
+      if (def.hero) top.append(h('span', 'hero-badge', 'HERO'));
+      top.append(h('span', 'unit-cost', `${def.cost} pt${def.cost === 1 ? '' : 's'}`));
+
+      const stats = h('div', 'unit-stats');
+      const statList: [string, string][] = [
+        ['Size', SIZE_NAMES[def.size]],
+        ['Move', `${def.speed} ${speedName(def.speed)}`.trim()],
+        ['Def', `${def.defense}`],
+        ['HP', `${def.health}`],
+        ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
+        ['Dmg', `${def.damage}`],
+      ];
+      if (def.hitBonus) statList.push(['Hit', `+${def.hitBonus}`]);
+      for (const [k, v] of statList) {
+        const sEl = h('span', '', `${k} `);
+        sEl.append(h('b', '', v));
+        stats.append(sEl);
+      }
+
+      const special = h('div', 'unit-special');
+      if (def.hero?.aura) {
+        const aura = AURAS[def.hero.aura].describe(config.specials);
+        special.append(h('b', '', 'Passive (whole army): '), document.createTextNode(aura));
+      } else if (sp) {
+        special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
+      } else if (def.transformsInto) {
+        // No special until it transforms; show the beast form's special.
+        const beastSp = config.units[def.transformsInto.type].special;
+        if (beastSp) {
+          const bsp = SPECIALS[beastSp];
+          special.append(h('b', '', `${bsp.name} (after transforming): `), document.createTextNode(bsp.describe(config.specials)));
+        }
+      }
+      // Callouts: hero rules, the unit's attack quirks, then the special's.
+      const callouts = [
+        ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
+        ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
+        ...(def.crackingArmor
+          ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]
+          : []),
+        ...(def.flying ? ['Flying: moves over terrain and models, lands on an open hex'] : []),
+        ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
+        ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
+        ...(def.woundedForm ? ['Crawls when first hurt: small, speed 1, for good'] : []),
+        ...(def.restsOnDoubleTurn ? ['Rests on back-to-back turns'] : []),
+        ...(def.transformsInto ? [transformText(config, def.transformsInto)] : []),
+        ...(!def.hero && !sp && !def.transformsInto ? ['No special'] : []),
+        ...(sp?.tags ?? []),
+      ];
+      const tags = h('div', 'unit-tags');
+      for (const c of callouts) tags.append(h('span', 'unit-pill', c));
+
+      card.append(top, stats, special);
+      if (callouts.length) card.append(tags);
+      card.append(controls(t, count, blocked));
       return card;
     };
 
     const render = () => {
+      // Remember where this tab was scrolled to before re-rendering.
+      const oldList = root.querySelector<HTMLElement>('.builder-list');
+      if (oldList) scrollOf[tab] = oldList.scrollTop;
+
       const cost = armyCost(config, army);
       const limit = config.armyPointLimit;
+      const left = limit - cost;
       const over = cost > limit;
       const reason = validateArmy(config, army);
 
@@ -121,100 +207,42 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       });
       header.append(title, points, bar, summary);
 
+      // Tabs: Units / Heroes, each with how many of them are in the army.
+      const tabs = h('div', 'builder-tabs');
+      const max = config.maxHeroesPerArmy;
+      for (const [id, label] of [
+        ['unit', 'Units'],
+        ['hero', `Heroes (max ${max})`],
+      ] as const) {
+        const picked = army.filter((t) => entries.find((e) => e.id === t)?.tab === id).length;
+        const btn = h('button', `builder-tab${tab === id ? ' active' : ''}`, label);
+        if (picked) btn.append(h('span', 'tab-count', String(picked)));
+        btn.onclick = () => {
+          if (tab === id) return;
+          scrollOf[tab] = root.querySelector<HTMLElement>('.builder-list')?.scrollTop ?? 0;
+          tab = id;
+          render();
+        };
+        tabs.append(btn);
+      }
+
+      // Affordable entries first (cheapest first), then the rest with why they can't be added.
+      const shown = entries
+        .filter((e) => e.tab === tab)
+        .map((e) => ({ ...e, blocked: addBlockedReason(config, army, e.id) }))
+        .sort((a, b) => Number(!!a.blocked) - Number(!!b.blocked) || a.cost - b.cost || a.name.localeCompare(b.name));
       const list = h('div', 'builder-list');
-      let section: 'hero' | 'unit' | null = null;
-      for (const t of types) {
-        const def = config.units[t];
-        const sp = def.special ? SPECIALS[def.special] : undefined;
-        const count = army.filter((x) => x === t).length;
-
-        const kind = def.hero ? 'hero' : 'unit';
-        if (kind !== section) {
-          section = kind;
-          const max = config.maxHeroesPerArmy;
-          list.append(h('div', 'builder-section', kind === 'hero' ? `Heroes (max ${max} per army, optional)` : 'Units'));
-          // Squads that count as a hero (the Twins) go first in the Heroes section.
-          if (kind === 'hero') {
-            for (const id of Object.keys(config.squads)) if (config.squads[id].hero) list.append(squadCard(id));
-          }
+      if (tab === 'hero') list.append(h('div', 'builder-note', `Optional. Max ${max} per army; their rules last all game.`));
+      let dividerShown = false;
+      for (const e of shown) {
+        if (e.blocked && !dividerShown) {
+          dividerShown = true;
+          const allBlocked = shown.every((x) => x.blocked);
+          list.append(
+            h('div', 'builder-section', allBlocked ? `Nothing fits (${left} pt${left === 1 ? '' : 's'} left)` : `Too expensive or not allowed (${left} pt${left === 1 ? '' : 's'} left)`),
+          );
         }
-
-        const card = h('div', `unit-card${count ? ' picked' : ''}${def.hero ? ' hero' : ''}`);
-        const top = h('div', 'unit-card-top');
-        const tag = h('span', 'unit-tag', def.label);
-        const name = h('span', 'unit-name', def.name);
-        const costBadge = h('span', 'unit-cost', `${def.cost} pt${def.cost === 1 ? '' : 's'}`);
-        top.append(tag, name);
-        if (def.hero) top.append(h('span', 'hero-badge', 'HERO'));
-        top.append(costBadge);
-
-        const stats = h('div', 'unit-stats');
-        const statList: [string, string][] = [
-          ['Size', SIZE_NAMES[def.size]],
-          ['Move', `${def.speed} ${speedName(def.speed)}`.trim()],
-          ['Def', `${def.defense}`],
-          ['HP', `${def.health}`],
-          ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
-          ['Dmg', `${def.damage}`],
-        ];
-        if (def.hitBonus) statList.push(['Hit', `+${def.hitBonus}`]);
-        for (const [k, v] of statList) {
-          const s = h('span', '', `${k} `);
-          s.append(h('b', '', v));
-          stats.append(s);
-        }
-
-        const special = h('div', 'unit-special');
-        if (def.hero?.aura) {
-          const aura = AURAS[def.hero.aura].describe(config.specials);
-          special.append(h('b', '', 'Passive (whole army): '), document.createTextNode(aura));
-        } else if (sp) {
-          special.append(h('b', '', `${sp.name}: `), document.createTextNode(sp.describe(config.specials)));
-        } else if (def.transformsInto) {
-          // No special until it transforms; show the beast form's special.
-          const beastSp = config.units[def.transformsInto.type].special;
-          if (beastSp) {
-            const bsp = SPECIALS[beastSp];
-            special.append(h('b', '', `${bsp.name} (after transforming): `), document.createTextNode(bsp.describe(config.specials)));
-          }
-        }
-        // Callouts: hero rules, the unit's attack quirks, then the special's.
-        const callouts = [
-          ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
-          ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
-          ...(def.crackingArmor
-            ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]
-            : []),
-          ...(def.flying ? ['Flying: moves over terrain and models, lands on an open hex'] : []),
-          ...(def.indirectFire ? ['Indirect fire: ignores line of sight'] : []),
-          ...(def.needsLoading ? [`Must Load to ${(def.attackName ?? 'attack').toLowerCase()}`] : []),
-          ...(def.woundedForm ? ['Crawls when first hurt: small, speed 1, for good'] : []),
-          ...(def.restsOnDoubleTurn ? ['Rests on back-to-back turns'] : []),
-          ...(def.transformsInto ? [transformText(config, def.transformsInto)] : []),
-          ...(!def.hero && !sp && !def.transformsInto ? ['No special'] : []),
-          ...(sp?.tags ?? []),
-        ];
-        const tags = h('div', 'unit-tags');
-        for (const t of callouts) tags.append(h('span', 'unit-pill', t));
-
-        const controls = h('div', 'unit-controls');
-        const minus = h('button', 'step', '−');
-        minus.disabled = count === 0;
-        minus.onclick = () => {
-          army.splice(army.lastIndexOf(t), 1);
-          render();
-        };
-        const plus = h('button', 'step', '+');
-        plus.onclick = () => {
-          army.push(t);
-          render();
-        };
-        controls.append(minus, h('span', 'unit-count', String(count)), plus);
-
-        card.append(top, stats, special);
-        if (callouts.length) card.append(tags);
-        card.append(controls);
-        list.append(card);
+        list.append(e.squad ? squadCard(e.id, e.blocked) : unitCard(e.id, e.blocked));
       }
 
       const footer = h('div', 'builder-footer');
@@ -234,10 +262,8 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       };
       footer.append(msg, clear, confirm);
 
-      // Keep the scroll position of the unit list across re-renders.
-      const scroll = root.querySelector('.builder-list')?.scrollTop ?? 0;
-      root.replaceChildren(header, list, footer);
-      list.scrollTop = scroll;
+      root.replaceChildren(header, tabs, list, footer);
+      list.scrollTop = scrollOf[tab];
     };
     render();
   });
