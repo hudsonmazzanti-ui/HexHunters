@@ -17,6 +17,7 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
       terrain: [],
       heights,
       controlPoint: controlPointHexes(),
+      deployShape: 'standard',
       deployZones: deployZones(config.boardRadius, config.deployRows),
     },
     units: [],
@@ -74,6 +75,7 @@ export function addUnit(
     hackPenalty: 0,
     attacked: false,
     armorCracks: 0,
+    usesLeft: null,
     ...extra,
   };
   state.units.push(unit);

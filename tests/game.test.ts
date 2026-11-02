@@ -193,7 +193,7 @@ describe('turn flow', () => {
     const s = makeState();
     const inf = addUnit(s, 'heavy', 0, hex(0, 3));
     const sniper = addUnit(s, 'sniper', 0, hex(2, 3));
-    const enemy = addUnit(s, 'infantry', 1, hex(0, -3));
+    const enemy = addUnit(s, 'infantry', 1, hex(1, -3)); // 7 from the Sniper (Spot's range)
     let state = run(s, { type: 'special', unitId: inf.id }, { type: 'special', unitId: sniper.id, targetId: enemy.id }).state;
     state = run(state, { type: 'endTurn' }).state; // player 2's turn
     expect(getUnit(state, inf.id)!.braced).toBe(true);

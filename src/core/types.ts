@@ -28,7 +28,8 @@ export type SpecialId =
   | 'hack'
   | 'secondShot'
   | 'breath'
-  | 'smash';
+  | 'smash'
+  | 'premiumShot';
 
 /** Army-wide passive rules granted by heroes (see src/core/auras/). */
 export type AuraId =
@@ -84,6 +85,11 @@ export interface UnitDef {
    * defense by 1, down to `minDefense`. Burn doesn't count; one action cracks it at most once.
    */
   crackingArmor?: { minDefense: number };
+  /**
+   * The special has limited uses per game (Mercenary's Premium Shot): one per point the
+   * army left unspent, up to `max`. Set when the army is confirmed.
+   */
+  specialUses?: { fromUnspentPoints: true; max: number };
 }
 
 export interface GameConfig {
@@ -93,8 +99,12 @@ export interface GameConfig {
   terrainPairs: number;
   terrainMinLength: number;
   terrainMaxLength: number;
-  /** Rows at each player's edge where they may deploy. */
+  /** Rows at each player's edge where they may deploy (the Standard deployment shape). */
   deployRows: number;
+  /** Deployment shape ids one is picked from at random each game (see src/data/deployShapes.ts). */
+  deployShapes: string[];
+  /** No attack or special may reach farther than this (checked by validateConfig). */
+  maxRange: number;
   dieSides: number;
   pointsToWin: number;
   /** Maximum total cost of each player's army. */
@@ -173,6 +183,11 @@ export interface SpecialRules {
   hackPenalty: number;
   /** How many hexes the Dragon's Breath reaches. */
   breathLength: number;
+  /** Sniper's Spot: how far it can mark a visible enemy. */
+  spotRange: number;
+  /** Mercenary's Premium Shot: range and damage (always hits). */
+  premiumRange: number;
+  premiumDamage: number;
 }
 
 export interface Terrain {
@@ -188,6 +203,8 @@ export interface GameMap {
   /** hexKey -> terrain height, for fast lookup. */
   heights: Record<string, TerrainHeight>;
   controlPoint: Hex[];
+  /** Id of this game's deployment shape (see src/data/deployShapes.ts). */
+  deployShape: string;
   /** deployZones[player] = hexes that player may deploy on. */
   deployZones: [Hex[], Hex[]];
 }
@@ -238,6 +255,8 @@ export interface Unit {
   attacked: boolean;
   /** Cracking Armor: how much defense it has permanently lost (see UnitDef.crackingArmor). */
   armorCracks: number;
+  /** Uses left of a limited special (see UnitDef.specialUses); null = unlimited. */
+  usesLeft: number | null;
 }
 
 export interface Overwatch {

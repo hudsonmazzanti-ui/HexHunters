@@ -21,6 +21,7 @@ import { hook } from './hook';
 import { load } from './load';
 import { overwatch } from './overwatch';
 import { pounce } from './pounce';
+import { premiumShot } from './premiumshot';
 import { prep } from './prep';
 import { secondShot } from './secondshot';
 import { shove } from './shove';
@@ -67,6 +68,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   secondShot,
   breath,
   smash,
+  premiumShot,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */
@@ -112,6 +114,7 @@ export function specialBlockedReason(state: GameState, unit: Unit, choice?: Spec
   const sp = specialOf(state, unit);
   if (!sp) return 'No special action';
   if (unit.specialUsed) return 'already used';
+  if (unit.usesLeft === 0) return 'no shots left';
   // Only Second Shot may follow the basic attack.
   if (unit.attacked && !sp.afterAttack) return 'already attacked';
   const general = sp.usable?.(state, unit);
@@ -171,6 +174,7 @@ export function applySpecial(state: GameState, unit: Unit, choice: SpecialChoice
   const sp = specialOf(state, unit)!; // a unit without a special was rejected above
   const resolved = resolve(state, unit, sp, choice) as ResolvedChoice;
   unit.specialUsed = true;
+  if (unit.usesLeft !== null) unit.usesLeft -= 1; // limited uses per game (Premium Shot)
   // Normally the special uses up the die. With Master Ninja's aura the unit may still attack afterwards.
   // A follow-up to the attack (Second Shot) always ends the turn.
   unit.acted = sp.afterAttack || (!hasDoubleAction(state, unit) && !sp.allowsAttackAfter);

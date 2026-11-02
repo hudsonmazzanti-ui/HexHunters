@@ -98,7 +98,7 @@ describe('Artillery', () => {
   it('stays loaded through movement and turns, and firing unloads it', () => {
     const s = makeState();
     const art = addUnit(s, 'artillery', 0, hex(0, 3), { die: 12 });
-    const target = addUnit(s, 'infantry', 1, hex(0, -4));
+    const target = addUnit(s, 'infantry', 1, hex(0, -3)); // 7 away after the move to (1, 3)
     let state = run(s, { type: 'special', unitId: art.id }).state;
     expect(getUnit(state, art.id)!.loaded).toBe(true);
     expect(specialBlockedReason(state, getUnit(state, art.id)!)).toBe('This model cannot act');
@@ -127,11 +127,11 @@ describe('Artillery', () => {
     expect(previewAttack(s, art, hidden).blockedReason).toBeNull();
   });
 
-  it('has range 10', () => {
+  it('has range 7 (capped)', () => {
     const s = makeState();
     const art = addUnit(s, 'artillery', 0, hex(-3, 7), { die: 12, loaded: true });
-    const inRange = addUnit(s, 'infantry', 1, hex(-3, -3)); // distance 10
-    const outOfRange = addUnit(s, 'infantry', 1, hex(4, -4)); // distance 11
+    const inRange = addUnit(s, 'infantry', 1, hex(-3, 0)); // distance 7
+    const outOfRange = addUnit(s, 'infantry', 1, hex(-3, -1)); // distance 8
     expect(previewAttack(s, art, inRange).blockedReason).toBeNull();
     expect(previewAttack(s, art, outOfRange).blockedReason).toBe('Out of range');
   });

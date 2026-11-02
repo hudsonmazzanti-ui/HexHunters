@@ -65,6 +65,8 @@ interface UnitNodes {
   armor: SVGGElement;
   armorText: SVGTextElement;
   armorRect: SVGRectElement;
+  /** Limited special uses left (Mercenary's Premium Shots). */
+  usesText: SVGTextElement;
 }
 
 export class BoardView {
@@ -252,7 +254,12 @@ export class BoardView {
     const armorRect = el('rect', { x: -16, y: -7, width: 32, height: 14, rx: 4 }, armor);
     const armorText = el('text', {}, armor);
 
-    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, armor, armorText, armorRect };
+    // Limited special (Mercenary): shots left, as a gold "★2" tag at the lower right.
+    const uses = el('g', { class: 'uses', transform: `translate(${r * 0.8 + 4} ${r * 0.6})` }, g);
+    el('rect', { x: -9, y: -6, width: 18, height: 12, rx: 3 }, uses);
+    const usesText = el('text', {}, uses);
+
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, armor, armorText, armorRect, usesText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -306,6 +313,9 @@ export class BoardView {
       n.die.classList.toggle('hacked', unit.hackPenalty > 0);
     }
 
+    cls.toggle('limited', unit.usesLeft !== null);
+    cls.toggle('empty-uses', unit.usesLeft === 0);
+    n.usesText.textContent = unit.usesLeft === null ? '' : `★${unit.usesLeft}`;
     n.armor.style.display = def.crackingArmor ? '' : 'none';
     if (def.crackingArmor) {
       const text = `DEF ${naturalDefense(state, unit)}${unit.armorCracks ? ` (-${unit.armorCracks})` : ''}`;

@@ -1,9 +1,10 @@
 /**
  * Procedural map generation.
  *
- * Terrain is placed in pairs: every piece has a twin mirrored through the board
- * center (point symmetry), so neither side gets a better layout. Pieces are kept
- * out of the deployment rows (plus a one-row buffer), off the control point and its
+ * Each map gets a random deployment shape (src/data/deployShapes.ts). Terrain is
+ * placed in pairs: every piece has a twin mirrored through the board center (point
+ * symmetry), so neither side gets a better layout. Pieces are kept out of both
+ * deployment zones (plus a one-hex buffer), off the control point and its
  * surrounding ring, and at least one empty hex apart, so the map stays sparse and
  * every open hex remains reachable.
  */
@@ -18,6 +19,7 @@ import {
   mirror,
   neighbors,
 } from './hex';
+import { DEPLOY_SHAPES } from '../data/deployShapes';
 import { Rng } from './rng';
 import type { GameConfig, GameMap, Terrain, TerrainHeight } from './types';
 
@@ -32,10 +34,22 @@ export function deployZones(radius: number, rows: number): [Hex[], Hex[]] {
   return [all.filter((h) => h.r >= edge), all.filter((h) => h.r <= -edge)];
 }
 
-/** Can terrain go on this hex? */
-function terrainAllowed(h: Hex, cfg: GameConfig): boolean {
-  const limit = cfg.boardRadius - cfg.deployRows; // keeps a 1-row buffer before deployment
-  return hexDistance(h, ORIGIN) <= cfg.boardRadius && Math.abs(h.r) < limit && hexDistance(h, ORIGIN) >= 2;
+/** Both players' zones for a deployment shape: Player 1's, and its mirror image for Player 2. */
+export function shapeZones(cfg: GameConfig, shapeId: string): [Hex[], Hex[]] {
+  const shape = DEPLOY_SHAPES[shapeId];
+  if (!shape) throw new Error(`Unknown deployment shape "${shapeId}"`);
+  const zone = hexagon(cfg.boardRadius).filter((h) => shape.zone(h, cfg));
+  return [zone, zone.map(mirror)];
+}
+
+/** Picks this seed's deployment shape (its own random stream, so terrain doesn't depend on it). */
+export function pickDeployShape(cfg: GameConfig, seed: number): string {
+  return new Rng((seed ^ 0x2c1b3c6d) | 0).pick(cfg.deployShapes);
+}
+
+/** Can terrain go on this hex? Not in or next to a deployment zone, nor on or next to the control point. */
+function terrainAllowed(h: Hex, cfg: GameConfig, nearZones: Set<string>): boolean {
+  return hexDistance(h, ORIGIN) <= cfg.boardRadius && !nearZones.has(hexKey(h)) && hexDistance(h, ORIGIN) >= 2;
 }
 
 /** A straight wall, or a curved wall that turns one direction each step (an arc). */
@@ -75,7 +89,12 @@ export function isConnected(radius: number, blocked: Set<string>): boolean {
 
 export function generateMap(cfg: GameConfig, seed: number): GameMap {
   const rng = new Rng(seed);
-  const candidates = hexagon(cfg.boardRadius).filter((h) => terrainAllowed(h, cfg));
+  const deployShape = pickDeployShape(cfg, seed);
+  const zones = shapeZones(cfg, deployShape);
+  // Zone hexes plus a one-hex buffer around them stay free of terrain.
+  const nearZones = new Set([...zones[0], ...zones[1]].flatMap((h) => [h, ...neighbors(h)]).map(hexKey));
+  const allowed = (h: Hex) => terrainAllowed(h, cfg, nearZones);
+  const candidates = hexagon(cfg.boardRadius).filter(allowed);
 
   for (let attempt = 0; attempt < 100; attempt++) {
     const terrain: Terrain[] = [];
@@ -88,7 +107,7 @@ export function generateMap(cfg: GameConfig, seed: number): GameMap {
       for (let tries = 0; tries < 50; tries++) {
         const piece = randomPiece(rng, cfg, candidates);
         const twin = piece.hexes.map(mirror);
-        if (!piece.hexes.every((h) => terrainAllowed(h, cfg))) continue;
+        if (!piece.hexes.every(allowed)) continue;
         if (touches(piece.hexes) || touches(twin)) continue;
         // The piece must not touch its own twin either.
         const pieceKeys = new Set(piece.hexes.map(hexKey));
@@ -111,7 +130,8 @@ export function generateMap(cfg: GameConfig, seed: number): GameMap {
       terrain,
       heights,
       controlPoint: controlPointHexes(),
-      deployZones: deployZones(cfg.boardRadius, cfg.deployRows),
+      deployShape,
+      deployZones: zones,
     };
   }
   throw new Error('Could not generate a valid map');

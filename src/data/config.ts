@@ -51,7 +51,7 @@ export const UNITS: Record<string, UnitDef> = {
     speed: SPEED.slow,
     defense: 5,
     health: 4,
-    range: 10,
+    range: 7, // was 10: capped at maxRange
     damage: 4,
     special: 'spot',
   },
@@ -136,7 +136,7 @@ export const UNITS: Record<string, UnitDef> = {
     speed: SPEED.crawl,
     defense: 4,
     health: 8,
-    range: 10,
+    range: 7, // was 10: capped at maxRange
     damage: 4,
     attackName: 'Fire',
     needsLoading: true,
@@ -393,6 +393,21 @@ export const UNITS: Record<string, UnitDef> = {
     special: 'smash', // no passive: its hero ability is its special (like the Twins)
     hero: {},
   },
+  mercenary: {
+    name: 'Mercenary',
+    label: 'Mc',
+    cost: 5,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 6,
+    health: 8,
+    // Same basic attack as the Infantry.
+    range: infantry.range,
+    damage: infantry.damage,
+    special: 'premiumShot', // no passive: its hero ability is its special (like the Twins)
+    specialUses: { fromUnspentPoints: true, max: 3 },
+    hero: {},
+  },
 
   // ---- The Twins: bought together as one hero (see SQUADS), never on their own ----
   twintank: {
@@ -441,6 +456,8 @@ export const DEFAULT_CONFIG: GameConfig = {
   terrainMinLength: 2,
   terrainMaxLength: 4,
   deployRows: 2,
+  deployShapes: ['standard', 'corners', 'flanks', 'spearhead', 'split', 'close'],
+  maxRange: 7,
   dieSides: 12,
   pointsToWin: 5,
   armyPointLimit: 16,
@@ -483,5 +500,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     hackRange: 4,
     hackPenalty: 2,
     breathLength: 2,
+    spotRange: 7,
+    premiumRange: 7,
+    premiumDamage: 4,
   },
 };

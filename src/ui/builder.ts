@@ -3,7 +3,7 @@
  * stats and special. Tap + / − to add or remove; Confirm is blocked while the
  * army is empty or over the point limit. Resolves with the chosen unit type ids.
  */
-import { addBlockedReason, armyCost, entryModels, entryName, validateArmy } from '../core/army';
+import { addBlockedReason, armyCost, entryModels, entryName, specialUsesFor, validateArmy } from '../core/army';
 import { AURAS } from '../core/auras';
 import { SPECIALS } from '../core/specials';
 import type { GameConfig, PlayerId } from '../core/types';
@@ -111,6 +111,27 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       return card;
     };
 
+    /**
+     * "Premium Shots: 2": uses a limited special gets from the points left unspent. Updates
+     * live; before the unit is added, shows what it would get if added now.
+     */
+    const usesLine = (t: string, count: number): HTMLElement => {
+      const def = config.units[t];
+      const withIt = count ? army : [...army, t];
+      const uses = specialUsesFor(config, withIt, t) ?? 0;
+      const name = SPECIALS[def.special!].name;
+      const line = h('div', `unit-uses${uses === 0 ? ' none' : ''}`);
+      line.append(h('b', '', `${name}s: ${uses}`));
+      const left = config.armyPointLimit - armyCost(config, withIt);
+      line.append(
+        document.createTextNode(
+          count ? ` (${Math.max(0, left)} pt${left === 1 ? '' : 's'} unspent, max ${def.specialUses!.max})`
+            : ` if added now (1 per unspent point, max ${def.specialUses!.max})`,
+        ),
+      );
+      return line;
+    };
+
     const unitCard = (t: string, blocked: string | null): HTMLElement => {
       const def = config.units[t];
       const sp = def.special ? SPECIALS[def.special] : undefined;
@@ -172,6 +193,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       for (const c of callouts) tags.append(h('span', 'unit-pill', c));
 
       card.append(top, stats, special);
+      if (def.specialUses && sp) card.append(usesLine(t, count));
       if (callouts.length) card.append(tags);
       card.append(controls(t, count, blocked));
       return card;
@@ -247,7 +269,12 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
 
       const footer = h('div', 'builder-footer');
       const models = army.reduce((n, t) => n + entryModels(config, t).length, 0);
-      const msg = h('div', `builder-msg${over ? ' over' : ''}`, reason ?? `${models} model${models === 1 ? '' : 's'} ready.`);
+      // Limited specials in the army (Mercenary): show the trade-off right by Confirm.
+      const limited = [...new Set(army)].filter((t) => config.units[t]?.specialUses);
+      const usesNote = limited
+        .map((t) => ` ${SPECIALS[config.units[t].special!].name}s: ${specialUsesFor(config, army, t)}.`)
+        .join('');
+      const msg = h('div', `builder-msg${over ? ' over' : ''}`, reason ?? `${models} model${models === 1 ? '' : 's'} ready.${usesNote}`);
       const clear = h('button', '', 'Clear');
       clear.disabled = army.length === 0;
       clear.onclick = () => {

@@ -39,6 +39,7 @@ describe('army building', () => {
       dualgunner: 4,
       dragon: 6,
       behemoth: 12,
+      mercenary: 5,
     });
   });
 
