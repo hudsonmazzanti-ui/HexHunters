@@ -1111,3 +1111,72 @@ button.danger {
   fill: #fecaca;
   stroke: #b91c1c;
 }
+
+/* Builder tabs: Units / Heroes. */
+.builder-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 8px 12px 0;
+  background: var(--bg);
+}
+.builder-tab {
+  min-height: 44px;
+  border-radius: 10px 10px 0 0;
+  font-weight: 800;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-bottom: 3px solid transparent;
+}
+.builder-tab.active {
+  background: var(--panel);
+  color: var(--player);
+  border-bottom-color: var(--player);
+}
+.tab-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--player);
+  color: #fff;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.builder-note {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* Entries that can't be added right now sit at the bottom, dimmed, with the reason. */
+.unit-card.blocked {
+  opacity: 0.55;
+}
+.unit-card.blocked.picked {
+  opacity: 0.8;
+}
+.unit-blocked {
+  margin-right: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bad);
+}
+/* Keep the header short so the list always has room: picked units scroll sideways in one row. */
+.builder-summary {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+}
+.builder-chip {
+  flex: none;
+}
+.builder-list {
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
