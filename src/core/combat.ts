@@ -38,7 +38,8 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit, se
   const def = unitDef(state, attacker);
   const roll = attacker.die ?? 0;
   const hitBonus = def.hitBonus ?? 0;
-  const spotBonus = target.spottedBy === attacker.owner ? state.config.specials.spotAttackBonus : 0;
+  // A model without a die (Behemoth) always hits, so Spot doesn't help it (and isn't used up).
+  const spotBonus = target.spottedBy === attacker.owner && !def.noDie ? state.config.specials.spotAttackBonus : 0;
   const pointBonus = actionBonus(state, attacker);
   const bonus = hitBonus + spotBonus + pointBonus;
   const defense = effectiveDefense(state, target);
@@ -51,7 +52,7 @@ export function previewAttack(state: GameState, attacker: Unit, target: Unit, se
   else if (hexDistance(attacker.pos!, target.pos) > def.range) blockedReason = 'Out of range';
   else if (!def.indirectFire && !canSeeUnit(state, attacker, target)) blockedReason = 'No line of sight';
 
-  const hit = roll + bonus >= defense;
+  const hit = !!def.noDie || roll + bonus >= defense;
   return { blockedReason, roll, bonus, hitBonus, spotBonus, pointBonus, defense, hit, damage: attackDamage(state, attacker) };
 }
 

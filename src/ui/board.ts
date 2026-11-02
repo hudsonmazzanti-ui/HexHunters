@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, maxHealth, naturalDefense, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
+import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 
@@ -250,9 +250,11 @@ export class BoardView {
     const hpText = el('text', {}, hp);
 
     // Cracking Armor (Behemoth): its current defense, under the health badge.
-    const armor = el('g', { class: 'badge armor', transform: `translate(0 ${r + 19})` }, g);
-    const armorRect = el('rect', { x: -16, y: -7, width: 32, height: 14, rx: 4 }, armor);
-    const armorText = el('text', {}, armor);
+    // Placed where other models show their die (it has none), with a shield icon.
+    const armor = el('g', { class: 'badge armor', transform: `translate(${r * 0.8 + 3} ${-r * 0.8 - 3})` }, g);
+    const armorRect = el('rect', { x: -18, y: -9, width: 53, height: 18, rx: 4 }, armor);
+    el('path', { class: 'shield', d: 'M-15 -6L-10 -8L-5 -6V-1C-5 3 -8 5 -10 6C-12 5 -15 3 -15 -1Z' }, armor);
+    const armorText = el('text', { x: -3, class: 'armor-text' }, armor);
 
     // Limited special (Mercenary): shots left, as a gold "★2" tag at the lower right.
     const uses = el('g', { class: 'uses', transform: `translate(${r * 0.8 + 4} ${r * 0.6})` }, g);
@@ -318,11 +320,10 @@ export class BoardView {
     n.usesText.textContent = unit.usesLeft === null ? '' : `★${unit.usesLeft}`;
     n.armor.style.display = def.crackingArmor ? '' : 'none';
     if (def.crackingArmor) {
-      const text = `DEF ${naturalDefense(state, unit)}${unit.armorCracks ? ` (-${unit.armorCracks})` : ''}`;
+      const text = armorLabel(state, unit)!;
       n.armorText.textContent = text;
-      const width = text.length * 6 + 8;
-      n.armorRect.setAttribute('width', String(width));
-      n.armorRect.setAttribute('x', String(-width / 2));
+      // Shield on the left, the text starts after it.
+      n.armorRect.setAttribute('width', String(text.length * 7 + 18));
       n.armor.classList.toggle('cracked', unit.armorCracks > 0);
     }
     n.hpText.textContent = String(unit.hp);

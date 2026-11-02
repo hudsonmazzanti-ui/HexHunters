@@ -1104,8 +1104,19 @@ button.danger {
 }
 .armor text {
   fill: #111827;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
+}
+.armor .armor-text {
+  text-anchor: start;
+}
+.armor .shield {
+  fill: #64748b;
+  stroke: #111827;
+  stroke-width: 1;
+}
+.armor.cracked .shield {
+  fill: #b91c1c;
 }
 .armor.cracked rect {
   fill: #fecaca;

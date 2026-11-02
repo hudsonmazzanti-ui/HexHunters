@@ -5,7 +5,7 @@
  * With the Gambler, the penalty applies when the delayed die is rolled.
  */
 import { hexDistance } from '../hex';
-import { canSeeUnit } from '../queries';
+import { canSeeUnit, unitDef } from '../queries';
 import type { SpecialDef } from './types';
 
 export const hack: SpecialDef = {
@@ -17,6 +17,7 @@ export const hack: SpecialDef = {
   tags: ['No roll', `Doesn't stack`],
   checkChoice: (state, unit, { target }) => {
     if (target!.hacked) return 'Already hacked';
+    if (unitDef(state, target!).noDie) return 'Has no die to hack';
     if (hexDistance(unit.pos!, target!.pos!) > state.config.specials.hackRange) return 'Out of range';
     return canSeeUnit(state, unit, target!) ? null : 'No line of sight';
   },

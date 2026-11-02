@@ -105,7 +105,7 @@ export const canAct = (state: GameState, unit: Unit): boolean =>
   unit.owner === state.current &&
   !!unit.pos &&
   !unit.acted &&
-  (unit.die !== null || unit.gambling);
+  (unit.die !== null || unit.gambling || !!unitDef(state, unit).noDie);
 
 /** Current size (height for line of sight): a crawling Zombie is small. */
 export function unitSize(state: GameState, unit: Unit): UnitDef['size'] {
@@ -130,8 +130,9 @@ export const needsLoading = (state: GameState, unit: Unit): boolean =>
 
 export const isHero = (state: GameState, unit: Unit): boolean => !!unitDef(state, unit).hero;
 
-/** Die bonus a unit gets when it acts right now (Standard Bearer: +2 while on the control point). */
-export const actionBonus = (state: GameState, unit: Unit): number => auraEffects(state, unit).actionRollBonus ?? 0;
+/** Die bonus a unit gets when it acts right now (Standard Bearer: +2 while on the control point). None without a die. */
+export const actionBonus = (state: GameState, unit: Unit): number =>
+  unitDef(state, unit).noDie ? 0 : (auraEffects(state, unit).actionRollBonus ?? 0);
 
 /**
  * The die value used when the unit acts now: its rolled die (incl. Prep/Marshal) plus any
@@ -142,6 +143,11 @@ export function actionDie(state: GameState, unit: Unit): number {
   // A hacked Gambler's best roll is the cap minus the hack.
   const die = unit.gambling ? Math.max(1, state.config.specials.gamblerMaxDie - unit.hackPenalty) : (unit.die ?? 0);
   return die + actionBonus(state, unit);
+}
+
+/** Cracking Armor badge text ("DEF 8"), shown where other models show their die; null for other units. */
+export function armorLabel(state: GameState, unit: Unit): string | null {
+  return unitDef(state, unit).crackingArmor ? `DEF ${naturalDefense(state, unit)}` : null;
 }
 
 /** Werewolf: how many more of its owner's turns until it transforms (null if it never will / already has). */

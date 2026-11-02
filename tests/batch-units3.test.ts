@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validateArmy } from '../src/core/army';
 import { type Action, type GameEvent, applyAction, canUndoMove } from '../src/core/game';
 import { hex, hexKey } from '../src/core/hex';
-import { actionDie, getUnit, moveReach, terrainHeight } from '../src/core/queries';
+import { actionBonus, actionDie, armorLabel, canAct, getUnit, moveReach, terrainHeight } from '../src/core/queries';
 import { nextRandom } from '../src/core/rng';
 import { previewSpecial, specialBlockedReason, specialChoices } from '../src/core/specials';
 import type { GameState } from '../src/core/types';
@@ -343,5 +343,72 @@ describe('Behemoth: Cracking Armor', () => {
     b.braced = true;
     const inf = addUnit(s, 'infantry', 0, hex(1, 2), { die: 8 });
     expect(applyAction(s, { type: 'attack', unitId: inf.id, targetId: b.id }).events[0]).toMatchObject({ defense: 9, hit: false });
+  });
+});
+
+describe('Behemoth: no die', () => {
+  it('rolls no die at the start of its turn, yet can move and act', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 0, hex(0, 3));
+    const inf = addUnit(s, 'infantry', 0, hex(2, 3));
+    addUnit(s, 'heavy', 1, hex(0, -3));
+    const r = run(s, END, END); // back to P1
+    const turn = r.events.filter((e) => e.type === 'turnStart').at(-1)!;
+    expect(turn.type === 'turnStart' && Object.keys(turn.dice)).toEqual([inf.id]);
+    expect(getUnit(r.state, b.id)).toMatchObject({ die: null, movesLeft: 2, acted: false });
+    expect(canAct(r.state, getUnit(r.state, b.id)!)).toBe(true);
+  });
+
+  it('its melee always hits for 6, even against high defense', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 0, hex(0, 1));
+    const target = addUnit(s, 'grappler', 1, hex(0, 0), { braced: true }); // def 7 (+2 braced)
+    const r = run(s, { type: 'attack', unitId: b.id, targetId: target.id });
+    expect(r.events[0]).toMatchObject({ type: 'attack', hit: true, damage: 6 });
+    expect(getUnit(r.state, target.id)!.hp).toBe(UNITS.grappler.health - 6);
+    expect(getUnit(r.state, b.id)!.acted).toBe(true);
+  });
+
+  it('die modifiers do nothing: Gambler, Standard Bearer, Spot', () => {
+    // Gambler: no "?" die and no roll for the Behemoth.
+    const s = makeState();
+    addUnit(s, 'gambler', 0, hex(-5, 5));
+    const b = addUnit(s, 'behemoth', 0, hex(0, 1));
+    addUnit(s, 'infantry', 1, hex(0, -5));
+    const r = run(s, END, END);
+    expect(getUnit(r.state, b.id)).toMatchObject({ die: null, gambling: false });
+    const enemy = addUnit(r.state, 'heavy', 1, hex(0, 0), { spottedBy: 0 }); // survives the 6
+    const attack = run(r.state, { type: 'attack', unitId: b.id, targetId: enemy.id });
+    expect(attack.events.some((e) => e.type === 'gambleRoll')).toBe(false);
+    expect(attack.events[0]).toMatchObject({ type: 'attack', hit: true, bonus: 0 });
+    // Spot isn't used up by the Behemoth's attack.
+    expect(getUnit(attack.state, enemy.id)).toMatchObject({ hp: UNITS.heavy.health - 6, spottedBy: 0 });
+
+    // Standard Bearer: no +2 on the point.
+    const t = makeState();
+    addUnit(t, 'standardbearer', 0, hex(-5, 5));
+    const onPoint = addUnit(t, 'behemoth', 0, hex(0, 0));
+    expect(actionBonus(t, onPoint)).toBe(0);
+  });
+
+  it("Hack can't target it", () => {
+    const s = makeState();
+    const hacker = addUnit(s, 'hacker', 0, hex(0, 3));
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0));
+    expect(specialBlockedReason(s, hacker, { targetId: b.id })).toBe('Has no die to hack');
+    expect(specialChoices(s, hacker)).toEqual([]);
+  });
+});
+
+describe('Behemoth: armor display', () => {
+  it('shows "DEF 10" in the die spot and updates when it cracks; other models show none', () => {
+    const s = makeState();
+    const b = addUnit(s, 'behemoth', 1, hex(0, 0));
+    const a = addUnit(s, 'heavy', 0, hex(0, 3), { die: 12 });
+    expect(armorLabel(s, b)).toBe('DEF 10');
+    expect(armorLabel(s, a)).toBeNull();
+    const r = run(s, { type: 'attack', unitId: a.id, targetId: b.id });
+    expect(armorLabel(r.state, getUnit(r.state, b.id)!)).toBe('DEF 9');
+    expect(armorLabel(r.state, { ...getUnit(r.state, b.id)!, armorCracks: 6 })).toBe('DEF 4');
   });
 });

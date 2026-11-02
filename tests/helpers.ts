@@ -55,7 +55,7 @@ export function addUnit(
     owner,
     pos,
     hp: def.health,
-    die: owner === state.current ? 6 : null,
+    die: owner === state.current && !def.noDie ? 6 : null,
     dieBonus: 0,
     movesLeft: owner === state.current ? def.speed : 0,
     acted: false,

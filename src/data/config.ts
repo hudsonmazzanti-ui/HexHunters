@@ -390,6 +390,7 @@ export const UNITS: Record<string, UnitDef> = {
     range: 1, // melee only
     damage: 6,
     crackingArmor: { minDefense: 4 },
+    noDie: true, // melee always hits; Smash needs no roll
     special: 'smash', // no passive: its hero ability is its special (like the Twins)
     hero: {},
   },
