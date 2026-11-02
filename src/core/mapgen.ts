@@ -56,7 +56,9 @@ function terrainAllowed(h: Hex, cfg: GameConfig, nearZones: Set<string>): boolea
 function randomPiece(rng: Rng, cfg: GameConfig, candidates: Hex[]): Omit<Terrain, 'id'> {
   const length = rng.int(cfg.terrainMinLength, cfg.terrainMaxLength);
   const kind = length >= 3 && rng.next() < 0.5 ? 'curve' : 'wall';
-  const height = rng.int(1, 2) as TerrainHeight;
+  // Height 2 with probability terrainTallShare (default: 50/50, drawn exactly as before).
+  const tall = cfg.terrainTallShare;
+  const height = (tall === undefined ? rng.int(1, 2) : rng.next() < tall ? 2 : 1) as TerrainHeight;
   const turn = rng.next() < 0.5 ? 1 : -1;
   let dir = rng.int(0, 5);
   let cur = rng.pick(candidates);
@@ -87,10 +89,41 @@ export function isConnected(radius: number, blocked: Set<string>): boolean {
   return seen.size === open.length;
 }
 
+/**
+ * Can each deployment zone reach the control point and the enemy zone over open hexes?
+ * (Implied by isConnected, but checked explicitly so a future relaxation of that rule
+ * can't produce a map where an army is walled off.)
+ */
+export function zonesConnected(radius: number, blocked: Set<string>, zones: [Hex[], Hex[]], objective: Hex[]): boolean {
+  const reach = (from: Hex[]) => {
+    const seen = new Set(from.filter((h) => !blocked.has(hexKey(h))).map(hexKey));
+    const stack = from.filter((h) => !blocked.has(hexKey(h)));
+    while (stack.length) {
+      const h = stack.pop()!;
+      for (const n of neighbors(h)) {
+        const k = hexKey(n);
+        if (hexDistance(n, ORIGIN) > radius || blocked.has(k) || seen.has(k)) continue;
+        seen.add(k);
+        stack.push(n);
+      }
+    }
+    return seen;
+  };
+  const touches = (seen: Set<string>, hexes: Hex[]) => hexes.some((h) => seen.has(hexKey(h)));
+  const from0 = reach(zones[0]);
+  const from1 = reach(zones[1]);
+  return touches(from0, objective) && touches(from0, zones[1]) && touches(from1, objective);
+}
+
 export function generateMap(cfg: GameConfig, seed: number): GameMap {
   const rng = new Rng(seed);
   const deployShape = pickDeployShape(cfg, seed);
   const zones = shapeZones(cfg, deployShape);
+  // A fractional terrainPairs (density) rounds up or down at random: 4.5 = 4 or 5 pairs, 50/50.
+  // (Only draws a random number when fractional, so whole-number maps are unchanged.)
+  const whole = Math.floor(cfg.terrainPairs);
+  const frac = cfg.terrainPairs - whole;
+  const pairCount = frac > 0 && rng.next() < frac ? whole + 1 : whole;
   // Zone hexes plus a one-hex buffer around them stay free of terrain.
   const nearZones = new Set([...zones[0], ...zones[1]].flatMap((h) => [h, ...neighbors(h)]).map(hexKey));
   const allowed = (h: Hex) => terrainAllowed(h, cfg, nearZones);
@@ -103,8 +136,8 @@ export function generateMap(cfg: GameConfig, seed: number): GameMap {
     const touches = (hexes: Hex[]) =>
       hexes.some((h) => used.has(hexKey(h)) || neighbors(h).some((n) => used.has(hexKey(n))));
 
-    for (let pair = 0; pair < cfg.terrainPairs; pair++) {
-      for (let tries = 0; tries < 50; tries++) {
+    for (let pair = 0; pair < pairCount; pair++) {
+      for (let tries = 0; tries < (cfg.terrainTries ?? 50); tries++) {
         const piece = randomPiece(rng, cfg, candidates);
         const twin = piece.hexes.map(mirror);
         if (!piece.hexes.every(allowed)) continue;
@@ -122,6 +155,7 @@ export function generateMap(cfg: GameConfig, seed: number): GameMap {
     }
 
     if (!isConnected(cfg.boardRadius, used)) continue;
+    if (!zonesConnected(cfg.boardRadius, used, zones, controlPointHexes())) continue;
 
     const heights: Record<string, TerrainHeight> = {};
     for (const t of terrain) for (const h of t.hexes) heights[hexKey(h)] = t.height;

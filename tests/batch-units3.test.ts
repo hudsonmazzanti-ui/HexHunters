@@ -34,7 +34,7 @@ describe('new unit stats', () => {
   it('match the brief', () => {
     expect(UNITS.hacker).toMatchObject({ cost: 3, size: 1, speed: 3, defense: 5, health: 6, range: 4, damage: 2, special: 'hack' });
     expect(UNITS.dualgunner).toMatchObject({ cost: 4, size: 2, speed: 3, defense: 6, health: 7, range: 4, damage: 2, special: 'secondShot' });
-    expect(UNITS.dragon).toMatchObject({ cost: 6, size: 3, speed: 4, defense: 6, health: 12, range: 3, damage: 3, special: 'breath', flying: true });
+    expect(UNITS.dragon).toMatchObject({ cost: 6, size: 3, speed: 3, defense: 6, health: 12, range: 3, damage: 3, special: 'breath', flying: true });
     expect(UNITS.behemoth).toMatchObject({ cost: 12, size: 3, speed: 2, defense: 10, health: 15, range: 1, damage: 6, special: 'smash', hero: {}, crackingArmor: { minDefense: 4 } });
   });
 
@@ -189,7 +189,7 @@ describe('Dragon', () => {
     expect(reach.costs.has(hexKey(hex(0, 0)))).toBe(false); // enemy
     expect(reach.costs.has(hexKey(hex(0, 3)))).toBe(false); // ally
     const state = run(s, { type: 'move', unitId: dragon.id, to: hex(0, -1) }).state;
-    expect(getUnit(state, dragon.id)).toMatchObject({ pos: hex(0, -1), movesLeft: 1 });
+    expect(getUnit(state, dragon.id)).toMatchObject({ pos: hex(0, -1), movesLeft: 0 });
     expect(() => run(s, { type: 'move', unitId: dragon.id, to: hex(0, 1) })).toThrow('Cannot reach');
   });
 

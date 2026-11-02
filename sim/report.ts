@@ -44,6 +44,11 @@ export interface Summary {
   presetShape: Record<string, Record<string, Tally>>;
   reasons: Record<string, number>;
   avgRounds: number;
+  /** Sum of squared game lengths, for the standard error of avgRounds. */
+  roundsSq: number;
+  /** Average terrain generated per map. */
+  avgTerrainPieces: number;
+  avgTerrainHexes: number;
   usage: Record<string, { turns: number; attacks: number; specials: number }>;
   illegal: number;
 }
@@ -60,6 +65,9 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     presetShape: {},
     reasons: {},
     avgRounds: 0,
+    roundsSq: 0,
+    avgTerrainPieces: 0,
+    avgTerrainHexes: 0,
     usage: {},
     illegal: 0,
   };
@@ -69,8 +77,13 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     s.presetShape[n] = {};
   }
   let rounds = 0;
+  let pieces = 0;
+  let hexes = 0;
   for (const r of records) {
     rounds += r.rounds;
+    s.roundsSq += r.rounds * r.rounds;
+    pieces += r.terrainPieces;
+    hexes += r.terrainHexes;
     s.illegal += r.illegal;
     s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1;
 
@@ -113,6 +126,8 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     }
   }
   s.avgRounds = records.length ? rounds / records.length : 0;
+  s.avgTerrainPieces = records.length ? pieces / records.length : 0;
+  s.avgTerrainHexes = records.length ? hexes / records.length : 0;
   return s;
 }
 
@@ -147,10 +162,10 @@ const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join
 
 export function gamesCsv(records: GameRecord[]): string {
   return csv([
-    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'shape', 'winner', 'reason', 'rounds', 'scoreA', 'scoreB'],
+    ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'shape', 'terrainPieces', 'terrainHexes', 'winner', 'reason', 'rounds', 'scoreA', 'scoreB'],
     ...records.map((r) => [
       r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
-      r.seatOfA + 1, r.firstMover, r.shape, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
+      r.seatOfA + 1, r.firstMover, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
     ]),
   ]);
 }

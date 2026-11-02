@@ -29,7 +29,9 @@ import { validateConfig } from '../src/core/army';
 import type { PlayerId } from '../src/core/types';
 import { DEFAULT_CONFIG } from '../src/data/config';
 import { type ArmySpec, PRESETS, checkPresets } from './armies';
-import { type VariantResult, compareCsv, compareHtml, spreads } from './compare';
+import { type VariantResult, bootstrapSpreads, compareCsv, compareHtml, spreads } from './compare';
+import { generateMap } from '../src/core/mapgen';
+import { mapAscii, mapSvg } from './mapImage';
 import { findFlags, gamesCsv, reportHtml, summarize, unitsCsv } from './report';
 import { type GameJob, type GameRecord, runGame } from './runGame';
 import { buildJobs, splitGames } from './schedule';
@@ -130,8 +132,17 @@ async function runVariant(id: string, o: RunSettings, out: string): Promise<Vari
     join(out, 'report.html'),
     reportHtml(summary, config, { ...o, seconds, maxRounds: MAX_ROUNDS, variant: id === 'baseline' ? undefined : variant.label }),
   );
-  console.log(`  done in ${seconds.toFixed(1)} s · avg ${summary.avgRounds.toFixed(1)} rounds · illegal bot moves: ${summary.illegal}`);
-  return { id, label: variant.label, description: variant.description, config, summary, excluded, seconds };
+  // A sample map with the run's seed (the same seed for every variant, so densities can be compared).
+  const sample = generateMap(config, o.seed);
+  const sampleMap = { svg: mapSvg(sample), ascii: mapAscii(sample) };
+  writeFileSync(join(out, 'sample-map.svg'), sampleMap.svg);
+  writeFileSync(join(out, 'sample-map.txt'), sampleMap.ascii);
+  const spreadNoise = bootstrapSpreads(records, config, presets.map((p) => p.name), o.minGames, 200, o.seed);
+  console.log(
+    `  done in ${seconds.toFixed(1)} s · avg ${summary.avgRounds.toFixed(1)} rounds · terrain ${summary.avgTerrainPieces.toFixed(1)} pieces / ` +
+      `${summary.avgTerrainHexes.toFixed(1)} hexes · illegal bot moves: ${summary.illegal}`,
+  );
+  return { id, label: variant.label, description: variant.description, config, summary, excluded, seconds, spreadNoise, sampleMap };
 }
 
 async function main(): Promise<void> {

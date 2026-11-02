@@ -305,7 +305,7 @@ describe('Werewolf', () => {
   it('has the agreed stats in both forms; the beast form is not buyable', () => {
     expect(UNITS.werewolf).toMatchObject({ cost: 5, size: 2, speed: 3, defense: 5, health: 7, range: 3, damage: 2 });
     expect(UNITS.werewolf.special).toBeUndefined();
-    expect(UNITS.werewolfbeast).toMatchObject({ size: 3, speed: 4, defense: 6, health: 12, range: 1, damage: 5, special: 'pounce' });
+    expect(UNITS.werewolfbeast).toMatchObject({ size: 3, speed: 3, defense: 6, health: 12, range: 1, damage: 5, special: 'pounce' });
     expect(validateArmy(DEFAULT_CONFIG, ['werewolfbeast'])).toMatch(/can't be bought/);
   });
 
@@ -320,8 +320,8 @@ describe('Werewolf', () => {
     r = run(r.state, END); // round 2: P1 again, its 3rd turn
     const beast = getUnit(r.state, w.id)!;
     expect(r.events).toContainEqual({ type: 'transformed', unitId: w.id, into: 'werewolfbeast', healed: 5 });
-    expect(beast).toMatchObject({ type: 'werewolfbeast', hp: 8, movesLeft: 4 });
-    expect([unitSize(r.state, beast), unitSpeed(r.state, beast), baseDefense(r.state, beast)]).toEqual([3, 4, 6]);
+    expect(beast).toMatchObject({ type: 'werewolfbeast', hp: 8, movesLeft: 3 });
+    expect([unitSize(r.state, beast), unitSpeed(r.state, beast), baseDefense(r.state, beast)]).toEqual([3, 3, 6]);
     expect(turnsUntilTransform(r.state, beast)).toBeNull();
 
     // Healing is capped at the new max of 12.

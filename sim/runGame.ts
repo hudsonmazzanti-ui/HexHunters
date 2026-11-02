@@ -46,6 +46,9 @@ export interface GameRecord {
   /** Which army won the coin flip and went first in round 1. */
   firstMover: 'A' | 'B';
   shape: string;
+  /** Terrain on this game's map. */
+  terrainPieces: number;
+  terrainHexes: number;
   winner: Outcome;
   reason: EndReason;
   rounds: number;
@@ -83,6 +86,9 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
   let illegal = 0;
 
   let state: GameState = newGame(config, job.seed);
+  // Terrain as generated (Hurl and Smash can remove some during the game).
+  const terrainPieces = state.map.terrain.length;
+  const terrainHexes = Object.keys(state.map.heights).length;
   // (A function, so TypeScript doesn't narrow the phase across the apply() calls below.)
   const phase = () => state.phase;
   const apply = (action: Action): boolean => {
@@ -143,6 +149,8 @@ export function runGame(job: GameJob, opts: RunOptions = {}): GameRecord {
     seatOfA: job.seatOfA,
     firstMover: state.firstPlayer === job.seatOfA ? 'A' : 'B',
     shape: DEPLOY_SHAPES[state.map.deployShape]?.name ?? state.map.deployShape,
+    terrainPieces,
+    terrainHexes,
     winner,
     reason: reason ?? (state.winReason as EndReason),
     rounds: Math.min(state.round, maxRounds),

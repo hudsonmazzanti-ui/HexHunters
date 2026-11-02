@@ -100,8 +100,15 @@ export interface UnitDef {
 export interface GameConfig {
   /** Board is a hexagon of this radius (radius 7 = 15 hexes across). */
   boardRadius: number;
-  /** Mirrored terrain pairs; each pair is two pieces (so 3 pairs = 6 walls). */
+  /**
+   * Terrain amount: mirrored pairs, each pair is two pieces (so 3 pairs = 6 walls). May be
+   * fractional (a density): 4.5 gives 4 or 5 pairs per map, 50/50.
+   */
   terrainPairs: number;
+  /** Random attempts to place each terrain pair before giving up on it (default 50). */
+  terrainTries?: number;
+  /** Chance that a terrain piece is height 2 rather than 1 (default 0.5). */
+  terrainTallShare?: number;
   terrainMinLength: number;
   terrainMaxLength: number;
   /** Rows at each player's edge where they may deploy (the Standard deployment shape). */

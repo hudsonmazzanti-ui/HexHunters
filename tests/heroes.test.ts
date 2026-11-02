@@ -35,7 +35,7 @@ describe('hero data and army limit', () => {
   it('has the three heroes with the agreed stats and no special', () => {
     expect(UNITS.marshal).toMatchObject({ cost: 7, size: 2, speed: 3, defense: 6, health: 9, range: 4, damage: 3 });
     expect(UNITS.siegemaster).toMatchObject({ cost: 8, size: 2, speed: 2, defense: 5, health: 8, range: 4, damage: 2, indirectFire: true });
-    expect(UNITS.warlord).toMatchObject({ cost: 6, size: 3, speed: 3, defense: 6, health: 12, range: 1, damage: 4 });
+    expect(UNITS.warlord).toMatchObject({ cost: 6, size: 3, speed: 2, defense: 6, health: 12, range: 1, damage: 4 });
     for (const id of ['marshal', 'siegemaster', 'warlord']) {
       expect(UNITS[id].hero).toBeDefined();
       expect(UNITS[id].special).toBeUndefined();
@@ -160,16 +160,16 @@ describe('Warlord', () => {
     const grappler = addUnit(s, 'grappler', 0, hex(1, 5));
     const inf = addUnit(s, 'infantry', 0, hex(3, 4));
     const enemyHeavy = addUnit(s, 'heavy', 1, hex(0, -5));
-    expect(unitSpeed(s, w)).toBe(4);
+    expect(unitSpeed(s, w)).toBe(3);
     expect(unitSpeed(s, heavy)).toBe(3);
-    expect(unitSpeed(s, monster)).toBe(4);
+    expect(unitSpeed(s, monster)).toBe(3);
     expect(unitSpeed(s, grappler)).toBe(3);
     expect(unitSpeed(s, inf)).toBe(3);
     expect(unitSpeed(s, enemyHeavy)).toBe(2);
 
     const state = run(s, ...NEXT_P1_TURN).state;
     expect(getUnit(state, heavy.id)!.movesLeft).toBe(3);
-    expect(getUnit(state, w.id)!.movesLeft).toBe(4);
+    expect(getUnit(state, w.id)!.movesLeft).toBe(3);
     // A heavy can really move 3 hexes now.
     expect(moveReach(state, getUnit(state, heavy.id)!).costs.get('0,5')).toBe(3);
   });

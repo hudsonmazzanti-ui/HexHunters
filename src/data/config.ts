@@ -120,7 +120,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Mo',
     cost: 5,
     size: 3, // large
-    speed: SPEED.normal,
+    speed: SPEED.slow, // was normal: large models -1 speed (minimum 2)
     defense: 3,
     health: 14, // was 18
     range: 1, // melee only
@@ -221,7 +221,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'WW',
     cost: 0,
     size: 3, // large
-    speed: SPEED.fast,
+    speed: SPEED.normal, // was fast: large models -1 speed (minimum 2)
     defense: 6,
     health: 12,
     range: 1, // melee only
@@ -258,7 +258,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Dr',
     cost: 6,
     size: 3, // large
-    speed: SPEED.fast,
+    speed: SPEED.normal, // was fast: large models -1 speed (minimum 2)
     defense: 6,
     health: 12,
     range: 3,
@@ -298,7 +298,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'WL',
     cost: 6,
     size: 3, // large
-    speed: SPEED.normal,
+    speed: SPEED.slow, // was normal: large models -1 speed (minimum 2)
     defense: 6,
     health: 12,
     range: 1, // melee only
