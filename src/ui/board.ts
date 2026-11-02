@@ -8,6 +8,7 @@ import { aurasOn } from '../core/auras';
 import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitDef, unitSize } from '../core/queries';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
+import { getSettings } from './settings';
 
 export const HEX_SIZE = 32;
 
@@ -33,6 +34,12 @@ const points = (h: Hex, size = HEX_SIZE) =>
     .join(' ');
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Movement animation speed: milliseconds per hex. */
+export const MOVE_MS = 130;
+
+/** Smooth start and stop (sine in-out). */
+export const easeInOut = (t: number): number => 0.5 - Math.cos(Math.PI * t) / 2;
 
 /** What to highlight on top of the plain board. */
 export interface BoardOverlay {
@@ -78,6 +85,8 @@ export class BoardView {
   private units = new Map<string, UnitNodes>();
   /** Dice currently mid-animation; render() leaves their text alone. */
   private rolling = new Set<string>();
+  /** Models currently gliding (their position is driven by the tween, not by render). */
+  private moving = new Set<string>();
 
   constructor(svg: SVGSVGElement) {
     this.world = el('g', {}, svg);
@@ -150,7 +159,7 @@ export class BoardView {
       for (const h of t.hexes) {
         el('polygon', { points: points(h, HEX_SIZE - 1), class: `terrain h${t.height} ${t.kind}` }, this.layers.terrain);
         const c = hexToPixel(h, HEX_SIZE);
-        el('text', { x: c.x, y: c.y, class: 'terrain-label' }, this.layers.terrain).textContent = String(t.height);
+        el('text', { x: c.x, y: c.y, class: `terrain-label h${t.height}` }, this.layers.terrain).textContent = String(t.height);
       }
     }
   }
@@ -225,13 +234,13 @@ export class BoardView {
 
     // Spotted marker: small crosshair at the lower left.
     const spot = el('g', { class: 'spot', transform: `translate(${-r - 2} ${r - 2})` }, g);
-    el('circle', { r: 6, fill: '#f97316', stroke: '#111', 'stroke-width': 1.5 }, spot);
-    el('path', { d: 'M-4 0H4M0 -4V4', stroke: '#111', 'stroke-width': 1.5 }, spot);
+    el('circle', { r: 6, class: 'spot-bg' }, spot);
+    el('path', { d: 'M-4 0H4M0 -4V4', class: 'spot-cross' }, spot);
 
     // The pop animation uses a CSS transform, so position the badge with a wrapper group.
     const dieWrap = el('g', { transform: `translate(${r * 0.8 + 3} ${-r * 0.8 - 3})` }, g);
     const die = el('g', { class: 'badge die' }, dieWrap);
-    const dieRect = el('rect', { x: -9, y: -9, width: 18, height: 18, rx: 4 }, die);
+    const dieRect = el('rect', { x: -10, y: -10, width: 20, height: 20, rx: 5 }, die);
     const dieText = el('text', {}, die);
 
     // Overwatch: eye + locked die at the upper left (visible to both players).
@@ -246,7 +255,7 @@ export class BoardView {
     el('path', { d: 'M-4 6V-2A4 4 0 0 1 4 -2V6Z' }, shell);
 
     const hp = el('g', { class: 'badge hp', transform: `translate(0 ${r + 5})` }, g);
-    el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 7 }, hp);
+    el('rect', { x: -14, y: -8, width: 28, height: 16, rx: 8 }, hp);
     const hpText = el('text', {}, hp);
 
     // Cracking Armor (Behemoth): its current defense, under the health badge.
@@ -269,8 +278,11 @@ export class BoardView {
 
   private updateUnit(state: GameState, unit: Unit, n: UnitNodes, o: BoardOverlay): void {
     const def = unitDef(state, unit);
-    const p = hexToPixel(unit.pos!, HEX_SIZE);
-    n.g.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    // While a model is gliding along its path, the tween owns its position.
+    if (!this.moving.has(unit.id)) {
+      const p = hexToPixel(unit.pos!, HEX_SIZE);
+      n.g.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    }
 
     const isCurrent = state.phase === 'play' && unit.owner === state.current;
     const spent = isCurrent && unit.acted && unit.movesLeft === 0;
@@ -308,7 +320,7 @@ export class BoardView {
       // Hacked: the die is already reduced; show by how much ("7 (-2)").
       if (text && unit.hackPenalty) text += ` (-${unit.hackPenalty})`;
       n.dieText.textContent = text;
-      const width = text.length > 2 ? Math.max(28, text.length * 7 + 4) : 18;
+      const width = text.length > 2 ? Math.max(30, text.length * 8 + 4) : 20;
       n.dieRect.setAttribute('width', String(width));
       n.dieRect.setAttribute('x', String(-width / 2));
       n.die.classList.toggle('boosted', unit.dieBonus > 0 || bonus > 0);
@@ -330,14 +342,46 @@ export class BoardView {
     n.hp.classList.toggle('low', unit.hp <= Math.ceil(maxHealth(state, unit) / 3));
   }
 
-  /** Walks a unit along a path one hex at a time. */
-  async animateMove(unitId: string, path: Hex[]): Promise<void> {
+  /**
+   * Glides a model from `from` along `path` (the hexes it actually passes through, so
+   * never through walls), ~MOVE_MS per hex, eased in at the start and out at the end.
+   * `airborne` adds the Dragon's lift-off shadow. With animations off it just snaps.
+   */
+  async animateMove(unitId: string, from: Hex, path: Hex[], opts: { airborne?: boolean } = {}): Promise<void> {
     const n = this.units.get(unitId);
-    if (!n) return;
-    for (const h of path) {
-      const p = hexToPixel(h, HEX_SIZE);
-      n.g.style.transform = `translate(${p.x}px, ${p.y}px)`;
-      await sleep(150);
+    if (!n || !path.length) return;
+    const pts = [from, ...path].map((h) => hexToPixel(h, HEX_SIZE));
+    const place = (p: Point) => (n.g.style.transform = `translate(${p.x}px, ${p.y}px)`);
+    if (!getSettings().animations) {
+      place(pts[pts.length - 1]);
+      return;
+    }
+    // Distance along the polyline, so a 2-hex Vault leap takes as long as 2 steps.
+    const seg = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+    const total = seg.reduce((a, b) => a + b, 0);
+    const duration = Math.max(1, Math.round(total / (HEX_SIZE * Math.sqrt(3)))) * MOVE_MS;
+    this.moving.add(unitId);
+    n.g.classList.toggle('airborne', !!opts.airborne);
+    place(pts[0]); // start where it was (a render may already have drawn it at the end)
+    try {
+      const start = performance.now();
+      await new Promise<void>((resolve) => {
+        const frame = (now: number) => {
+          const t = Math.min(1, (now - start) / duration);
+          let d = easeInOut(t) * total;
+          let i = 0;
+          while (i < seg.length - 1 && d > seg[i]) d -= seg[i++];
+          const k = seg[i] ? Math.min(1, d / seg[i]) : 1;
+          place({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k });
+          if (t < 1) requestAnimationFrame(frame);
+          else resolve();
+        };
+        requestAnimationFrame(frame);
+      });
+    } finally {
+      this.moving.delete(unitId);
+      n.g.classList.remove('airborne');
+      place(pts[pts.length - 1]);
     }
   }
 
@@ -373,7 +417,7 @@ export class BoardView {
       this.rolling.add(id);
       this.units.get(id)!.die.classList.add('rolling');
     });
-    const end = performance.now() + 700;
+    const end = performance.now() + (getSettings().animations ? 700 : 0);
     while (performance.now() < end) {
       for (const id of ids) this.units.get(id)!.dieText.textContent = String(1 + Math.floor(Math.random() * sides));
       await sleep(60);

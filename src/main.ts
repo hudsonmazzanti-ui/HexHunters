@@ -1,4 +1,9 @@
 import './style.css';
+import { applySettingsClasses } from './ui/settings';
+import { applyTheme } from './ui/theme';
+
+applyTheme();
+applySettingsClasses();
 import { randomSeed } from './core/rng';
 import { DEFAULT_CONFIG } from './data/config';
 import { Controller } from './ui/controller';

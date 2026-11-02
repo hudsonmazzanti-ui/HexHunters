@@ -6,7 +6,8 @@
 import { firstPlayerOfRound } from '../core/game';
 import type { GameState } from '../core/types';
 
-export const PLAYER_COLORS = ['#3b82f6', '#ef4444'] as const;
+export { PLAYER_COLORS } from './theme';
+import { COLORS, PLAYER_COLORS } from './theme';
 export const PLAYER_NAMES = ['Player 1', 'Player 2'] as const;
 
 export interface RosterChip {
@@ -90,7 +91,7 @@ export function renderTopBar(state: GameState): void {
       first(state.round + 1),
     );
   }
-  const color = state.phase === 'over' ? (state.winner === null ? '#9aa4b6' : PLAYER_COLORS[state.winner]) : PLAYER_COLORS[state.current];
+  const color = state.phase === 'over' ? (state.winner === null ? COLORS.muted : PLAYER_COLORS[state.winner]) : PLAYER_COLORS[state.current];
   who.style.color = color;
   label.append(who, sub);
 
