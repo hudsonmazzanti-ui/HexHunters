@@ -38,6 +38,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Movement animation speed: milliseconds per hex. */
 export const MOVE_MS = 130;
 
+/** Undo: a quick straight slide back to the start hex. */
+export const UNDO_MS = 180;
+
 /** Smooth start and stop (sine in-out). */
 export const easeInOut = (t: number): number => 0.5 - Math.cos(Math.PI * t) / 2;
 
@@ -347,7 +350,12 @@ export class BoardView {
    * never through walls), ~MOVE_MS per hex, eased in at the start and out at the end.
    * `airborne` adds the Dragon's lift-off shadow. With animations off it just snaps.
    */
-  async animateMove(unitId: string, from: Hex, path: Hex[], opts: { airborne?: boolean } = {}): Promise<void> {
+  async animateMove(
+    unitId: string,
+    from: Hex,
+    path: Hex[],
+    opts: { airborne?: boolean; durationMs?: number } = {},
+  ): Promise<void> {
     const n = this.units.get(unitId);
     if (!n || !path.length) return;
     const pts = [from, ...path].map((h) => hexToPixel(h, HEX_SIZE));
@@ -359,7 +367,7 @@ export class BoardView {
     // Distance along the polyline, so a 2-hex Vault leap takes as long as 2 steps.
     const seg = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
     const total = seg.reduce((a, b) => a + b, 0);
-    const duration = Math.max(1, Math.round(total / (HEX_SIZE * Math.sqrt(3)))) * MOVE_MS;
+    const duration = opts.durationMs ?? Math.max(1, Math.round(total / (HEX_SIZE * Math.sqrt(3)))) * MOVE_MS;
     this.moving.add(unitId);
     n.g.classList.toggle('airborne', !!opts.airborne);
     place(pts[0]); // start where it was (a render may already have drawn it at the end)
