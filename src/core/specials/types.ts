@@ -74,6 +74,8 @@ export interface SpecialDef {
   keepsMovement?: boolean;
   /** The model may still make its attack afterwards with the same die (Werewolf's Pounce). */
   allowsAttackAfter?: boolean;
+  /** Only usable after the model's basic attack this turn, with the same die (Dual Gunner's Second Shot). */
+  afterAttack?: boolean;
   /** Why the special can't be used at all right now (before picking a target), or null. */
   usable?(state: GameState, unit: Unit): string | null;
   /** Why this particular target isn't valid, or null. */

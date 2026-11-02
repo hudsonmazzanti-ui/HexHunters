@@ -186,6 +186,10 @@ export class Controller {
           this.ui.message = ev.hit
             ? `${unitDef(before, attacker).name} hits ${unitDef(before, target).name} (${roll}) for ${ev.damage}${ev.killed ? ' — destroyed!' : '.'}`
             : `${unitDef(before, attacker).name} misses ${unitDef(before, target).name} (${roll}).`;
+          // Dual Gunner: the turn stays open for Second Shot.
+          const after = getUnit(this.state, ev.unitId);
+          const follow = after && specialOf(this.state, after);
+          if (after && follow?.afterAttack && canAct(this.state, after)) this.ui.message += ` ${follow.name} ready: same die.`;
           this.render();
           break;
         }
@@ -272,6 +276,8 @@ export class Controller {
       spot: 'SPOTTED',
       shove: 'SHOVED',
       vault: 'VAULT',
+      hack: 'HACKED',
+      smash: 'SMASH',
     };
     const label = labels[ev.special];
     if (label) this.board.floatText((target ?? unit).pos!, label, '#c4b5fd');
@@ -281,7 +287,9 @@ export class Controller {
       this.board.flash([ev.hex], 'flash-impact');
       this.board.flash(neighbors(ev.hex), 'flash-splash');
     }
-    if (ev.special === 'torch' && ev.dir !== undefined) {
+    if (ev.special === 'secondShot' && target?.pos) this.board.shot(unit.pos!, target.pos, '#fde68a');
+    if (ev.special === 'hack' && target?.pos) this.board.shot(unit.pos!, target.pos, '#4ade80');
+    if ((ev.special === 'torch' || ev.special === 'breath') && ev.dir !== undefined) {
       const preview = previewSpecial(before, unit, { dir: ev.dir });
       if (preview) this.board.flash(preview.area.map((a) => a.hex), 'flash-impact');
     }
@@ -292,6 +300,10 @@ export class Controller {
       else this.board.floatText(pos, `-${e.damage}`, '#fca5a5');
     }
 
+    if (ev.special === 'smash' && ev.hex) {
+      this.board.flash([ev.hex], 'flash-impact');
+      this.board.drawTerrain(this.state.map);
+    }
     if (ev.special === 'hurl' && ev.hex) {
       // The map changed: the chunk is gone (and a boulder may have landed).
       const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
@@ -699,7 +711,7 @@ export class Controller {
           id: u.id,
           label: def.label,
           owner: u.owner,
-          die: u.gambling ? '?' : u.die,
+          die: (u.gambling ? '?' : u.die) === null ? null : `${u.gambling ? '?' : u.die}${u.hackPenalty ? ` (-${u.hackPenalty})` : ''}`,
           hp: u.hp,
           maxHp: maxHealth(s, u),
           spent: s.phase === 'play' && u.acted && u.movesLeft === 0,
@@ -732,21 +744,28 @@ export class Controller {
         stats.push(['Aura', `${heroName(s.config, aura)} ${AURAS[aura].short(s.config.specials, def)}`]);
       }
       if (sel.overwatch) stats.push(['Overwatch', `die ${sel.overwatch.die}, ${sel.overwatch.hexes.length} hexes`]);
-      if (sel.gambling) stats.unshift(['Die', '? (rolls on action)']);
+      const hackNote = sel.hackPenalty ? ` (-${sel.hackPenalty} hacked)` : '';
+      if (sel.gambling) stats.unshift(['Die', `? (rolls on action)${hackNote}`]);
       if (sel.die !== null) {
         const point = sel.acted ? 0 : actionBonus(s, sel);
         const prep =
           (sel.dieBonus ? ` (${sel.die - sel.dieBonus}+${sel.dieBonus} bonus)` : '') + (point ? ` (+${point} on point)` : '');
-        stats.unshift(['Die', `${sel.die}${prep}${sel.acted ? ' used' : ''}`]);
+        stats.unshift(['Die', `${sel.die}${prep}${hackNote}${sel.acted ? ' used' : ''}`]);
+      }
+      // Dual Gunner: its attack, then Second Shot.
+      if (ownTurn && sp?.afterAttack) {
+        stats.push(['Actions', `${attackName(s, sel)} ${sel.attacked ? '✓' : '○'} · ${sp.name} ${sel.specialUsed ? '✓' : '○'}`]);
       }
       // Master Ninja: show which of the two actions have been used this turn.
-      if (ownTurn && sp && hasDoubleAction(s, sel)) {
+      else if (ownTurn && sp && hasDoubleAction(s, sel)) {
         const attacked = sel.acted;
         stats.push(['Actions', `${sp.name} ${sel.specialUsed ? '✓' : '○'} · ${attackName(s, sel)} ${attacked ? '✓' : '○'}`]);
       }
       if (sel.prepped) stats.push(['Prepped', `+${s.config.specials.prepRollBonus} next roll`]);
       if (sel.spottedBy !== null) stats.push(['', 'Spotted']);
       if (sel.burning) stats.push(['', `Burning: -${s.config.specials.burnDamage} at its next turn`]);
+      if (sel.hacked) stats.push(['', `Hacked: -${s.config.specials.hackPenalty} on its next die`]);
+      if (def.flying) stats.push(['', 'Flying: moves over terrain and models']);
       if (sel.crawling) stats.push(['', 'Crawling (small, speed 1)']);
       if (sel.resting && ownTurn) stats.push(['', 'Resting (back-to-back turn)']);
       const transformsIn = turnsUntilTransform(s, sel);
@@ -834,7 +853,8 @@ export class Controller {
         const dies = e.killed ? (predicted ? ', destroyed' : '') : '';
         if (e.hit === undefined) return `${name} −${e.damage}${dies}${friendly}`;
         const vs = `${e.roll} vs ${e.defense}`;
-        return e.hit ? `${name}: HIT −${e.damage} (${vs})${dies}${friendly}` : `${name}: miss (${vs})${friendly}`;
+        const burn = e.burned ? ', burns' : '';
+        return e.hit ? `${name}: HIT −${e.damage} (${vs})${dies}${burn}${friendly}` : `${name}: miss (${vs})${friendly}`;
       })
       .join(' · ');
   }
@@ -847,7 +867,7 @@ export class Controller {
       const trial = structuredClone(this.state);
       const u = getUnit(trial, unit.id)!;
       u.gambling = false;
-      u.die = Math.min(r.gamblerMaxDie, d + r.gamblerRollBonus + u.dieBonus);
+      u.die = Math.max(1, Math.min(r.gamblerMaxDie, d + r.gamblerRollBonus + u.dieBonus) - u.hackPenalty);
       if (ok(trial, u)) good++;
     }
     return Math.round((good / this.state.config.dieSides) * 100);
@@ -879,9 +899,29 @@ export class Controller {
         if (targetsUnit(sp.targeting)) {
           detail = ` ${unitDef(s, getUnit(s, choice.targetId!)!).name}${detail}`;
         }
-        if (id === 'grenade' || id === 'torch' || id === 'sweep') {
+        if (id === 'grenade' || id === 'torch' || id === 'sweep' || id === 'breath') {
           const friendlyHit = effects.some((e) => getUnit(s, e.unitId)?.owner === unit.owner && e.damage > 0);
           model.preview = { text: this.effectsText(s, unit.owner, effects, true), good: !friendlyHit };
+        } else if (id === 'secondShot') {
+          const e = effects[0];
+          const t = getUnit(s, choice.targetId!)!;
+          model.preview = {
+            text: e.hit
+              ? `Same die: ${unitDef(s, t).name} HIT −${e.damage} (${e.roll} vs ${e.defense})${e.killed ? ', destroyed' : ''}`
+              : `Same die: ${unitDef(s, t).name} miss (${e.roll} vs ${e.defense})`,
+            good: !!e.hit,
+          };
+        } else if (id === 'hack') {
+          const t = getUnit(s, choice.targetId!)!;
+          model.preview = {
+            text: `No roll. ${unitDef(s, t).name}'s die gets −${s.config.specials.hackPenalty} (min 1) on its next turn.`,
+            good: true,
+          };
+        } else if (id === 'smash') {
+          model.preview = {
+            text: `Destroy this height-${terrainHeight(s, choice.hex!)} terrain hex for good. No roll.`,
+            good: true,
+          };
         } else if (id === 'swap') {
           const partner = partnerOf(s, unit);
           model.preview = {
@@ -991,7 +1031,10 @@ export class Controller {
 
     const hints: string[] = [];
     if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
-    if (canAct(s, unit)) {
+    if (canAct(s, unit) && unit.attacked) {
+      // Dual Gunner after its attack: only Second Shot is left.
+      hints.push(`tap ${sp?.name ?? 'the special'} to fire again with the same die`);
+    } else if (canAct(s, unit)) {
       if (needsLoading(s, unit) && !unit.loaded) {
         actions.push({ label: `${attackName(s, unit)} (load first)`, disabled: true, onClick: () => {} });
       } else if (hasDoubleAction(s, unit)) {

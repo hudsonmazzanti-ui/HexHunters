@@ -24,7 +24,15 @@ import {
   unitsOnControlPoint,
 } from './queries';
 import { nextRandom } from './rng';
-import { type SpecialChoice, type SpecialResult, applySpecial, specialBlockedReason, specialOf } from './specials';
+import {
+  type SpecialChoice,
+  type SpecialResult,
+  applySpecial,
+  hackedDie,
+  specialBlockedReason,
+  specialChoices,
+  specialOf,
+} from './specials';
 import type { GameConfig, GameState, PlayerId, Unit, WinReason } from './types';
 
 export type Action =
@@ -213,6 +221,9 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       }
       const result = guard(() => resolveAttack(state, unit, target));
       unit.overwatch = null;
+      // Dual Gunner: the turn stays open for Second Shot, if there's anything left to shoot at.
+      if (specialOf(state, unit)?.afterAttack && !unit.specialUsed) unit.acted = false;
+      if (!unit.acted && !specialChoices(state, unit).length) unit.acted = true;
       events.push({ type: 'attack', unitId: unit.id, targetId: target.id, ...result });
       checkElimination(state, events);
       break;
@@ -259,7 +270,9 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
 /** Gambler: rolls the model's die now: d12 + bonus (+ Prep/Marshal), capped. */
 function gambleRoll(state: GameState, unit: Unit, events: GameEvent[]): number {
   const r = state.config.specials;
-  unit.die = Math.min(r.gamblerMaxDie, rollDie(state) + r.gamblerRollBonus + unit.dieBonus);
+  // A hack reduces the roll after the cap (so a hacked Gambler rolls 1–12).
+  const roll = Math.min(r.gamblerMaxDie, rollDie(state) + r.gamblerRollBonus + unit.dieBonus);
+  unit.die = hackedDie(roll, unit.hackPenalty);
   unit.gambling = false;
   events.push({ type: 'gambleRoll', unitId: unit.id, roll: unit.die });
   return unit.die;
@@ -288,6 +301,9 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     burning: false,
     partnerId: null,
     gambling: false,
+    hacked: false,
+    hackPenalty: 0,
+    attacked: false,
   };
 }
 
@@ -334,7 +350,7 @@ export function isInDeployZone(state: GameState, player: PlayerId, h: Hex): bool
 
 /** A move can be undone until the model uses its die, if its start hex is still free. */
 export function canUndoMove(state: GameState, unit: Unit): boolean {
-  if (state.phase !== 'play' || unit.owner !== state.current || unit.acted || unit.specialUsed) return false;
+  if (state.phase !== 'play' || unit.owner !== state.current || unit.acted || unit.specialUsed || unit.attacked) return false;
   if (!unit.pos || !unit.turnStartPos || hexEquals(unit.pos, unit.turnStartPos)) return false;
   return !unitAt(state, unit.turnStartPos);
 }
@@ -373,6 +389,10 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
 
   const dice: Record<string, number> = {};
   for (const unit of livingUnits(state, state.current)) {
+    // A hack lasts for this one turn (it's used up even if the model rests).
+    unit.hackPenalty = unit.hacked ? state.config.specials.hackPenalty : 0;
+    unit.hacked = false;
+    unit.attacked = false;
     unit.resting = backToBack && !!unitDef(state, unit).restsOnDoubleTurn && !auraEffects(state, unit).noRest;
     if (unit.resting) {
       // Sits this turn out: no die, no movement.
@@ -391,7 +411,7 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     unit.prepped = false;
     // Gambler: no roll yet ("?"); the die rolls when an action is confirmed.
     unit.gambling = !!auraEffects(state, unit).rollsOnAction;
-    unit.die = unit.gambling ? null : rollDie(state) + unit.dieBonus;
+    unit.die = unit.gambling ? null : hackedDie(rollDie(state) + unit.dieBonus, unit.hackPenalty);
     unit.movesLeft = unitSpeed(state, unit);
     unit.acted = false;
     unit.specialUsed = false;
@@ -409,6 +429,8 @@ function endTurn(state: GameState, events: GameEvent[]): void {
     unit.die = null;
     unit.gambling = false;
     unit.dieBonus = 0;
+    unit.hackPenalty = 0;
+    unit.attacked = false;
     unit.movesLeft = 0;
     unit.turnStartPos = null;
   }

@@ -42,7 +42,7 @@ function throwAt(state: GameState, unit: Unit, chunk: Hex, target: Unit): Specia
   };
 }
 
-function removeTerrain(state: GameState, h: Hex): void {
+export function removeTerrain(state: GameState, h: Hex): void {
   delete state.map.heights[hexKey(h)];
   for (const t of state.map.terrain) t.hexes = t.hexes.filter((x) => hexKey(x) !== hexKey(h));
   state.map.terrain = state.map.terrain.filter((t) => t.hexes.length);

@@ -205,6 +205,11 @@ export class BoardView {
     el('circle', { r: 6.5 }, moon);
     const moonText = el('text', {}, moon);
 
+    // Hacked (Hacker): a small green "</>" chip at the left, until its owner's hacked turn is over.
+    const hackMark = el('g', { class: 'hack-mark', transform: `translate(${-r - 6} 2)` }, g);
+    el('rect', { x: -8, y: -6, width: 16, height: 12, rx: 3 }, hackMark);
+    el('text', {}, hackMark).textContent = '</>';
+
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
 
@@ -266,6 +271,7 @@ export class BoardView {
     cls.toggle('crawling', unit.crawling);
     cls.toggle('resting', unit.resting && state.phase === 'play' && unit.owner === state.current);
     cls.toggle('burning', unit.burning);
+    cls.toggle('hacked', unit.hacked || (unit.hackPenalty > 0 && (unit.die !== null || unit.gambling)));
     cls.toggle('twin', !!unit.partnerId);
     cls.toggle('partner', o.partnerId === unit.id);
     const transformsIn = turnsUntilTransform(state, unit);
@@ -280,12 +286,15 @@ export class BoardView {
     if (!this.rolling.has(unit.id)) {
       // Standard Bearer: show "8+2" while the model would get a bonus for acting here.
       const bonus = unit.die !== null && !unit.acted ? actionBonus(state, unit) : 0;
-      const text = unit.gambling ? '?' : unit.die === null ? '' : bonus ? `${unit.die}+${bonus}` : String(unit.die);
+      let text = unit.gambling ? '?' : unit.die === null ? '' : bonus ? `${unit.die}+${bonus}` : String(unit.die);
+      // Hacked: the die is already reduced; show by how much ("7 (-2)").
+      if (text && unit.hackPenalty) text += ` (-${unit.hackPenalty})`;
       n.dieText.textContent = text;
-      const width = text.length > 2 ? 28 : 18;
+      const width = text.length > 2 ? Math.max(28, text.length * 7 + 4) : 18;
       n.dieRect.setAttribute('width', String(width));
       n.dieRect.setAttribute('x', String(-width / 2));
       n.die.classList.toggle('boosted', unit.dieBonus > 0 || bonus > 0);
+      n.die.classList.toggle('hacked', unit.hackPenalty > 0);
     }
 
     n.hpText.textContent = String(unit.hp);

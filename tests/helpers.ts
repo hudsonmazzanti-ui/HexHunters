@@ -69,6 +69,9 @@ export function addUnit(
     burning: false,
     partnerId: null,
     gambling: false,
+    hacked: false,
+    hackPenalty: 0,
+    attacked: false,
     ...extra,
   };
   state.units.push(unit);

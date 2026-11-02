@@ -68,19 +68,23 @@ export function canSeeUnit(state: GameState, viewer: Unit, target: Unit): boolea
 
 /**
  * Where can this unit move with its remaining movement? Terrain and enemy models
- * block; friendly models can be passed through but not stopped on.
+ * block; friendly models can be passed through but not stopped on. Flyers (Dragon)
+ * pass over terrain and any models, but still must stop on an empty, open hex.
  */
 export function moveReach(state: GameState, unit: Unit): Reach {
   if (!unit.pos) return { costs: new Map(), prev: new Map() };
+  const flying = !!unitDef(state, unit).flying;
   return reachable(
     unit.pos,
     unit.movesLeft,
     (h) => {
-      if (!onBoard(state, h) || terrainHeight(state, h) > 0) return false;
+      if (!onBoard(state, h)) return false;
+      if (flying) return true;
+      if (terrainHeight(state, h) > 0) return false;
       const occupant = unitAt(state, h);
       return !occupant || occupant.owner === unit.owner;
     },
-    (h) => !unitAt(state, h),
+    (h) => !unitAt(state, h) && terrainHeight(state, h) === 0,
   );
 }
 
@@ -132,7 +136,8 @@ export const actionBonus = (state: GameState, unit: Unit): number => auraEffects
  * what an action must be possible with before it is rolled for real.
  */
 export function actionDie(state: GameState, unit: Unit): number {
-  const die = unit.gambling ? state.config.specials.gamblerMaxDie : (unit.die ?? 0);
+  // A hacked Gambler's best roll is the cap minus the hack.
+  const die = unit.gambling ? Math.max(1, state.config.specials.gamblerMaxDie - unit.hackPenalty) : (unit.die ?? 0);
   return die + actionBonus(state, unit);
 }
 
