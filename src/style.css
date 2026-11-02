@@ -277,13 +277,13 @@ button.danger {
   fill: color-mix(in srgb, var(--c-accent) 22%, transparent);
 }
 .shade.hide-1 {
-  fill: color-mix(in srgb, var(--c-black) 36%, transparent);
+  fill: color-mix(in srgb, var(--c-hide) 22%, transparent);
 }
 .shade.hide-2 {
-  fill: color-mix(in srgb, var(--c-black) 56%, transparent);
+  fill: color-mix(in srgb, var(--c-hide) 38%, transparent);
 }
 .shade.hide-3 {
-  fill: color-mix(in srgb, var(--c-black) 74%, transparent);
+  fill: color-mix(in srgb, var(--c-hide) 54%, transparent);
 }
 
 .reach-dot {
@@ -1340,9 +1340,6 @@ button.danger {
 
 /* ---------- Polish: markers, input lock, reduced motion ---------- */
 
-.terrain-label.h2 {
-  fill: color-mix(in srgb, var(--c-terrain-label) 75%, transparent);
-}
 .spot-bg {
   fill: var(--c-fire);
   stroke: var(--c-ink);
