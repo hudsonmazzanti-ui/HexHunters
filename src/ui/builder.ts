@@ -4,10 +4,10 @@
  * army is empty or over the point limit. Resolves with the chosen unit type ids.
  */
 import { addBlockedReason, armyCost, entryModels, entryName, specialUsesFor, validateArmy } from '../core/army';
-import { AURAS } from '../core/auras';
+import { AURAS, typeStatChanges } from '../core/auras';
 import { SPECIALS } from '../core/specials';
-import type { GameConfig, PlayerId } from '../core/types';
-import { speedName } from '../data/config';
+import type { AuraId, GameConfig, PlayerId } from '../core/types';
+import { heroName, speedName } from '../data/config';
 import { PLAYER_COLORS, PLAYER_NAMES } from './hud';
 
 const SIZE_NAMES = ['', 'small', 'medium', 'large'];
@@ -132,6 +132,17 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       return line;
     };
 
+    /**
+     * Stat changes from hero auras for a unit type: the auras of heroes already in the army,
+     * plus the card's own aura when it is a hero (the Warlord is large, so its own -2 HP shows).
+     */
+    const auraStatChanges = (t: string) => {
+      const ids: AuraId[] = army.flatMap((e) => (config.units[e]?.hero?.aura ? [config.units[e].hero!.aura!] : []));
+      const own = config.units[t].hero?.aura;
+      if (own) ids.push(own);
+      return typeStatChanges(config, ids, t, (id) => heroName(config, id));
+    };
+
     const unitCard = (t: string, blocked: string | null): HTMLElement => {
       const def = config.units[t];
       const sp = def.special ? SPECIALS[def.special] : undefined;
@@ -144,11 +155,16 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       top.append(h('span', 'unit-cost', `${def.cost} pt${def.cost === 1 ? '' : 's'}`));
 
       const stats = h('div', 'unit-stats');
+      // Hero auras in this army (and a hero's own aura on its card) change these numbers.
+      const fx = auraStatChanges(t);
+      /** "10 (12 −2 Warlord)" when an aura changes the stat, else just the number. */
+      const withAura = (base: number, delta: { total: number; from: string }) =>
+        delta.total ? `${base + delta.total} (${base} ${delta.total > 0 ? '+' : '−'}${Math.abs(delta.total)} ${delta.from})` : `${base}`;
       const statList: [string, string][] = [
         ['Size', SIZE_NAMES[def.size]],
-        ['Move', `${def.speed} ${speedName(def.speed)}`.trim()],
-        ['Def', `${def.defense}`],
-        ['HP', `${def.health}`],
+        ['Move', fx.speed.total ? withAura(def.speed, fx.speed) : `${def.speed} ${speedName(def.speed)}`.trim()],
+        ['Def', withAura(def.defense, fx.defense)],
+        ['HP', withAura(def.health, fx.health)],
         ['Range', def.range === 1 ? '1 (melee)' : `${def.range}`],
         ['Dmg', `${def.damage}`],
       ];

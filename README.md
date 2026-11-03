@@ -48,7 +48,7 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 |---------------|------|------------|-------|-----|----|--------------|-----|--------------------------------|
 | Field Marshal | 7    | medium (2) | 3     | 6   | 9  | 4            | 3   | Your Infantry get +2 on their roll every turn (stacks with Prep) |
 | Siege Master  | 8    | medium (2) | 2     | 5   | 8  | 4 (indirect) | 2   | Your Artillery never needs to Load |
-| Warlord       | 6    | large (3)  | 2     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement |
+| Warlord       | 6    | large (3)  | 2     | 6   | 12 | 1 (melee)    | 4   | All your large models, including the Warlord, get +1 movement and −2 max health (from the start; a Werewolf when it turns into its beast) |
 | Warden        | 6    | medium (2) | 3     | 6   | 10 | 4            | 3   | Medics +1 defense and +1 damage; Sentinels +1 defense and +2 max health (from the start) |
 | Master Ninja  | 7    | small (1)  | 4     | 5   | 7  | 1 (melee)    | 4   | Assassins and Scouts may use their special AND attack in one turn (special first; attacking ends their turn) |
 | Standard Bearer | 6  | medium (2) | 3     | 6   | 10 | 3            | 3   | Models on the control point get +2 on their die when they act; holding the point scores 2 instead of 1. Capture the Flag: the carrier isn't slowed and gets +2 |
@@ -197,7 +197,7 @@ start of your next turn. Spot has no range limit, only line of sight.
 **Heroes.** At most one per army (the builder blocks confirming two). A hero has no special action; instead its
 passive rule applies to its own army for the **whole game**, even after the hero dies. Field Marshal: your Infantry
 get +2 on every roll, on top of any Prep (+4 with both). Siege Master: your Artillery can Fire without loading (Load
-is greyed out as not needed, and firing doesn't use a shell). Warlord: your large models move 1 extra hex. Warden:
+is greyed out as not needed, and firing doesn't use a shell). Warlord: your large models move 1 extra hex and have 2 less max health (applied at game start, permanent; the army builder shows the effective HP, e.g. "HP 12 (14 −2 Warlord)"). Warden:
 Medics +1 defense and +1 attack damage; Sentinels +1 defense and +2 max health, starting the game at 10 (Heal can
 restore them to 10). Master Ninja: your Assassins and Scouts can use their special and then attack in the same turn,
 with the same die; they can move before, between and (after Dash/Vault) after the special, but attacking ends their
@@ -385,7 +385,7 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
 - The bot is simple: units that need clever play (Twins, Sentinel, Hacker…) may test weaker than they really are.
 - **Balance variants** (`sim/variants.ts`): temporary overrides of unit stats, special-rule numbers or rule/map
   settings (e.g. `terrainPairs`), applied to a copy of the data. `--variant ID`, `--variants A,B` or
-  `--experiment NAME` (e.g. `monster`, `terrain`) run them with the same seed and write `compare.html`: one row
+  `--experiment NAME` (e.g. `monster`, `terrain`, `warlord`) run them with the same seed and write `compare.html`: one row
   per variant, changes from the baseline marked as real (beyond 2 standard errors) or noise, plus a sample map
   per variant (`sample-map.svg` / `.txt`).
 - **Missions:** each sim game's mission is random (50/50), like the app. The report has a **By mission** section

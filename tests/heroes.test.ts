@@ -3,10 +3,10 @@ import { validateArmy } from '../src/core/army';
 import { previewAttack } from '../src/core/combat';
 import { type Action, type GameEvent, applyAction, canUndoMove, newGame } from '../src/core/game';
 import { hex } from '../src/core/hex';
-import { aurasOn } from '../src/core/auras';
+import { AURAS, aurasOn, typeStatChanges } from '../src/core/auras';
 import { actionDie, attackDamage, baseDefense, canSeeUnit, getUnit, maxHealth, moveReach, needsLoading, unitSpeed } from '../src/core/queries';
 import { previewSpecial, specialBlockedReason } from '../src/core/specials';
-import type { GameState } from '../src/core/types';
+import type { AuraId, GameState } from '../src/core/types';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 import { addUnit, makeState } from './helpers';
 
@@ -191,6 +191,50 @@ describe('Warlord', () => {
     addUnit(s, 'infantry', 1, hex(0, -3));
     const state = run(kill(s, w.id), ...NEXT_P1_TURN).state;
     expect(getUnit(state, heavy.id)!.movesLeft).toBe(3);
+    expect(maxHealth(state, getUnit(state, heavy.id)!)).toBe(UNITS.heavy.health - 2); // permanent
+  });
+
+  it('large models (the Warlord included) get -2 max health from the start of the game', () => {
+    let s = newGame({ ...DEFAULT_CONFIG, conditions: { clear: 1 } }, 1);
+    s = run(s, { type: 'chooseArmy', units: ['warlord', 'monster', 'infantry'] }, { type: 'chooseArmy', units: ['heavy', 'infantry'] }).state;
+    const hp = (owner: 0 | 1, type: string) => {
+      const u = s.units.find((x) => x.owner === owner && x.type === type)!;
+      return [u.hp, maxHealth(s, u)];
+    };
+    expect(hp(0, 'warlord')).toEqual([UNITS.warlord.health - 2, UNITS.warlord.health - 2]); // 10
+    expect(hp(0, 'monster')).toEqual([UNITS.monster.health - 2, UNITS.monster.health - 2]); // 12
+    expect(hp(0, 'infantry')).toEqual([UNITS.infantry.health, UNITS.infantry.health]); // medium: unaffected
+    expect(hp(1, 'heavy')).toEqual([UNITS.heavy.health, UNITS.heavy.health]); // the enemy's: unaffected
+  });
+
+  it('healing can\'t go past the lowered max health', () => {
+    const s = makeState();
+    addUnit(s, 'warlord', 0, hex(-5, 5));
+    const monster = addUnit(s, 'monster', 0, hex(0, 3), { hp: UNITS.monster.health - 4 });
+    const medic = addUnit(s, 'medic', 0, hex(1, 3), { die: 12 });
+    const healed = run(s, { type: 'special', unitId: medic.id, targetId: monster.id }).state;
+    expect(getUnit(healed, monster.id)!.hp).toBe(UNITS.monster.health - 2);
+  });
+
+  it('a Werewolf gets the -2 once it becomes a large beast', () => {
+    const s = makeState();
+    addUnit(s, 'warlord', 0, hex(-5, 5));
+    const wolf = addUnit(s, 'werewolf', 0, hex(0, 3));
+    expect(maxHealth(s, wolf)).toBe(UNITS.werewolf.health); // medium human form
+    wolf.type = 'werewolfbeast';
+    expect(maxHealth(s, wolf)).toBe(UNITS.werewolfbeast.health - 2);
+  });
+
+  it('describes the cost, and the army builder shows effective stats', () => {
+    expect(AURAS.warlord.describe(DEFAULT_CONFIG.specials)).toBe(
+      'All your large models, including the Warlord, get +1 movement and -2 max health (from the start of the game).',
+    );
+    const fx = (army: AuraId[], type: string) => typeStatChanges(DEFAULT_CONFIG, army, type, () => 'Warlord');
+    expect(fx(['warlord'], 'monster')).toMatchObject({ speed: { total: 1, from: 'Warlord' }, health: { total: -2, from: 'Warlord' } });
+    expect(fx(['warlord'], 'warlord').health.total).toBe(-2); // its own card
+    expect(fx(['warlord'], 'infantry')).toMatchObject({ speed: { total: 0 }, health: { total: 0 } });
+    expect(fx([], 'monster').health.total).toBe(0); // no Warlord in the army
+    expect(fx(['warden'], 'sentinel').health.total).toBe(DEFAULT_CONFIG.specials.wardenSentinelHealthBonus);
   });
 });
 

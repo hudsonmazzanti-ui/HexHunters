@@ -4,7 +4,9 @@ import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 import { checkPresets } from '../sim/armies';
 import { type Metric, change, compareCsv, compareHtml, spread, spreads } from '../sim/compare';
 import { generateMap, zonesConnected } from '../src/core/mapgen';
-import { hexKey } from '../src/core/hex';
+import { hex, hexKey } from '../src/core/hex';
+import { baseDefense, maxHealth, unitSpeed } from '../src/core/queries';
+import { addUnit, makeState } from './helpers';
 import { mapAscii, mapSvg } from '../sim/mapImage';
 import { summarize } from '../sim/report';
 import { runJobs } from '../sim/runGame';
@@ -186,5 +188,40 @@ describe('pacing variants', () => {
   it('the pacing experiment covers every hero', () => {
     const heroes = [...Object.entries(UNITS).filter(([, d]) => d.hero && !d.squadOnly).map(([id]) => id), 'twins'];
     for (const h of heroes) expect(EXPERIMENTS.pacing.focusUnits).toContain(h);
+  });
+});
+
+describe('Warlord variants', () => {
+  /** A Monster (large) and an Infantry (medium) under a Warlord, with a variant's numbers. */
+  const board = (cfg: typeof DEFAULT_CONFIG) => {
+    const s = makeState();
+    s.config = cfg;
+    addUnit(s, 'warlord', 0, hex(3, 3));
+    const monster = addUnit(s, 'monster', 0, hex(0, 3));
+    const inf = addUnit(s, 'infantry', 0, hex(-2, 3));
+    return { s, monster, inf };
+  };
+
+  it('the real game now has the health cost: +1 speed and -2 max health', () => {
+    expect(DEFAULT_CONFIG.specials).toMatchObject({ warlordSpeedBonus: 1, warlordDefenseBonus: 0, warlordHealthBonus: -2 });
+    const { s, monster } = board(DEFAULT_CONFIG);
+    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense, UNITS.monster.health - 2]);
+    // The old rule, kept as a variant for comparison.
+    const old = board(variantConfig('warlord-speed-only'));
+    expect(maxHealth(old.s, old.monster)).toBe(UNITS.monster.health);
+  });
+
+  it('Warlord-Armor: large models +1 speed and -1 defense; others untouched', () => {
+    const { s, monster, inf } = board(variantConfig('warlord-armor'));
+    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense - 1, UNITS.monster.health]); // no health cost
+    expect([unitSpeed(s, inf), baseDefense(s, inf)]).toEqual([3, UNITS.infantry.defense]);
+  });
+
+  it('Warlord-Health: large models +1 speed and -2 max health (they start with it)', () => {
+    const cfg = variantConfig('warlord-health');
+    const { s, monster } = board(cfg);
+    expect([unitSpeed(s, monster), baseDefense(s, monster), maxHealth(s, monster)]).toEqual([3, UNITS.monster.defense, UNITS.monster.health - 2]);
+    expect(monster.hp).toBe(UNITS.monster.health - 2);
+    expect(EXPERIMENTS.warlord.variants).toEqual(['warlord-speed-only', 'warlord-armor', 'baseline']);
   });
 });
