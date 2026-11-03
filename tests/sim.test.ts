@@ -95,7 +95,7 @@ describe('simulator games', () => {
       if (r.reason === 'capture') expect(r.mission).toBe('ctf');
       expect(r.rounds).toBeGreaterThanOrEqual(1);
       expect(r.rounds).toBeLessThanOrEqual(30);
-      if (r.reason === 'points') expect(Math.max(r.scoreA, r.scoreB)).toBeGreaterThanOrEqual(config.pointsToWin);
+      if (r.reason === 'points') expect(Math.max(r.scoreA, r.scoreB)).toBeGreaterThanOrEqual(r.mission === 'dom' ? 8 : config.pointsToWin);
       // Both sides actually fought.
       const actions = Object.values(r.usage).reduce((n, u) => n + u.attacks + u.specials, 0);
       expect(actions).toBeGreaterThan(0);
@@ -172,13 +172,22 @@ describe('missions in the simulator', () => {
     expect(Object.values(sum.captureUnits).reduce((a, b) => a + b, 0)).toBe(records.filter((r) => r.reason === 'capture').length);
   }, 60_000);
 
+  it('plays legal Domination games where the bot claims sites and wins on points', () => {
+    const domConfig = { ...config, missions: ['dom' as const] };
+    const records = runJobs(buildJobs(domConfig, { seed: 23, perMatchup: 0, randomGames: 30 }), { config: domConfig });
+    expect(records.every((r) => r.mission === 'dom' && r.illegal === 0)).toBe(true);
+    expect(records.reduce((n, r) => n + r.siteClaims, 0)).toBeGreaterThan(30);
+    expect(records.some((r) => r.reason === 'points')).toBe(true);
+    for (const r of records) if (r.reason === 'points') expect(Math.max(r.scoreA, r.scoreB)).toBeGreaterThanOrEqual(8);
+  }, 60_000);
+
   it('random missions are mixed in a run and the report breaks results down by mission', () => {
     const jobs = buildJobs(config, { seed: 4, perMatchup: 1, randomGames: 60 }).filter((_, i) => i % 3 === 0 || i >= 36);
     const records = runJobs(jobs);
     const missions = new Set(records.map((r) => r.mission));
-    expect(missions).toEqual(new Set(['koth', 'ctf']));
+    expect(missions).toEqual(new Set(['koth', 'ctf', 'dom']));
     const s = summarize(records, config, PRESETS.map((p) => p.name));
-    expect((s.byMission.koth?.games ?? 0) + (s.byMission.ctf?.games ?? 0)).toBe(records.length);
+    expect((s.byMission.koth?.games ?? 0) + (s.byMission.ctf?.games ?? 0) + (s.byMission.dom?.games ?? 0)).toBe(records.length);
     expect(s.byMission.ctf?.byMission).toEqual({}); // only one level deep
     const html = reportHtml(s, config, { seed: 4, perMatchup: 1, randomGames: 30, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
     expect(html).toContain('By mission');

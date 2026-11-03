@@ -60,6 +60,20 @@ export const WEIGHTS = {
   /** Making its own carrier drop the flag (Dash, Vault, Pounce, Swap, hooking it). */
   dropOwnFlag: 6.0,
 
+  // ---- Domination ----
+  /** Claiming a site nobody owns (it scores every round from now on). */
+  claimSite: 5.0,
+  /** Claiming an enemy-owned site (they lose a point a round, we gain one). */
+  claimEnemySite: 7.0,
+  /** Standing in a site we could claim (unowned, or the enemy's with no enemy inside). */
+  inClaimableSite: 1.5,
+  /** Standing in an enemy site that has an enemy in it (blocks their re-claim, sets up ours). */
+  contestSite: 1.2,
+  /** Standing in our own site while an enemy is within 4 of it (stops them claiming). */
+  guardSite: 1.4,
+  /** Per extra own model already in the same site (spread out across sites). */
+  siteCrowd: 0.8,
+
   // ---- Specials without direct damage ----
   brace: 0.25, // per point of expected incoming damage it would block
   prep: 0.6, // when the model has nothing better to do

@@ -93,6 +93,11 @@ export const VARIANTS: Record<string, Variant> = {
     description: 'Every game is Capture the Flag.',
     settings: { missions: ['ctf'] },
   },
+  'dom-only': {
+    label: 'Domination only',
+    description: 'Every game is Domination.',
+    settings: { missions: ['dom'] },
+  },
 
   // ---- Conditions: by default each game's Condition is random; `only-<id>` forces one ----
   ...Object.fromEntries(
@@ -172,7 +177,7 @@ export const EXPERIMENTS: Record<string, Experiment> = {
   },
   missions: {
     title: 'Missions: random vs each mission alone',
-    variants: ['baseline', 'koth-only', 'ctf-only'],
+    variants: ['baseline', 'koth-only', 'ctf-only', 'dom-only'],
     focusUnits: ['monster', 'heavy', 'werewolf', 'dragon', 'grappler', 'hacker', 'sniper', 'infantry', 'assassin', 'scout', ...allHeroes()],
     focusPresets: [],
   },

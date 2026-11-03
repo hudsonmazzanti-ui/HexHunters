@@ -27,7 +27,10 @@ import {
   effectiveDefense,
   getUnit,
   livingUnits,
+  claimBlockedReason,
   pickUpBlockedReason,
+  siteIndexAt,
+  unitsInSite,
   maxHealth,
   moveReach,
   onBoard,
@@ -135,9 +138,15 @@ function positionScore(state: GameState, unit: Unit, h: Hex, w: Weights): number
   const dEnemy = enemies.length ? Math.min(...enemies.map((e) => hexDistance(e.pos!, h))) : 99;
   const toEnemy = Math.max(0, dEnemy - def.range);
   const flag = flagHex(state);
-  const toPoint = flag ? hexDistance(h, flag) : Math.max(0, hexDistance(h, ORIGIN) - 1);
+  const sites = state.map.sites;
+  const toPoint = flag
+    ? hexDistance(h, flag)
+    : sites
+      ? siteDistance(state, unit, h)
+      : Math.max(0, hexDistance(h, ORIGIN) - 1);
   s -= w.approach * Math.min(toEnemy, toPoint);
   if (flag) s += flagScore(state, unit, h, flag, w);
+  if (sites) s += siteScore(state, unit, h, w);
   // Stay out of reach of enemies that could hurt it next turn.
   const value = unitValue(state, unit, w) + (isCarrier(state, unit) ? w.flagStake : 0);
   s -= (w.danger * incomingDamage(state, unit, h, w) * value) / maxHealth(state, unit);
@@ -163,6 +172,37 @@ function flagScore(state: GameState, unit: Unit, h: Hex, flag: Hex, w: Weights):
   if (carrier.owner === unit.owner) return -w.escort * Math.max(0, hexDistance(h, carrier.pos!) - 2);
   // Enemy carrier: get within range of it (the approach term already pulls toward it).
   return -w.flagApproach * Math.max(0, hexDistance(h, carrier.pos!) - unitDef(state, unit).range);
+}
+
+/** Domination: hexes from `h` to the nearest site this side doesn't own (or any site, if it owns all). */
+function siteDistance(state: GameState, unit: Unit, h: Hex): number {
+  const sites = state.map.sites!;
+  const wanted = sites.filter((_, i) => state.siteOwners[i] !== unit.owner);
+  const pool = wanted.length ? wanted : sites;
+  return Math.min(...pool.map((site) => Math.max(0, hexDistance(h, site[0]) - 1)));
+}
+
+/**
+ * Domination position terms: be in a site we can claim; sit in enemy sites to contest them;
+ * guard our own sites when enemies are near; don't pile everyone into one site.
+ */
+function siteScore(state: GameState, unit: Unit, h: Hex, w: Weights): number {
+  const i = siteIndexAt(state, h);
+  if (i < 0) return 0;
+  const me = unit.owner;
+  const enemy = other(me);
+  const owner = state.siteOwners[i];
+  const enemyInside = unitsInSite(state, i, enemy).length > 0;
+  const friends = unitsInSite(state, i, me).filter((u) => u.id !== unit.id).length;
+  let s = -w.siteCrowd * Math.max(0, friends - 1);
+  if (owner !== me && !enemyInside) s += w.inClaimableSite;
+  else if (owner === enemy && enemyInside) s += w.contestSite;
+  else if (owner === me) {
+    const site = state.map.sites![i];
+    const threat = livingUnits(state, enemy).some((e) => hexDistance(e.pos!, site[0]) <= 4);
+    if (threat && friends === 0) s += w.guardSite;
+  }
+  return s;
 }
 
 /** Capture the Flag: does this special make a carrier drop the flag? +knock for the enemy's, -drop for ours. */
@@ -404,6 +444,11 @@ export function planStep(state: GameState, rng: Rng, w: Weights = WEIGHTS): Acti
       if (!canAct(work, unit)) continue;
       // Capture the Flag: pick up the flag it's standing on.
       if (work.flag && !pickUpBlockedReason(work, unit)) consider(gain + w.pickUp, [...move, { type: 'pickUp', unitId: unit.id }]);
+      // Domination: claim the site it's standing in.
+      if (work.map.sites && !claimBlockedReason(work, unit)) {
+        const owner = work.siteOwners[siteIndexAt(work, h)];
+        consider(gain + (owner === null ? w.claimSite : w.claimEnemySite), [...move, { type: 'claim', unitId: unit.id }]);
+      }
       for (const enemy of livingUnits(work, other(unit.owner))) {
         const s = attackScore(work, unit, enemy, w);
         if (s !== null) consider(gain + s, [...move, { type: 'attack', unitId: unit.id, targetId: enemy.id }]);

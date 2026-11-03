@@ -10,7 +10,7 @@ import { type AttackResult, dealDamage, previewAttack, resolveAttack } from './c
 import { raiseDead } from './necro';
 import { auraEffects } from './auras';
 import { settleFlag } from './flag';
-import { MISSIONS, pickMission } from './missions';
+import { MISSIONS, missionPointsToWin, pickMission } from './missions';
 import { CONDITIONS, mapConfig, pickCondition } from './conditions';
 import { generateMap } from './mapgen';
 import { type OverwatchShot, resolveOverwatch } from './overwatch';
@@ -21,8 +21,10 @@ import {
   maxHealth,
   naturalDefense,
   movePath,
+  claimBlockedReason,
   other,
   pickUpBlockedReason,
+  siteIndexAt,
   unitAt,
   unitDef,
   unitSpeed,
@@ -49,6 +51,8 @@ export type Action =
   | ({ type: 'special'; unitId: string } & SpecialChoice)
   /** Capture the Flag: a model standing on the flag spends its action to pick it up. */
   | { type: 'pickUp'; unitId: string }
+  /** Domination: a model inside a site spends its action to claim it. */
+  | { type: 'claim'; unitId: string }
   | { type: 'endTurn' };
 
 export type GameEvent =
@@ -85,6 +89,10 @@ export type GameEvent =
   | { type: 'flagShifted'; from: Hex; to: Hex }
   /** Capture the Flag: `player`'s carrier made it home, which wins the game (a gameOver event follows). */
   | { type: 'flagCaptured'; player: PlayerId; unitId: string }
+  /** Domination: a model claimed site `site` (previous owner `from`). */
+  | { type: 'siteClaimed'; unitId: string; player: PlayerId; site: number; from: PlayerId | null }
+  /** Domination: end-of-round points (sites owned, points scored incl. Standard Bearer, scores after). */
+  | { type: 'sitesScored'; round: number; owned: [number, number]; points: [number, number]; scores: [number, number] }
   /** winner null = draw. */
   | { type: 'gameOver'; winner: PlayerId | null; reason: WinReason };
 
@@ -114,6 +122,7 @@ export function newGame(config: GameConfig, seed: number): GameState {
   const map = generateMap(mapConfig(config, condition), seed, {
     shape: c.deployShape,
     extraModels: c.freeUnits?.length ?? 0,
+    sites: !!MISSIONS[mission].sites,
   });
   const state: GameState = {
     config,
@@ -123,6 +132,7 @@ export function newGame(config: GameConfig, seed: number): GameState {
     condition,
     flag: null,
     flagChanges: [],
+    siteOwners: [],
     units: [],
     phase: 'build',
     current: 0,
@@ -315,6 +325,23 @@ export function applyAction(prev: GameState, action: Action): ActionResult {
       unit.movesLeft = 0;
       unit.overwatch = null;
       events.push({ type: 'flagPickedUp', unitId: unit.id, hex: unit.pos! });
+      break;
+    }
+    case 'claim': {
+      if (state.phase !== 'play') fail('Not in play');
+      const unit = ownUnit(action.unitId);
+      const reason = claimBlockedReason(state, unit);
+      if (reason) fail(reason);
+      // Uses the model's action like a special (no roll), the same as picking up the flag.
+      const site = siteIndexAt(state, unit.pos!);
+      const from = state.siteOwners[site];
+      state.siteOwners[site] = unit.owner;
+      unit.specialUsed = true;
+      unit.acted = !hasDoubleAction(state, unit);
+      unit.gambling = false;
+      unit.movesLeft = 0;
+      unit.overwatch = null;
+      events.push({ type: 'siteClaimed', unitId: unit.id, player: unit.owner, site, from });
       break;
     }
     case 'endTurn': {
@@ -554,11 +581,16 @@ function endTurn(state: GameState, events: GameEvent[]): void {
   startTurn(state, events, state.current === previous);
 }
 
-/** Ends the game if a side has reached the points to win. Returns true if it ended. */
+/**
+ * Ends the game if a side has reached the mission's points to win. If both get there at
+ * once (Domination), the higher score wins; an exact tie plays on. Returns true if it ended.
+ */
 function checkPoints(state: GameState, events: GameEvent[]): boolean {
-  const winner = ([0, 1] as const).find((p) => state.scores[p] >= state.config.pointsToWin);
-  if (winner === undefined) return false;
-  endGame(state, events, winner, 'points');
+  const target = missionPointsToWin(state.config, state.mission);
+  const [a, b] = state.scores;
+  if (a < target && b < target) return false;
+  if (a === b) return false;
+  endGame(state, events, a > b ? 0 : 1, 'points');
   return true;
 }
 

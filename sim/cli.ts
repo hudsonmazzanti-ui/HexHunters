@@ -21,9 +21,9 @@
  *   --variants A,B,C   run several with the same seed and write a comparison (out/compare.html)
  *   --experiment NAME  run a named group from EXPERIMENTS (e.g. "monster", "missions")
  *
- * Missions: each game's mission is picked at random (King of the Hill or Capture the Flag,
- * 50/50) and the report breaks results down by mission. To force one:
- *   --mission koth|ctf  same as --variant koth-only / ctf-only
+ * Missions: each game's mission is picked at random (King of the Hill, Capture the Flag or Domination,
+ * a third each) and the report breaks results down by mission. To force one:
+ *   --mission koth|ctf|dom  same as --variant koth-only / ctf-only / dom-only
  *
  * Conditions: each game's battlefield Condition is random (weights in config.ts), and the
  * report has a "By Condition" section. To force one: --condition fog (same as

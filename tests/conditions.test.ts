@@ -67,10 +67,10 @@ describe('picking a Condition', () => {
     }
   });
 
-  it('is seeded, and a Clear game has exactly today\'s map', () => {
+  it('is seeded, and a Clear game has exactly today\'s map (King of the Hill / Capture the Flag)', () => {
     for (let seed = 1; seed < 40; seed++) {
       expect(newGame(DEFAULT_CONFIG, seed).condition).toBe(newGame(DEFAULT_CONFIG, seed).condition);
-      expect(newGame(only('clear'), seed).map).toEqual(generateMap(DEFAULT_CONFIG, seed));
+      expect(newGame(only('clear', { missions: ['koth', 'ctf'] }), seed).map).toEqual(generateMap(DEFAULT_CONFIG, seed));
     }
   });
 });

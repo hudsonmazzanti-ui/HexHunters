@@ -25,6 +25,12 @@ const ICONS: Record<string, Part[]> = {
     ['line', { x1: 14, y1: 6, x2: 14, y2: 43, ...stroke(COLORS.text, 4) }],
     ['path', { d: 'M15 7l24 8-24 9z', fill: COLORS.flag, stroke: COLORS.flagDark, 'stroke-width': 2, 'stroke-linejoin': 'round' }],
   ],
+  // Domination: three sites (gold hexagons), the middle one raised.
+  sites: [
+    ['polygon', { points: hexPoints(10, 30, 8.5), fill: COLORS.accent, stroke: COLORS.ink, 'stroke-width': 2 }],
+    ['polygon', { points: hexPoints(24, 18, 8.5), fill: COLORS.accent, stroke: COLORS.ink, 'stroke-width': 2 }],
+    ['polygon', { points: hexPoints(38, 30, 8.5), fill: COLORS.accent, stroke: COLORS.ink, 'stroke-width': 2 }],
+  ],
   sun: [
     ['circle', { cx: 24, cy: 24, r: 9, fill: COLORS.iconSun }],
     ...[0, 45, 90, 135, 180, 225, 270, 315].map((deg): Part => {

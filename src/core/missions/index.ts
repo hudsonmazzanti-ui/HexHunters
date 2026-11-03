@@ -6,12 +6,17 @@
 import { Rng } from '../rng';
 import type { GameConfig, MissionId } from '../types';
 import { ctf } from './ctf';
+import { dom } from './dom';
 import { koth } from './koth';
 import type { MissionDef } from './types';
 
 export * from './types';
 
-export const MISSIONS: Record<MissionId, MissionDef> = { koth, ctf };
+export const MISSIONS: Record<MissionId, MissionDef> = { koth, ctf, dom };
+
+/** Points needed to win this game's mission. */
+export const missionPointsToWin = (config: GameConfig, mission: MissionId): number =>
+  MISSIONS[mission].pointsToWin?.(config) ?? config.pointsToWin;
 
 /**
  * This game's mission: a seeded pick from config.missions. It uses its own random stream,

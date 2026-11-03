@@ -63,6 +63,25 @@ export interface BoardOverlay {
   scoreZone: { player: PlayerId; hexes: Set<string> } | null;
 }
 
+/** Thick outline around an area of hexes: draws only the edges not shared with another hex of it. */
+function outlineArea(area: Hex[], cls: string, parent: SVGElement): void {
+  for (const h of area) {
+    const corners = hexCorners(h, HEX_SIZE);
+    const c = hexToPixel(h, HEX_SIZE);
+    for (let i = 0; i < 6; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % 6];
+      // The neighbor across this edge mirrors our center through the edge's midpoint.
+      const across = { x: a.x + b.x - c.x, y: a.y + b.y - c.y };
+      const inner = area.some((o) => {
+        const oc = hexToPixel(o, HEX_SIZE);
+        return Math.hypot(oc.x - across.x, oc.y - across.y) < 1;
+      });
+      if (!inner) el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: cls }, parent);
+    }
+  }
+}
+
 /** A pennant on a pole, pole foot at (0, 0). `dir` 1 = cloth to the right, -1 = left. */
 function pennant(parent: SVGElement, dir: 1 | -1, cls: string): SVGGElement {
   const g = el('g', { class: cls }, parent);
@@ -94,6 +113,8 @@ export class BoardView {
   readonly world: SVGGElement;
   private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'goal' | 'cp' | 'dots' | 'units' | 'flag' | 'fx', SVGGElement>;
   private goals = new Map<string, SVGPolygonElement>();
+  /** Domination: one group per site (its tinted hexes and outline), colored by owner. */
+  private sites: SVGGElement[] = [];
   /** Capture the Flag: the flag lying on the ground (hidden while carried). */
   private groundFlag: SVGGElement | null = null;
   private shades = new Map<string, SVGPolygonElement>();
@@ -156,23 +177,16 @@ export class BoardView {
 
     this.drawTerrain(map);
 
-    // Thick outline around the 7-hex control point: draw only edges not shared with another CP hex.
-    for (const h of showControlPoint ? map.controlPoint : []) {
-      const corners = hexCorners(h, HEX_SIZE);
-      for (let i = 0; i < 6; i++) {
-        const a = corners[i];
-        const b = corners[(i + 1) % 6];
-        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        const c = hexToPixel(h, HEX_SIZE);
-        // Neighbor across this edge is the hex whose center mirrors ours through the edge midpoint.
-        const across = { x: 2 * mid.x - c.x, y: 2 * mid.y - c.y };
-        const isInner = map.controlPoint.some((o) => {
-          const oc = hexToPixel(o, HEX_SIZE);
-          return Math.hypot(oc.x - across.x, oc.y - across.y) < 1;
-        });
-        if (!isInner) el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: 'cp-outline' }, this.layers.cp);
-      }
-    }
+    // Thick outline around the 7-hex control point.
+    if (showControlPoint) outlineArea(map.controlPoint, 'cp-outline', this.layers.cp);
+
+    // Domination: each site's hexes tinted by its owner, with a thick outline (also owner-colored).
+    this.sites = (map.sites ?? []).map((site) => {
+      const g = el('g', { class: 'site owner-none' }, this.layers.cp);
+      for (const h of site) el('polygon', { points: points(h), class: 'site-hex' }, g);
+      outlineArea(site, 'site-outline', g);
+      return g;
+    });
 
     return bounds;
   }
@@ -201,6 +215,10 @@ export class BoardView {
       poly.setAttribute('class', zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal');
     }
     this.renderFlag(state);
+    this.sites.forEach((g, i) => {
+      const owner = state.siteOwners[i];
+      g.setAttribute('class', `site owner-${owner === undefined || owner === null ? 'none' : owner}`);
+    });
 
     const alive = new Set<string>();
     for (const unit of state.units) {
