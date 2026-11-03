@@ -162,6 +162,13 @@ export const VARIANTS: Record<string, Variant> = {
     specials: { marshalRange: 0 },
   },
 
+  // ---- Turn order ----
+  'no-double': {
+    label: 'No-Double',
+    description: 'Strict alternation: the coin-flip winner goes first every round (P1, P2, P1, P2...), no back-to-back turns.',
+    settings: { firstPlayerSwapEvery: 0 },
+  },
+
   // ---- Pacing experiment ----
   'slow-large': {
     label: 'Slow-Large',
@@ -227,6 +234,12 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     title: 'Balance pack: Domination target, Behemoth cost and speed, Field Marshal range',
     variants: ['baseline', 'dom-10', 'behemoth-10', 'behemoth-speed', 'fm-range'],
     focusUnits: ['behemoth', 'marshal', 'warlord', 'infantry'],
+    focusPresets: [],
+  },
+  turnorder: {
+    title: 'Turn order: flip every two rounds vs strict alternation',
+    variants: ['baseline', 'no-double'],
+    focusUnits: [],
     focusPresets: [],
   },
   pacing: {

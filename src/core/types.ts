@@ -149,7 +149,10 @@ export interface GameConfig {
   armyPointLimit: number;
   /** Max heroes per army. */
   maxHeroesPerArmy: number;
-  /** The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...). */
+  /**
+   * The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...).
+   * 0 = never: the coin-flip winner goes first every round (no back-to-back turns).
+   */
   firstPlayerSwapEvery: number;
   units: Record<string, UnitDef>;
   /** Entries that buy several linked models at once (the Twins). */

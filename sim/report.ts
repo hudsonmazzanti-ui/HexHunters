@@ -38,6 +38,12 @@ export interface WinTypes {
   other: number;
 }
 
+/** Results split by whether the army won the coin flip (went first in round 1) or not. */
+export interface SeatSplit {
+  first: Tally;
+  second: Tally;
+}
+
 export interface Summary {
   games: number;
   presetNames: string[];
@@ -50,6 +56,8 @@ export interface Summary {
   /** Games won by the army that went first (coin flip), and how many were decisive. */
   firstMover: { games: number; wins: number; losses: number; draws: number };
   shapes: Record<string, { games: number; firstWins: number; draws: number; eliminations: number; rounds: number }>;
+  /** Going first vs second: per preset (preset games), and per builder entry (random armies). */
+  seat: { presets: Record<string, SeatSplit>; entries: Record<string, SeatSplit> };
   /** Per preset army: how its wins came (wipeout or the mission's objective: points / flag capture). */
   presetWinTypes: Record<string, WinTypes>;
   /** Capture the Flag: winning captures per unit type, overall and per preset army that made them. */
@@ -87,6 +95,7 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     shapes: {},
     presetShape: {},
     presetWinTypes: {},
+    seat: { presets: {}, entries: {} },
     captureUnits: {},
     presetCaptureUnits: {},
     reasons: {},
@@ -148,6 +157,10 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
       const army = side === 'A' ? r.a : r.b;
       const opp = side === 'A' ? r.b : r.a;
       const res = resultFor(r.winner, side);
+      const seat = r.firstMover === side ? 'first' : 'second';
+      const split = (rec: Record<string, SeatSplit>, k: string) => (rec[k] ??= { first: tally(), second: tally() });
+      if (r.kind === 'preset' && s.presets[army.name]) add(split(s.seat.presets, army.name)[seat], res);
+      if (r.kind === 'random') for (const entry of new Set(army.units)) add(split(s.seat.entries, entry)[seat], res);
       if (r.kind === 'preset' && s.presets[army.name]) {
         add(s.presets[army.name], res);
         s.presets[army.name].rounds += r.rounds;
@@ -279,6 +292,54 @@ export interface ReportMeta {
   maxRounds: number;
   /** Set when the run used a balance variant (temporary stat overrides). */
   variant?: string;
+}
+
+/** Going first minus going second, with whether the gap is beyond 2 standard errors. */
+export function seatGap(sp: SeatSplit | undefined): { first: number; second: number; gap: number; real: boolean; n1: number; n2: number } | null {
+  if (!sp?.first.games || !sp.second.games) return null;
+  const a = score(sp.first);
+  const b = score(sp.second);
+  const se = Math.sqrt((a * (1 - a)) / sp.first.games + (b * (1 - b)) / sp.second.games);
+  return { first: a, second: b, gap: a - b, real: Math.abs(a - b) > 2 * se, n1: sp.first.games, n2: sp.second.games };
+}
+
+/**
+ * "Going first vs second": for every preset, hero and unit, the score when its army won the
+ * coin flip (went first in round 1) and when it didn't, overall and per mission.
+ */
+function seatSection(s: Summary, config: GameConfig): string {
+  const groups: { label: string; of: (x: Summary) => Summary | undefined }[] = [
+    { label: 'Overall', of: (x) => x },
+    ...(Object.keys(s.byMission) as MissionId[]).map((m) => ({ label: MISSIONS[m].name, of: (x: Summary) => x.byMission[m] })),
+  ];
+  const head = (first: string) =>
+    `<tr><th rowspan="2">${first}</th>${groups.map((g) => `<th colspan="3">${esc(g.label)}</th>`).join('')}</tr>` +
+    `<tr>${groups.map(() => '<th>1st</th><th>2nd</th><th>Gap</th>').join('')}</tr>`;
+  const cells = (pick: (x: Summary) => SeatSplit | undefined) =>
+    groups
+      .map((g) => {
+        const sub = g.of(s);
+        const r = sub ? seatGap(pick(sub)) : null;
+        if (!r) return '<td class="na">–</td><td class="na">–</td><td class="na">–</td>';
+        const gap = `${r.gap >= 0 ? '+' : '−'}${Math.abs(100 * r.gap).toFixed(1)}`;
+        return `<td title="${r.n1} games">${p1(100 * r.first)}</td><td title="${r.n2} games">${p1(100 * r.second)}</td>` +
+          `<td class="${r.real ? 'gap real' : 'gap noise'}">${r.real ? `<b>${gap}</b>` : `${gap} ~`}</td>`;
+      })
+      .join('');
+  const presets = s.presetNames.map((n) => `<tr><th>${esc(n)}</th>${cells((x) => x.seat.presets[n])}</tr>`).join('');
+  const entries = (hero: boolean) =>
+    Object.keys(s.entries)
+      .filter((id) => s.entries[id].hero === hero)
+      .sort((a, b) => entryName(config, a).localeCompare(entryName(config, b)))
+      .map((id) => `<tr><th>${esc(entryName(config, id))}</th>${cells((x) => x.seat.entries[id])}</tr>`)
+      .join('');
+  return `<h2>Going first vs second</h2>
+<section><p class="muted">Score (draw = half a win) when the army won the coin flip and went first in round 1 ("1st") and when it
+didn't ("2nd"); Gap = 1st minus 2nd. <b>Bold</b> = beyond 2 standard errors (probably real); "~" = within noise. Hover a score for
+its number of games; per-mission hero cells are small (about 25–30 games), so most of them are noise.</p>
+<h3>Presets</h3><table>${head('Army')}${presets}</table>
+<h3>Heroes in random armies</h3><table>${head('Hero')}${entries(true)}</table>
+<h3>Units in random armies</h3><table>${head('Unit')}${entries(false)}</table></section>`;
 }
 
 /** "By Condition": game flow per battlefield Condition, and preset scores per Condition. */
@@ -497,6 +558,7 @@ export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): st
   .kpi b { display:block; font-size:22px; }
   ul.flags { margin:0; padding-left:18px; } li.hi b { color:var(--hi); } li.lo b { color:var(--lo); }
   tr.rare td, tr.rare th { color:var(--lo); }
+  td.gap.noise { color:var(--muted); } td.gap.real b { color:var(--text); }
 </style></head><body><main>
 <h1>HexHunters balance report${meta.variant ? `: ${esc(meta.variant)}` : ''}</h1>
 <div class="muted">${s.games} games · seed ${meta.seed} · ${meta.perMatchup} per preset matchup + ${meta.randomGames} random-vs-random ·
@@ -537,6 +599,8 @@ of ${s.games} games: <b>${p1(pct(s.firstMover.wins, decisive))}</b> of decisive 
 ${missionSection(s, config, meta)}
 
 ${conditionSection(s, meta)}
+
+${seatSection(s, config)}
 
 <h2>How games end</h2>
 <section><table><tr><th>Win type</th><th>Games</th><th>Share</th></tr>${reasonRows}</table></section>

@@ -12,7 +12,7 @@
 import { entryName } from '../src/core/army';
 import { Rng } from '../src/core/rng';
 import type { GameConfig } from '../src/core/types';
-import { type Summary, score, summarize } from './report';
+import { type SeatSplit, type Summary, score, seatGap, summarize } from './report';
 import { MISSIONS } from '../src/core/missions';
 import type { MissionId } from '../src/core/types';
 import type { GameRecord } from './runGame';
@@ -106,6 +106,8 @@ export interface MetricGroups {
   spread: Metric[];
   /** The same preset and focus unit/hero scores, for each mission's games alone. */
   byMission: { mission: MissionId; name: string; presets: Metric[]; units: Metric[]; heroes: Metric[] }[];
+  /** Going first minus going second (score gap): every preset, hero and unit, overall; presets per mission. */
+  seat: { presets: Metric[]; heroes: Metric[]; units: Metric[]; presetsByMission: { name: string; presets: Metric[] }[] };
 }
 
 export function compareMetrics(results: VariantResult[], exp: Experiment, minGames: number): MetricGroups {
@@ -207,7 +209,30 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
     const pick: Pick = (x) => x.byMission[m];
     return { mission: m, name: MISSIONS[m].name, presets: presetMetrics(pick), units: focus(unitIds, pick), heroes: focus(heroIds, pick) };
   });
-  return { flow, presets, units: focus(unitIds), heroes: focus(heroIds), spread, byMission };
+  // Going first vs second: the score gap (1st − 2nd) and its standard error.
+  const gapMetric = (label: string, pick: (x: Summary) => SeatSplit | undefined): Metric => ({
+    label,
+    format: 'pct',
+    cells: results.map((r) => {
+      const g = seatGap(pick(r.summary));
+      if (!g) return { value: null, se: null, n: 0 };
+      const se = Math.sqrt((g.first * (1 - g.first)) / g.n1 + (g.second * (1 - g.second)) / g.n2);
+      return { value: g.gap, se, n: g.n1 + g.n2 };
+    }),
+  });
+  const entryIds = [...new Set(results.flatMap((r) => Object.keys(r.summary.entries)))].sort((a, b) =>
+    entryName(config, a).localeCompare(entryName(config, b)),
+  );
+  const seat = {
+    presets: presetNames.map((n) => gapMetric(n, (x) => x.seat.presets[n])),
+    heroes: entryIds.filter(isHero).map((id) => gapMetric(entryName(config, id), (x) => x.seat.entries[id])),
+    units: entryIds.filter((id) => !isHero(id)).map((id) => gapMetric(entryName(config, id), (x) => x.seat.entries[id])),
+    presetsByMission: missions.map((m) => ({
+      name: MISSIONS[m].name,
+      presets: presetNames.map((n) => gapMetric(n, (x) => x.byMission[m]?.seat.presets[n])),
+    })),
+  };
+  return { flow, presets, units: focus(unitIds), heroes: focus(heroIds), spread, byMission, seat };
 }
 
 /** Change from the baseline and whether it's beyond 2 standard errors (null when it can't be judged). */
@@ -251,6 +276,10 @@ export function compareCsv(results: VariantResult[], exp: Experiment, minGames: 
       ...b.units.map((m) => ({ ...m, label: `${b.name}: random armies ${m.label}` })),
       ...b.heroes.map((m) => ({ ...m, label: `${b.name}: random armies (hero) ${m.label}` })),
     ]),
+    ...g.seat.presets.map((m) => ({ ...m, label: `1st − 2nd gap: preset ${m.label}` })),
+    ...g.seat.presetsByMission.flatMap((b) => b.presets.map((m) => ({ ...m, label: `1st − 2nd gap (${b.name}): preset ${m.label}` }))),
+    ...g.seat.heroes.map((m) => ({ ...m, label: `1st − 2nd gap: hero ${m.label}` })),
+    ...g.seat.units.map((m) => ({ ...m, label: `1st − 2nd gap: unit ${m.label}` })),
     ...g.spread,
   ];
   const header = ['variant', ...metrics.flatMap((m) => [m.label, `${m.label} (change)`, `${m.label} (beyond noise)`])];
@@ -346,6 +375,14 @@ ${g.byMission
       (b.heroes.length || b.units.length ? table(`${b.name}: random armies, heroes and units (score)`, [...b.heroes, ...b.units], results) : ''),
   )
   .join('\n')}
+<h2>Going first vs second</h2>
+<p class="muted">Each value is the score gap 1st − 2nd (how much better the army does when it wins the coin flip), in points.
+The baseline row shows its 95% margin; under the other rows, the change from the baseline (green/red bold = beyond noise).
+Each variant's own report has the full table (1st and 2nd scores, overall and per mission).</p>
+${table('Gap: preset armies (overall)', g.seat.presets, results)}
+${g.seat.presetsByMission.map((b) => table(`Gap: preset armies (${b.name})`, b.presets, results)).join('\n')}
+${table('Gap: heroes in random armies (overall)', g.seat.heroes, results)}
+${table('Gap: units in random armies (overall)', g.seat.units, results)}
 ${table('Overall spread', g.spread, results)}
 
 <h2>Variants</h2>

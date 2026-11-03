@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 import { PRESETS, checkPresets } from '../sim/armies';
 import { armyCost } from '../src/core/army';
 import { auraEffects } from '../src/core/auras';
+import { applyAction, firstPlayerOfRound } from '../src/core/game';
 import { missionPointsToWin } from '../src/core/missions';
 import { type Metric, change, compareCsv, compareHtml, spread, spreads } from '../sim/compare';
 import { generateMap, zonesConnected } from '../src/core/mapgen';
@@ -11,7 +12,7 @@ import { hex, hexKey } from '../src/core/hex';
 import { baseDefense, maxHealth, unitSpeed } from '../src/core/queries';
 import { addUnit, makeState } from './helpers';
 import { mapAscii, mapSvg } from '../sim/mapImage';
-import { summarize } from '../sim/report';
+import { reportHtml, seatGap, summarize } from '../sim/report';
 import { runJobs } from '../sim/runGame';
 import { buildJobs } from '../sim/schedule';
 import { EXPERIMENTS, VARIANTS, applyVariant, variantConfig, variantPresets } from '../sim/variants';
@@ -286,5 +287,53 @@ describe('balance pack variants', () => {
     expect(html).toContain('Domination: random armies, heroes and units');
     expect(html).toContain('Domination: first mover wins');
     expect(compareCsv(results, exp, 25)).toContain('Domination: random armies (hero) Field Marshal');
+  }, 60_000);
+});
+
+describe('turn order: No-Double', () => {
+  it('0 means the coin-flip winner goes first every round; the real game still flips every 2', () => {
+    expect([1, 2, 3, 4, 5, 6].map((r) => firstPlayerOfRound(r, 0, 1))).toEqual([1, 1, 1, 1, 1, 1]);
+    expect([1, 2, 3, 4, 5].map((r) => firstPlayerOfRound(r, 2, 0))).toEqual([0, 0, 1, 1, 0]);
+    expect(DEFAULT_CONFIG.firstPlayerSwapEvery).toBe(2);
+    expect(variantConfig('no-double').firstPlayerSwapEvery).toBe(0);
+    expect(EXPERIMENTS.turnorder.variants).toEqual(['baseline', 'no-double']);
+  });
+
+  it('a No-Double game strictly alternates turns: never the same player twice in a row', () => {
+    const config = variantConfig('no-double');
+    const s = makeState();
+    s.config = config;
+    addUnit(s, 'infantry', 0, hex(0, 5));
+    addUnit(s, 'infantry', 1, hex(0, -5));
+    let state = s;
+    const order: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const r = applyAction(state, { type: 'endTurn' });
+      state = r.state;
+      for (const e of r.events) if (e.type === 'turnStart') order.push(e.player);
+    }
+    expect(order).toEqual([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+  });
+
+  it('the report splits every preset, hero and unit by going first vs second', () => {
+    const records = runJobs(buildJobs(DEFAULT_CONFIG, { seed: 6, perMatchup: 1, randomGames: 40 }).filter((_, i) => i % 4 === 0 || i >= 36));
+    const s = summarize(records, DEFAULT_CONFIG, PRESETS.map((p) => p.name));
+    for (const [name, t] of Object.entries(s.presets)) {
+      const sp = s.seat.presets[name];
+      if (!t.games) continue;
+      expect(sp.first.games + sp.second.games).toBe(t.games);
+      expect(sp.first.wins + sp.second.wins).toBe(t.wins);
+    }
+    for (const [id, t] of Object.entries(s.entries)) {
+      const sp = s.seat.entries[id];
+      expect(sp.first.games + sp.second.games).toBe(t.games);
+    }
+    const big = seatGap({ first: { games: 100, wins: 70, losses: 30, draws: 0 }, second: { games: 100, wins: 40, losses: 60, draws: 0 } })!;
+    expect(big.gap).toBeCloseTo(0.3);
+    expect(big.real).toBe(true);
+    expect(seatGap({ first: { games: 10, wins: 6, losses: 4, draws: 0 }, second: { games: 10, wins: 5, losses: 5, draws: 0 } })!.real).toBe(false);
+    const html = reportHtml(s, DEFAULT_CONFIG, { seed: 6, perMatchup: 1, randomGames: 40, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
+    expect(html).toContain('Going first vs second');
+    expect(html).toContain('Heroes in random armies');
   }, 60_000);
 });
