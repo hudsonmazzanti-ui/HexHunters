@@ -61,6 +61,9 @@ export interface BoardOverlay {
   watch: Map<string, PlayerId>;
   /** Capture the Flag: the zone where the current player's flag carrier scores, outlined. */
   scoreZone: { player: PlayerId; hexes: Set<string> } | null;
+  /** A selected hero with a ranged aura (Field Marshal): the hexes it reaches, and the models inside getting it. */
+  auraArea: Set<string>;
+  auraUnits: Set<string>;
 }
 
 /** Thick outline around an area of hexes: draws only the edges not shared with another hex of it. */
@@ -212,7 +215,8 @@ export class BoardView {
     for (const [key, dot] of this.dots) dot.setAttribute('visibility', overlay.dots.has(key) ? 'visible' : 'hidden');
     const zone = overlay.scoreZone;
     for (const [key, poly] of this.goals) {
-      poly.setAttribute('class', zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal');
+      const cls = overlay.auraArea.has(key) ? 'goal on aura-area' : zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal';
+      poly.setAttribute('class', cls);
     }
     this.renderFlag(state);
     this.sites.forEach((g, i) => {
@@ -270,6 +274,8 @@ export class BoardView {
     el('circle', { r: r + 9, class: 'ring tgt' }, g);
     el('circle', { r: r + 4, class: 'ring sel' }, g);
     el('circle', { r: r + 3, class: 'brace' }, g);
+    // In a selected hero's aura area and getting its bonus (Field Marshal): a gold dashed ring.
+    el('circle', { r: r + 6, class: 'aura-ring' }, g);
     el('circle', { r, class: 'body' }, g);
     el('text', { class: 'label', 'font-size': LABEL_SIZE[size] }, g).textContent = def.label;
 
@@ -381,6 +387,7 @@ export class BoardView {
     cls.toggle('counting', transformsIn !== null);
     n.moonText.textContent = transformsIn === null ? '' : String(transformsIn);
     cls.toggle('aura', aurasOn(state, unit).length > 0);
+    cls.toggle('in-aura', o.auraUnits.has(unit.id));
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';
 

@@ -1559,3 +1559,22 @@ button.danger {
 .zone-map .site {
   fill: var(--c-accent);
 }
+
+/* ---- A selected hero's aura area (Field Marshal: 3 hexes) and the models getting it ---- */
+/* Green (a buff), so it stands apart from the yellow range shading. */
+.goal.aura-area {
+  fill: color-mix(in srgb, var(--c-good) 30%, transparent);
+  stroke: color-mix(in srgb, var(--c-good) 70%, transparent);
+  stroke-width: 1.5;
+  animation: none;
+}
+.unit .aura-ring {
+  display: none;
+  fill: none;
+  stroke: var(--c-good);
+  stroke-width: 3;
+  stroke-dasharray: 4 3;
+}
+.unit.in-aura .aura-ring {
+  display: block;
+}

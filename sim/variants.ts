@@ -140,15 +140,26 @@ export const VARIANTS: Record<string, Variant> = {
     units: { behemoth: { cost: 10 } },
     presets: { Behemoth: ['behemoth', 'dualgunner', 'scout'] },
   },
+  // Behemoth-Speed and FM-Range are now the real rules; the *-old variants keep the previous ones.
   'behemoth-speed': {
     label: 'Behemoth-Speed',
-    description: 'The Behemoth moves 3 instead of 2 (its speed after the large-model rule).',
+    description: 'The Behemoth moves 3 (today\'s rule).',
     units: { behemoth: { speed: 3 } },
+  },
+  'behemoth-speed-2': {
+    label: 'Behemoth speed 2 (old rule)',
+    description: 'The Behemoth moves 2, as before the change.',
+    units: { behemoth: { speed: 2 } },
   },
   'fm-range': {
     label: 'FM-Range',
-    description: 'The Field Marshal\'s free Prep only reaches Infantry within 3 hexes of it at the start of the turn.',
+    description: 'The Field Marshal\'s free Prep only reaches Infantry within 3 hexes of it at the start of the turn (today\'s rule).',
     specials: { marshalRange: 3 },
+  },
+  'fm-whole-army': {
+    label: 'Field Marshal: whole army (old rule)',
+    description: 'The Field Marshal\'s free Prep reaches every Infantry, and outlives it, as before the change.',
+    specials: { marshalRange: 0 },
   },
 
   // ---- Pacing experiment ----

@@ -191,7 +191,14 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       }
       // Callouts: hero rules, the unit's attack quirks, then the special's.
       const callouts = [
-        ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
+        ...(def.hero?.aura
+          ? [
+              AURAS[def.hero.aura].outlivesHero?.(config.specials) === false
+                ? `Needs the ${def.name} alive: reaches ${AURAS[def.hero.aura].reach?.(config.specials)} hexes`
+                : 'Lasts all game, even if the hero dies',
+              'No special: die is for attacking',
+            ]
+          : []),
         ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
         ...(def.crackingArmor
           ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]

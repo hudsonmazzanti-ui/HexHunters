@@ -820,6 +820,8 @@ export class Controller {
       partnerId: this.selected()?.partnerId ?? null,
       watch: new Map(),
       scoreZone: null,
+      auraArea: new Set(),
+      auraUnits: new Set(),
     };
     // Capture the Flag: while one of your models has the flag, your scoring zone is outlined.
     const carrier = flagCarrier(s);
@@ -847,6 +849,13 @@ export class Controller {
 
     const sel = this.selected();
     if (!sel?.pos) return o;
+    // A hero whose aura has a reach (Field Marshal): show the area and who's inside getting it.
+    const reachAura = unitDef(s, sel).hero?.aura;
+    const reach = reachAura ? AURAS[reachAura].reach?.(s.config.specials) : 0;
+    if (s.phase === 'play' && reachAura && reach) {
+      for (const h of hexagon(s.map.radius)) if (hexDistance(h, sel.pos) <= reach) o.auraArea.add(hexKey(h));
+      for (const u of livingUnits(s, sel.owner)) if (aurasOn(s, u).includes(reachAura)) o.auraUnits.add(u.id);
+    }
 
     if (s.phase === 'play' && sel.owner === s.current && this.ui.specialMode) {
       this.specialOverlay(sel, o);
@@ -1006,7 +1015,7 @@ export class Controller {
         owner: sel.owner,
         stats,
         special: def.hero?.aura
-          ? `Hero aura (lasts all game): ${AURAS[def.hero.aura].describe(s.config.specials)}`
+          ? `Hero aura (${AURAS[def.hero.aura].outlivesHero?.(s.config.specials) === false ? 'while it lives' : 'lasts all game'}): ${AURAS[def.hero.aura].describe(s.config.specials)}`
           : sp
             ? `${sp.name}: ${sp.describe(s.config.specials)}`
             : '',
@@ -1342,6 +1351,12 @@ export class Controller {
     }
     if (canUndoMove(s, unit)) {
       actions.push({ label: 'Undo move', onClick: () => void this.dispatch({ type: 'undoMove', unitId: unit.id }) });
+    }
+    const reachAura = unitDef(s, unit).hero?.aura;
+    const reach = reachAura ? AURAS[reachAura].reach?.(s.config.specials) : 0;
+    if (reachAura && reach) {
+      const inside = livingUnits(s, unit.owner).filter((u) => aurasOn(s, u).includes(reachAura)).length;
+      hints.push(`green area: your Infantry inside it when your turn starts get +${s.config.specials.marshalRollBonus} (${inside} inside now)`);
     }
     model.hint = hints.length ? `${hints.join(', ')}.` : '';
     model.hint = model.hint.charAt(0).toUpperCase() + model.hint.slice(1);

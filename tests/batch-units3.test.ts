@@ -35,7 +35,7 @@ describe('new unit stats', () => {
     expect(UNITS.hacker).toMatchObject({ cost: 3, size: 1, speed: 3, defense: 5, health: 6, range: 4, damage: 2, special: 'hack' });
     expect(UNITS.dualgunner).toMatchObject({ cost: 4, size: 2, speed: 3, defense: 6, health: 7, range: 4, damage: 2, special: 'secondShot' });
     expect(UNITS.dragon).toMatchObject({ cost: 6, size: 3, speed: 3, defense: 6, health: 12, range: 3, damage: 3, special: 'breath', flying: true });
-    expect(UNITS.behemoth).toMatchObject({ cost: 12, size: 3, speed: 2, defense: 10, health: 15, range: 1, damage: 6, special: 'smash', hero: {}, crackingArmor: { minDefense: 4 } });
+    expect(UNITS.behemoth).toMatchObject({ cost: 12, size: 3, speed: 3, defense: 10, health: 15, range: 1, damage: 6, special: 'smash', hero: {}, crackingArmor: { minDefense: 4 } });
   });
 
   it('the Behemoth is a hero: it fits in 16 points but not with another hero', () => {
@@ -355,7 +355,7 @@ describe('Behemoth: no die', () => {
     const r = run(s, END, END); // back to P1
     const turn = r.events.filter((e) => e.type === 'turnStart').at(-1)!;
     expect(turn.type === 'turnStart' && Object.keys(turn.dice)).toEqual([inf.id]);
-    expect(getUnit(r.state, b.id)).toMatchObject({ die: null, movesLeft: 2, acted: false });
+    expect(getUnit(r.state, b.id)).toMatchObject({ die: null, movesLeft: 3, acted: false });
     expect(canAct(r.state, getUnit(r.state, b.id)!)).toBe(true);
   });
 

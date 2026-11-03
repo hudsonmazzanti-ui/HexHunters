@@ -4,7 +4,6 @@ import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
 import { PRESETS, checkPresets } from '../sim/armies';
 import { armyCost } from '../src/core/army';
 import { auraEffects } from '../src/core/auras';
-import { applyAction } from '../src/core/game';
 import { missionPointsToWin } from '../src/core/missions';
 import { type Metric, change, compareCsv, compareHtml, spread, spreads } from '../sim/compare';
 import { generateMap, zonesConnected } from '../src/core/mapgen';
@@ -164,7 +163,7 @@ describe('pacing variants', () => {
       const expected = def.size === 3 ? Math.max(1, def.speed - 1) : def.speed;
       expect([id, c.units[id].speed]).toEqual([id, expected]);
     }
-    expect(c.units.behemoth.speed).toBe(1);
+    expect(c.units.behemoth.speed).toBe(UNITS.behemoth.speed - 1);
     expect(c.units.dragon.speed).toBe(UNITS.dragon.speed - 1);
     expect(c.units.infantry.speed).toBe(UNITS.infantry.speed);
     expect(UNITS.monster.speed).toBe(2); // real data unchanged by the variant
@@ -254,34 +253,25 @@ describe('balance pack variants', () => {
     s.config = variantConfig('behemoth-speed');
     const b = addUnit(s, 'behemoth', 0, hex(0, 3));
     expect(unitSpeed(s, b)).toBe(3);
-    expect(DEFAULT_CONFIG.units.behemoth.speed).toBe(2);
+    expect(DEFAULT_CONFIG.units.behemoth.speed).toBe(3); // now the real rule
   });
 
-  it('FM-Range: only Infantry within 3 of a living Field Marshal get the free Prep; the real game reaches all', () => {
+  it('FM-Range is now the real rule; fm-whole-army keeps the old one for comparison', () => {
     const board = (cfg: typeof DEFAULT_CONFIG) => {
       const s = makeState();
       s.config = cfg;
-      const fm = addUnit(s, 'marshal', 0, hex(0, 4));
+      addUnit(s, 'marshal', 0, hex(0, 4));
       const near = addUnit(s, 'infantry', 0, hex(3, 4));
       const far = addUnit(s, 'infantry', 0, hex(-4, 4));
-      return { s, fm, near, far };
+      return { s, near, far };
     };
-    const real = board(DEFAULT_CONFIG);
-    expect(auraEffects(real.s, real.near).rollBonus).toBe(2);
-    expect(auraEffects(real.s, real.far).rollBonus).toBe(2);
-    const v = board(variantConfig('fm-range'));
-    expect(auraEffects(v.s, v.near).rollBonus).toBe(2);
-    expect(auraEffects(v.s, v.far).rollBonus).toBeUndefined();
-    // With the Field Marshal dead, nobody is in range.
-    v.s.units = v.s.units.filter((u) => u.id !== v.fm.id);
-    expect(auraEffects(v.s, v.near).rollBonus).toBeUndefined();
-    // Applied when the turn starts: the far Infantry's die has no bonus.
-    const s2 = board(variantConfig('fm-range'));
-    s2.s.current = 1;
-    addUnit(s2.s, 'infantry', 1, hex(0, -5));
-    const after = endTurnState(s2.s);
-    expect(after.units.find((u) => u.id === s2.near.id)!.dieBonus).toBe(2);
-    expect(after.units.find((u) => u.id === s2.far.id)!.dieBonus).toBe(0);
+    for (const cfg of [DEFAULT_CONFIG, variantConfig('fm-range')]) {
+      const b = board(cfg);
+      expect(auraEffects(b.s, b.near).rollBonus).toBe(2);
+      expect(auraEffects(b.s, b.far).rollBonus).toBeUndefined();
+    }
+    const old = board(variantConfig('fm-whole-army'));
+    expect(auraEffects(old.s, old.far).rollBonus).toBe(2);
   });
 
   it('the comparison breaks presets and focus heroes down by mission', () => {
@@ -298,8 +288,3 @@ describe('balance pack variants', () => {
     expect(compareCsv(results, exp, 25)).toContain('Domination: random armies (hero) Field Marshal');
   }, 60_000);
 });
-
-/** Ends the current turn (player 2's), starting player 1's: dice are rolled with auras applied. */
-function endTurnState(s: ReturnType<typeof makeState>) {
-  return applyAction(s, { type: 'endTurn' }).state;
-}
