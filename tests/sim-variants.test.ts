@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { validateConfig } from '../src/core/army';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
-import { checkPresets } from '../sim/armies';
+import { PRESETS, checkPresets } from '../sim/armies';
+import { armyCost } from '../src/core/army';
+import { auraEffects } from '../src/core/auras';
+import { applyAction } from '../src/core/game';
+import { missionPointsToWin } from '../src/core/missions';
 import { type Metric, change, compareCsv, compareHtml, spread, spreads } from '../sim/compare';
 import { generateMap, zonesConnected } from '../src/core/mapgen';
 import { hex, hexKey } from '../src/core/hex';
@@ -11,7 +15,7 @@ import { mapAscii, mapSvg } from '../sim/mapImage';
 import { summarize } from '../sim/report';
 import { runJobs } from '../sim/runGame';
 import { buildJobs } from '../sim/schedule';
-import { EXPERIMENTS, VARIANTS, applyVariant, variantConfig } from '../sim/variants';
+import { EXPERIMENTS, VARIANTS, applyVariant, variantConfig, variantPresets } from '../sim/variants';
 
 describe('balance variants', () => {
   it('apply overrides to a copy and never touch the real data', () => {
@@ -225,3 +229,77 @@ describe('Warlord variants', () => {
     expect(EXPERIMENTS.warlord.variants).toEqual(['warlord-speed-only', 'warlord-armor', 'baseline']);
   });
 });
+
+describe('balance pack variants', () => {
+  it('Dom-10 raises the Domination target; the real data stays at 8', () => {
+    expect(missionPointsToWin(DEFAULT_CONFIG, 'dom')).toBe(8);
+    expect(missionPointsToWin(variantConfig('dom-10'), 'dom')).toBe(10);
+    expect(missionPointsToWin(variantConfig('dom-10'), 'koth')).toBe(5);
+  });
+
+  it('Behemoth-10: costs 10, and the Behemoth preset is rebuilt to a legal 16 points', () => {
+    const cfg = variantConfig('behemoth-10');
+    expect(cfg.units.behemoth.cost).toBe(10);
+    expect(DEFAULT_CONFIG.units.behemoth.cost).toBe(12);
+    const presets = variantPresets('behemoth-10', PRESETS);
+    expect(presets.find((p) => p.name === 'Behemoth')!.units).toEqual(['behemoth', 'dualgunner', 'scout']);
+    expect(PRESETS.find((p) => p.name === 'Behemoth')!.units).toEqual(['behemoth', 'heavy']); // untouched
+    expect(checkPresets(cfg, presets)).toEqual([]);
+    expect(armyCost(cfg, ['behemoth', 'dualgunner', 'scout'])).toBe(16);
+    expect(variantPresets('baseline', PRESETS)).toEqual(PRESETS);
+  });
+
+  it('Behemoth-Speed: the Behemoth moves 3', () => {
+    const s = makeState();
+    s.config = variantConfig('behemoth-speed');
+    const b = addUnit(s, 'behemoth', 0, hex(0, 3));
+    expect(unitSpeed(s, b)).toBe(3);
+    expect(DEFAULT_CONFIG.units.behemoth.speed).toBe(2);
+  });
+
+  it('FM-Range: only Infantry within 3 of a living Field Marshal get the free Prep; the real game reaches all', () => {
+    const board = (cfg: typeof DEFAULT_CONFIG) => {
+      const s = makeState();
+      s.config = cfg;
+      const fm = addUnit(s, 'marshal', 0, hex(0, 4));
+      const near = addUnit(s, 'infantry', 0, hex(3, 4));
+      const far = addUnit(s, 'infantry', 0, hex(-4, 4));
+      return { s, fm, near, far };
+    };
+    const real = board(DEFAULT_CONFIG);
+    expect(auraEffects(real.s, real.near).rollBonus).toBe(2);
+    expect(auraEffects(real.s, real.far).rollBonus).toBe(2);
+    const v = board(variantConfig('fm-range'));
+    expect(auraEffects(v.s, v.near).rollBonus).toBe(2);
+    expect(auraEffects(v.s, v.far).rollBonus).toBeUndefined();
+    // With the Field Marshal dead, nobody is in range.
+    v.s.units = v.s.units.filter((u) => u.id !== v.fm.id);
+    expect(auraEffects(v.s, v.near).rollBonus).toBeUndefined();
+    // Applied when the turn starts: the far Infantry's die has no bonus.
+    const s2 = board(variantConfig('fm-range'));
+    s2.s.current = 1;
+    addUnit(s2.s, 'infantry', 1, hex(0, -5));
+    const after = endTurnState(s2.s);
+    expect(after.units.find((u) => u.id === s2.near.id)!.dieBonus).toBe(2);
+    expect(after.units.find((u) => u.id === s2.far.id)!.dieBonus).toBe(0);
+  });
+
+  it('the comparison breaks presets and focus heroes down by mission', () => {
+    const results = (['baseline', 'dom-10'] as const).map((id) => {
+      const config = variantConfig(id);
+      const records = runJobs(buildJobs(config, { seed: 2, perMatchup: 0, randomGames: 30 }), { config });
+      return { id, label: id, description: '', config, summary: summarize(records, config, []), excluded: [], seconds: 0 };
+    });
+    const exp = EXPERIMENTS.pack1;
+    expect(exp.variants).toEqual(['baseline', 'dom-10', 'behemoth-10', 'behemoth-speed', 'fm-range']);
+    const html = compareHtml(results, exp, { seed: 2, perMatchup: 0, randomGames: 30, minGames: 25, workers: 1 });
+    expect(html).toContain('Domination: random armies, heroes and units');
+    expect(html).toContain('Domination: first mover wins');
+    expect(compareCsv(results, exp, 25)).toContain('Domination: random armies (hero) Field Marshal');
+  }, 60_000);
+});
+
+/** Ends the current turn (player 2's), starting player 1's: dice are rolled with auras applied. */
+function endTurnState(s: ReturnType<typeof makeState>) {
+  return applyAction(s, { type: 'endTurn' }).state;
+}

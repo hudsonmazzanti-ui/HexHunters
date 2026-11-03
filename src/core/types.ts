@@ -189,6 +189,11 @@ export interface SpecialRules {
   hookDamage: number;
   /** Field Marshal aura: added to every Infantry die at turn start (stacks with Prep). */
   marshalRollBonus: number;
+  /**
+   * Field Marshal aura reach: 0 = every Infantry in the army (today's rule); a number = only
+   * Infantry within that many hexes of a living Field Marshal at the start of the turn.
+   */
+  marshalRange: number;
   /** Warlord aura: extra movement for large models. */
   warlordSpeedBonus: number;
   /**

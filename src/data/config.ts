@@ -495,6 +495,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     hookRange: 3,
     hookDamage: 1,
     marshalRollBonus: 2,
+    marshalRange: 0, // 0 = the whole army
     warlordSpeedBonus: 1,
     warlordDefenseBonus: 0,
     warlordHealthBonus: -2, // the cost of the +1 speed

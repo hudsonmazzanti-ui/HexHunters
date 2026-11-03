@@ -37,6 +37,8 @@ export interface Variant {
   settings?: Partial<Omit<GameConfig, 'units' | 'squads' | 'specials'>>;
   /** Computed changes applied last, for rules like "every large model gets -1 speed". Mutates the copy. */
   modify?: (config: GameConfig) => void;
+  /** Preset armies to rebuild under this variant (by preset name), e.g. when a cost changes. */
+  presets?: Record<string, string[]>;
 }
 
 /** Every large (size 3) model, including alternate forms and squad members, loses 1 speed (minimum 1). */
@@ -126,6 +128,29 @@ export const VARIANTS: Record<string, Variant> = {
     specials: { warlordHealthBonus: 0 },
   },
 
+  // ---- Balance pack (each against the baseline) ----
+  'dom-10': {
+    label: 'Dom-10',
+    description: 'Domination is won at 10 points instead of 8.',
+    settings: { dominationPointsToWin: 10 },
+  },
+  'behemoth-10': {
+    label: 'Behemoth-10',
+    description: 'The Behemoth costs 10 instead of 12; the Behemoth preset becomes Behemoth + Dual Gunner + Scout.',
+    units: { behemoth: { cost: 10 } },
+    presets: { Behemoth: ['behemoth', 'dualgunner', 'scout'] },
+  },
+  'behemoth-speed': {
+    label: 'Behemoth-Speed',
+    description: 'The Behemoth moves 3 instead of 2 (its speed after the large-model rule).',
+    units: { behemoth: { speed: 3 } },
+  },
+  'fm-range': {
+    label: 'FM-Range',
+    description: 'The Field Marshal\'s free Prep only reaches Infantry within 3 hexes of it at the start of the turn.',
+    specials: { marshalRange: 3 },
+  },
+
   // ---- Pacing experiment ----
   'slow-large': {
     label: 'Slow-Large',
@@ -187,6 +212,12 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     focusUnits: ['warlord', 'heavy', 'monster', 'hillgiant', 'dragon', 'grappler'],
     focusPresets: ['Big Guys'],
   },
+  pack1: {
+    title: 'Balance pack: Domination target, Behemoth cost and speed, Field Marshal range',
+    variants: ['baseline', 'dom-10', 'behemoth-10', 'behemoth-speed', 'fm-range'],
+    focusUnits: ['behemoth', 'marshal', 'warlord', 'infantry'],
+    focusPresets: [],
+  },
   pacing: {
     title: 'Pacing: slower large models and taller walls',
     variants: ['baseline', 'slow-large', 'slow-large-tall'],
@@ -219,6 +250,15 @@ export function applyVariant(base: GameConfig, variant: Variant): GameConfig {
   Object.assign(config, variant.settings ?? {});
   variant.modify?.(config);
   return config;
+}
+
+/** The preset armies under a variant (some variants rebuild a preset, e.g. after a cost change). */
+export function variantPresets<P extends { name: string; units: string[] }>(id: string, presets: P[]): P[] {
+  const over = VARIANTS[id]?.presets ?? {};
+  for (const name of Object.keys(over)) {
+    if (!presets.some((p) => p.name === name)) throw new Error(`Variant "${id}": unknown preset "${name}"`);
+  }
+  return presets.map((p) => (over[p.name] ? { ...p, units: over[p.name] } : p));
 }
 
 /** The config for a variant id (throws on an unknown id). */

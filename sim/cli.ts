@@ -43,7 +43,7 @@ import { mapAscii, mapSvg } from './mapImage';
 import { findFlags, gamesCsv, reportHtml, summarize, unitsCsv } from './report';
 import { type GameJob, type GameRecord, runGame } from './runGame';
 import { buildJobs, splitGames } from './schedule';
-import { EXPERIMENTS, type Experiment, VARIANTS, variantConfig } from './variants';
+import { EXPERIMENTS, type Experiment, VARIANTS, variantConfig, variantPresets } from './variants';
 
 const MAX_ROUNDS = 30;
 
@@ -123,8 +123,9 @@ async function runVariant(id: string, o: RunSettings, out: string): Promise<Vari
   const bad = validateConfig(config);
   if (bad.length) throw new Error(`Variant "${id}" breaks the unit data:\n  ${bad.join('\n  ')}`);
   // Presets that aren't legal under this variant sit out its round robin.
-  const excluded = checkPresets(config);
-  const presets = PRESETS.filter((p) => !excluded.some((e) => e.startsWith(`${p.name}:`)));
+  const variantArmies = variantPresets(id, PRESETS);
+  const excluded = checkPresets(config, variantArmies);
+  const presets = variantArmies.filter((p) => !excluded.some((e) => e.startsWith(`${p.name}:`)));
   const jobs = buildJobs(config, { seed: o.seed, perMatchup: o.perMatchup, randomGames: o.randomGames, presets });
   console.log(`\n[${variant.label}] ${jobs.length} games (${o.perMatchup} per preset matchup, ${o.randomGames} random)`);
   for (const e of excluded) console.log(`  left out (not legal): ${e}`);

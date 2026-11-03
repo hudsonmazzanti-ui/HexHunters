@@ -104,6 +104,8 @@ export interface MetricGroups {
   units: Metric[];
   heroes: Metric[];
   spread: Metric[];
+  /** The same preset and focus unit/hero scores, for each mission's games alone. */
+  byMission: { mission: MissionId; name: string; presets: Metric[]; units: Metric[]; heroes: Metric[] }[];
 }
 
 export function compareMetrics(results: VariantResult[], exp: Experiment, minGames: number): MetricGroups {
@@ -153,28 +155,33 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
       },
       rate(`${name}: wipeout wins`, (x) => ({ k: of(x)?.reasons.elimination ?? 0, n: of(x)?.games ?? 0 })),
       rate(`${name}: objective wins`, (x) => ({ k: (of(x)?.reasons.points ?? 0) + (of(x)?.reasons.capture ?? 0), n: of(x)?.games ?? 0 })),
+      rate(`${name}: first mover wins`, (x) => ({ k: of(x)?.firstMover.wins ?? 0, n: (of(x)?.firstMover.wins ?? 0) + (of(x)?.firstMover.losses ?? 0) })),
     );
   }
 
   const presetNames = [...new Set(results.flatMap((r) => r.summary.presetNames).concat(results.flatMap((r) => r.excluded.map((e) => e.split(':')[0]))))];
-  const presets: Metric[] = presetNames.map((name) => ({
+  // `pick` chooses the summary: the whole run, or one mission's games.
+  type Pick = (x: Summary) => Summary | undefined;
+  const all: Pick = (x) => x;
+  const presetMetrics = (pick: Pick): Metric[] => presetNames.map((name) => ({
     label: name,
     format: 'pct',
     cells: results.map((r) => {
-      const t = r.summary.presets[name];
+      const t = pick(r.summary)?.presets[name];
       if (!t?.games) return { value: null, se: null, n: 0, note: r.excluded.some((e) => e.startsWith(`${name}:`)) ? 'not legal' : undefined };
       const p = score(t);
       return { value: p, se: propSe(p, t.games), n: t.games };
     }),
   }));
+  const presets = presetMetrics(all);
 
   const config = results[0].config;
   const isHero = (id: string) => !!(config.units[id]?.hero ?? config.squads[id]?.hero);
-  const focus = (ids: string[]): Metric[] => ids.map((id) => ({
+  const focus = (ids: string[], pick: Pick = all): Metric[] => ids.map((id) => ({
     label: entryName(config, id),
     format: 'pct',
     cells: results.map((r) => {
-      const t = r.summary.entries[id];
+      const t = pick(r.summary)?.entries[id];
       if (!t?.games) return { value: null, se: null, n: 0 };
       const p = score(t);
       return { value: p, se: propSe(p, t.games), n: t.games };
@@ -194,7 +201,13 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
     spreadMetric(`Unit/hero spread (SD, ${minGames}+ games)`, (x) => x.entries, 'sd', 'entriesSd'),
     spreadMetric('Unit/hero range (best − worst)', (x) => x.entries, 'range', 'entriesRange'),
   ];
-  return { flow, presets, units: focus(exp.focusUnits.filter((id) => !isHero(id))), heroes: focus(exp.focusUnits.filter(isHero)), spread };
+  const unitIds = exp.focusUnits.filter((id) => !isHero(id));
+  const heroIds = exp.focusUnits.filter(isHero);
+  const byMission = missions.map((m) => {
+    const pick: Pick = (x) => x.byMission[m];
+    return { mission: m, name: MISSIONS[m].name, presets: presetMetrics(pick), units: focus(unitIds, pick), heroes: focus(heroIds, pick) };
+  });
+  return { flow, presets, units: focus(unitIds), heroes: focus(heroIds), spread, byMission };
 }
 
 /** Change from the baseline and whether it's beyond 2 standard errors (null when it can't be judged). */
@@ -233,6 +246,11 @@ export function compareCsv(results: VariantResult[], exp: Experiment, minGames: 
     ...g.presets.map((m) => ({ ...m, label: `Preset: ${m.label}` })),
     ...g.units.map((m) => ({ ...m, label: `Random armies: ${m.label}` })),
     ...g.heroes.map((m) => ({ ...m, label: `Random armies (hero): ${m.label}` })),
+    ...g.byMission.flatMap((b) => [
+      ...b.presets.map((m) => ({ ...m, label: `${b.name}: preset ${m.label}` })),
+      ...b.units.map((m) => ({ ...m, label: `${b.name}: random armies ${m.label}` })),
+      ...b.heroes.map((m) => ({ ...m, label: `${b.name}: random armies (hero) ${m.label}` })),
+    ]),
     ...g.spread,
   ];
   const header = ['variant', ...metrics.flatMap((m) => [m.label, `${m.label} (change)`, `${m.label} (beyond noise)`])];
@@ -321,6 +339,13 @@ ${table('Game flow', g.flow, results)}
 ${table('Preset armies (score)', g.presets, results)}
 ${g.units.length ? table('Random armies: score when the army includes the unit…', g.units, results) : ''}
 ${g.heroes.length ? table('Random armies: score when the army includes the hero…', g.heroes, results) : ''}
+${g.byMission
+  .map(
+    (b) =>
+      table(`${b.name}: preset armies (score)`, b.presets, results) +
+      (b.heroes.length || b.units.length ? table(`${b.name}: random armies, heroes and units (score)`, [...b.heroes, ...b.units], results) : ''),
+  )
+  .join('\n')}
 ${table('Overall spread', g.spread, results)}
 
 <h2>Variants</h2>
