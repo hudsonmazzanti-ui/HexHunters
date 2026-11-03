@@ -459,7 +459,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   deployShapes: ['standard', 'corners', 'flanks', 'spearhead', 'split', 'close'],
   maxRange: 7,
   dieSides: 12,
-  missions: ['koth', 'ctf'],
+  missions: ['koth', 'ctf', 'dom'],
   // Clear half the time; the other nine share the other half equally.
   conditions: {
     clear: 9,
@@ -474,6 +474,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     bigmap: 1,
   },
   pointsToWin: 5,
+  dominationPointsToWin: 8,
   armyPointLimit: 16,
   maxHeroesPerArmy: 1,
   firstPlayerSwapEvery: 2,

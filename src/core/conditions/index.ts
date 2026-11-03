@@ -28,7 +28,7 @@ export const CONDITIONS: Record<ConditionId, ConditionDef> = {
     name: 'Hot Drop',
     icon: 'drop',
     summary: 'Both armies deploy back to back in the middle.',
-    incompatibleMissions: ['ctf'],
+    incompatibleMissions: ['ctf', 'dom'],
     deployShape: 'hotdrop',
   },
   smallmap: {

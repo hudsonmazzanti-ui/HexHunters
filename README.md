@@ -282,7 +282,7 @@ red once cracked), on the board and on its roster chip, so both players can trac
 affect it: Hack can't target it, the Gambler doesn't turn its die into "?", and the Standard Bearer's +2 and Spot don't
 apply to its attacks (Spot isn't used up by them). Enemies can still Spot it as a target.
 
-**Missions.** After both armies are built, each game's mission is picked at random (50/50, seeded) and shown with
+**Missions.** After both armies are built, each game's mission is picked at random (a third each, seeded) and shown with
 a one-line rule on the briefing screen before deployment. The full rules are one tap away from the briefing during
 play. Missions are data
 (`src/core/missions/`, one module each; the pool is `missions` in `config.ts`). In every mission, eliminating every
@@ -311,6 +311,22 @@ game is a draw.
   - *Standard Bearer:* your carrier isn't slowed by the flag (it moves at its own speed, still without bonuses) and gets +2 on its rolls (instead of models on the
     control point).
   - Every pickup, drop and capture gets a log line.
+- **Domination.** No control point or flag: three sites, each a hex plus its six neighbors (tinted and outlined in
+  the owner's color, gold while nobody holds them).
+  - *Sites:* one in the center, and two flank sites mirrored through the center on the axis across the line between
+    the deployment zones (so they turn with the shape: left and right for Standard, top and bottom for Flanks), about
+    radius − 2 hexes out (5 normally, 3 on Small Map, 7 on Big Map). A flank site is as close to one army as to the
+    other; where the axis falls between hexes (Flanks, Corners) it is 1 hex closer to one army and its mirror 1 hex
+    closer to the other. Sites never touch a zone, terrain stays off them, and every zone must reach every site.
+  - *Claim:* a model inside a site spends its action to claim it (the **Claim site** button; no roll, movement
+    ends, like picking up the flag), but not while an enemy model is inside that site. It stays yours until the
+    enemy claims it.
+  - *Scoring:* at the end of each round, 1 point per site you own. First to 8 wins; if both reach 8 in the same
+    round the higher score wins, and an exact tie plays on. Or eliminate the enemy.
+  - *Standard Bearer:* your models inside any site get +2 on their rolls, and a round in which you score site points
+    scores 1 extra.
+  - Never paired with the Hot Drop Condition (rerolled). Every claim gets a log line, and each round's site points
+    show on the next handoff screen.
 
 **Battlefield Conditions.** Each game also gets one Condition, picked at random after the armies are built (seeded,
 like the mission and deployment shape). Clear comes up half the time; the other nine share the other half equally.
@@ -326,7 +342,7 @@ The weights are `conditions` in `config.ts` (set one to 0 to remove it), and eac
 | Blood Moon | +1 on every die result (Gambler included, within its cap). Models without a die (Behemoth) are unaffected. |
 | Sandstorm | −1 on every die result (minimum 1). Models without a die are unaffected. |
 | Bonus Bones | Each army gets 2 free Skeletons, placed after the rest of the army. They aren't in the army list, so they don't count toward points or the Mercenary's unspent points, but they are Skeletons for every rule (e.g. the Necromancer). Zones grow to fit 18 models. |
-| Hot Drop | Replaces the deployment shape: both armies deploy back to back in the middle. Player 1 gets the two rows just below the center line plus the left part of the center row, Player 2 the mirror image; the zones touch, and stay 3+ hexes from the center (off the control point and its ring). Never paired with Capture the Flag (rerolled). |
+| Hot Drop | Replaces the deployment shape: both armies deploy back to back in the middle. Player 1 gets the two rows just below the center line plus the left part of the center row, Player 2 the mirror image; the zones touch, and stay 3+ hexes from the center (off the control point and its ring). Never paired with Capture the Flag or Domination (rerolled). |
 | Small Map | The board is 2 rings smaller (radius 5). Terrain scales with the board's area; Close Quarters is left out (too cramped). |
 | Big Map | The board is 2 rings larger (radius 9), with terrain scaled up the same way. |
 
@@ -388,10 +404,12 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   `--experiment NAME` (e.g. `monster`, `terrain`, `warlord`) run them with the same seed and write `compare.html`: one row
   per variant, changes from the baseline marked as real (beyond 2 standard errors) or noise, plus a sample map
   per variant (`sample-map.svg` / `.txt`).
-- **Missions:** each sim game's mission is random (50/50), like the app. The report has a **By mission** section
+- **Missions:** each sim game's mission is random (a third each), like the app. The report has a **By mission** section
   (game flow, preset scores and unit/hero scores per mission side by side, how each preset wins (wipeout vs objective) per mission, and which unit types made the winning flag captures, overall and per preset), `games.csv` has mission and flag
-  columns, and `units.csv` has per-mission scores. `--mission koth|ctf` forces one; `--experiment missions`
-  compares random, King of the Hill only and Capture the Flag only.
+  columns, and `units.csv` has per-mission scores. `--mission koth|ctf|dom` forces one; `--experiment missions`
+  compares random and each mission alone. In Domination the bot claims sites it stands in, heads for sites it
+  doesn't own, spreads out across sites, sits in enemy sites to block their claims, and guards its own when enemies
+  are near.
 - **Conditions:** each sim game's Condition is random with the app's weights (and Hot Drop never with Capture the
   Flag). The report's **By Condition** section shows, per Condition, games, game length, win types and the first-mover
   rate, plus a preset × Condition score grid; `games.csv` has a `condition` column. `--condition fog` (or

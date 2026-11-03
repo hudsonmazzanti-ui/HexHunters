@@ -16,7 +16,7 @@ import {
   newGame,
   unplacedUnits,
 } from '../core/game';
-import { type Hex, type Point, hexCorners, hexDistance, hexEquals, hexKey, hexagon, neighbors, pixelToHex } from '../core/hex';
+import { type Hex, type Point, hexCorners, hexDistance, hexEquals, hexKey, hexToPixel, hexagon, neighbors, pixelToHex } from '../core/hex';
 import {
   actionBonus,
   armorLabel,
@@ -35,8 +35,10 @@ import {
   moveReach,
   needsLoading,
   onBoard,
+  claimBlockedReason,
   other,
   pickUpBlockedReason,
+  siteIndexAt,
   terrainHeight,
   turnsUntilTransform,
   unitAt,
@@ -66,7 +68,7 @@ import type { GameConfig, GameState, PlayerId, Unit, WinReason } from '../core/t
 import { heroName, speedName } from '../data/config';
 import { AURAS, aurasOn } from '../core/auras';
 import { flagCarrier, isCarrier } from '../core/flag';
-import { MISSIONS } from '../core/missions';
+import { MISSIONS, missionPointsToWin } from '../core/missions';
 import { CONDITIONS } from '../core/conditions';
 import { icon } from './icons';
 import { BoardView, type BoardOverlay, HEX_SIZE, UNDO_MS } from './board';
@@ -295,6 +297,16 @@ export class Controller {
           break;
         }
         case 'roundScored':
+          // Shown on the next handoff screen.
+          break;
+        case 'siteClaimed': {
+          this.render();
+          const site = this.state.map.sites![ev.site];
+          this.board.floatText(site[0], 'CLAIMED', PLAYER_COLORS[ev.player]);
+          this.ui.message = `${this.ui.message ?? ''} ${claimText(before, this.state, ev)}`.trim();
+          break;
+        }
+        case 'sitesScored':
           // Shown on the next handoff screen.
           break;
         case 'flagPickedUp':
@@ -536,6 +548,15 @@ export class Controller {
       if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
       if (e.type === 'cracked') lines.push(crackText(this.state, e));
       if (e.type === 'flagDropped' || e.type === 'flagShifted' || e.type === 'flagCaptured') lines.push(flagText(before, this.state, e));
+      if (e.type === 'sitesScored') {
+        const [a, b] = e.points;
+        lines.push(
+          a || b
+            ? `Round ${e.round}: sites held ${e.owned[0]}–${e.owned[1]}, so ${PLAYER_NAMES[0]} +${a}, ${PLAYER_NAMES[1]} +${b}${this.siteBonusNote(e)}.`
+            : `Round ${e.round}: nobody holds a site yet.`,
+        );
+        lines.push(`Score: ${e.scores[0]} – ${e.scores[1]} (first to ${missionPointsToWin(this.state.config, this.state.mission)})`);
+      }
     }
     if (before.phase === 'play' && before.current === player) {
       lines.push(`${PLAYER_NAMES[player]} goes again: turn order flips this round.`);
@@ -561,7 +582,7 @@ export class Controller {
 
   private async gameOverScreen(winner: PlayerId | null, reason: WinReason): Promise<void> {
     const reasons: Record<WinReason, string> = {
-      points: `Reached ${this.state.config.pointsToWin} points (${this.state.scores[0]} – ${this.state.scores[1]}).`,
+      points: `Reached ${missionPointsToWin(this.state.config, this.state.mission)} points (${this.state.scores[0]} – ${this.state.scores[1]}).`,
       capture: 'Carried the flag home to their own deployment zone.',
       elimination: 'Every enemy model was eliminated.',
       draw: 'Both armies were wiped out at the same time.',
@@ -606,6 +627,14 @@ export class Controller {
         },
       ],
     });
+  }
+
+  /** " (+1 Standard Bearer)" when a hero aura added a point to a scoring round of Domination. */
+  private siteBonusNote(e: Extract<GameEvent, { type: 'sitesScored' }>): string {
+    const notes = ([0, 1] as PlayerId[])
+      .filter((p) => e.points[p] > e.owned[p])
+      .map((p) => `${PLAYER_NAMES[p]} +${e.points[p] - e.owned[p]} ${this.holdSource(p, 2).trim().replace(/^\(|\)$/g, '') || 'bonus'}`);
+    return notes.length ? ` (${notes.join(', ')})` : '';
   }
 
   /** " (Standard Bearer)" when a hero aura made a held point worth more than 1. */
@@ -1266,7 +1295,17 @@ export class Controller {
       hints.unshift('standing on the flag: pick it up (uses its action)');
       actions.push({ label: 'Pick up flag', className: 'primary', onClick: () => void this.dispatch({ type: 'pickUp', unitId: unit.id }) });
     }
-    if (isCarrier(s, unit)) {
+    // Domination: standing in a site it can claim.
+    if (s.map.sites) {
+      const why = claimBlockedReason(s, unit);
+      if (!why) {
+        hints.unshift(`in the ${siteName(s, siteIndexAt(s, unit.pos!))}: claim it (uses its action)`);
+        actions.push({ label: 'Claim site', className: 'primary', onClick: () => void this.dispatch({ type: 'claim', unitId: unit.id }) });
+      } else if (why === 'Enemy inside') {
+        hints.unshift(`enemy inside the ${siteName(s, siteIndexAt(s, unit.pos!))}: can't claim`);
+      }
+    }
+        if (isCarrier(s, unit)) {
       const free = unitSpeed({ ...s, flag: null }, unit);
       hints.push(`carrying the flag (move ${unitSpeed(s, unit)} instead of ${free}): end your turn inside your zone to win`);
     }
@@ -1368,6 +1407,23 @@ function crawlText(before: GameState, after: GameState): string {
   return names.length ? `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} now crawling!` : '';
 }
 
+/** Domination: "center site", or a flank site by where it sits on screen ("north-west site"). */
+export function siteName(state: GameState, i: number): string {
+  if (i === 0) return 'center site';
+  const p = hexToPixel(state.map.sites![i][0], 1);
+  const angle = (Math.atan2(-p.y, p.x) * 180) / Math.PI; // 0 = east, 90 = north
+  const names = ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'];
+  return `${names[Math.round(((angle + 360) % 360) / 45) % 8]} site`;
+}
+
+/** "Player 1's Infantry claims the north-west site (from Player 2)." */
+function claimText(before: GameState, after: GameState, ev: Extract<GameEvent, { type: 'siteClaimed' }>): string {
+  const u = getUnit(after, ev.unitId) ?? getUnit(before, ev.unitId);
+  const who = u ? `${PLAYER_NAMES[u.owner]}'s ${unitDef(after, u).name}` : PLAYER_NAMES[ev.player];
+  const from = ev.from === null ? '' : ` from ${PLAYER_NAMES[ev.from]}`;
+  return `${who} claims the ${siteName(after, ev.site)}${from}!`;
+}
+
 /** "Player 1's Infantry picks up the flag." and the other flag log lines. */
 export function flagText(
   before: GameState,
@@ -1413,10 +1469,11 @@ function zoneMap(state: GameState): HTMLElement {
   const mission = MISSIONS[state.mission];
   const cp = (h: Hex) => mission.usesControlPoint && state.map.controlPoint.some((c) => hexEquals(c, h));
   const flag = (h: Hex) => !!state.flag?.pos && hexEquals(state.flag.pos, h);
+  const site = (h: Hex) => (state.map.sites ?? []).some((st) => st.some((x) => hexEquals(x, h)));
   for (const h of hexagon(state.map.radius)) {
     const poly = document.createElementNS(NS, 'polygon');
     poly.setAttribute('points', hexCorners(h, size).map((p) => `${p.x},${p.y}`).join(' '));
-    const kind = zone(h, 0) ? 'z0' : zone(h, 1) ? 'z1' : cp(h) ? 'cp' : flag(h) ? 'flag' : state.map.heights[hexKey(h)] ? 'wall' : 'open';
+    const kind = zone(h, 0) ? 'z0' : zone(h, 1) ? 'z1' : cp(h) ? 'cp' : site(h) ? 'site' : flag(h) ? 'flag' : state.map.heights[hexKey(h)] ? 'wall' : 'open';
     poly.setAttribute('class', kind);
     svg.append(poly);
   }

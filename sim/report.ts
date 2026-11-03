@@ -68,6 +68,8 @@ export interface Summary {
   illegal: number;
   /** Capture the Flag totals: captures (both sides), pickups and drops. */
   flag: { captures: number; pickups: number; drops: number };
+  /** Domination: site claims (both sides). */
+  siteClaims: number;
   /** The same summary for each mission's games alone (only on the top-level summary). */
   byMission: Partial<Record<MissionId, Summary>>;
   /** The same summary for each battlefield Condition's games alone (only on the top-level summary). */
@@ -95,6 +97,7 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     usage: {},
     illegal: 0,
     flag: { captures: 0, pickups: 0, drops: 0 },
+    siteClaims: 0,
     byMission: {},
     byCondition: {},
   };
@@ -117,6 +120,7 @@ export function summarize(records: GameRecord[], config: GameConfig, presetNames
     s.flag.captures += r.capturesA + r.capturesB;
     s.flag.pickups += r.flagPickups;
     s.flag.drops += r.flagDrops;
+    s.siteClaims += r.siteClaims;
     if (r.captureUnit) s.captureUnits[r.captureUnit] = (s.captureUnits[r.captureUnit] ?? 0) + 1;
     s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1;
 
@@ -217,11 +221,11 @@ const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(csvCell).join
 export function gamesCsv(records: GameRecord[]): string {
   return csv([
     ['index', 'seed', 'kind', 'armyA', 'unitsA', 'armyB', 'unitsB', 'seatOfA', 'firstMover', 'mission', 'condition', 'shape', 'terrainPieces', 'terrainHexes',
-      'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops', 'captureUnit'],
+      'winner', 'reason', 'rounds', 'scoreA', 'scoreB', 'capturesA', 'capturesB', 'flagPickups', 'flagDrops', 'captureUnit', 'siteClaims'],
     ...records.map((r) => [
       r.index, r.seed, r.kind, r.a.name, r.a.units.join(' '), r.b.name, r.b.units.join(' '),
       r.seatOfA + 1, r.firstMover, r.mission, r.condition, r.shape, r.terrainPieces, r.terrainHexes, r.winner, r.reason, r.rounds, r.scoreA, r.scoreB,
-      r.capturesA, r.capturesB, r.flagPickups, r.flagDrops, r.captureUnit ?? '',
+      r.capturesA, r.capturesB, r.flagPickups, r.flagDrops, r.captureUnit ?? '', r.siteClaims,
     ]),
   ]);
 }
@@ -345,6 +349,7 @@ function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): strin
     row('First mover wins (decisive)', (x) => p1(pct(x.firstMover.wins, decisive(x)))),
     row('Flag pickups / game', (x) => (x.flag.pickups ? (x.flag.pickups / x.games).toFixed(2) : '–')),
     row('Flag drops / game', (x) => (x.flag.pickups ? (x.flag.drops / x.games).toFixed(2) : '–')),
+    row('Site claims / game', (x) => (x.siteClaims ? (x.siteClaims / x.games).toFixed(2) : '–')),
   ].join('');
   const cell = (t: Tally | undefined) =>
     t?.games ? `<td${heat(score(t), t.games, meta.minGames)} title="${t.wins}W ${t.losses}L ${t.draws}D of ${t.games}">${p1(100 * score(t))}</td>` : '<td class="na">–</td>';
@@ -356,7 +361,7 @@ function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): strin
       .map(([id]) => `<tr><th>${esc(entryName(config, id))}</th>${ms.map((m) => cell(m.s.entries[id])).join('')}</tr>`)
       .join('');
   // How each preset's wins came, per mission: wins, then the share by wipeout / objective.
-  const objectiveName: Partial<Record<MissionId, string>> = { koth: 'points', ctf: 'capture' };
+  const objectiveName: Partial<Record<MissionId, string>> = { koth: 'points', ctf: 'capture', dom: 'points' };
   const winHead = `<tr><th rowspan="2">Army</th>${ms.map((m) => `<th colspan="3">${esc(m.name)}</th>`).join('')}</tr>` +
     `<tr>${ms.map((m) => `<th>Wins</th><th>Wipeout</th><th>${esc(objectiveName[m.id] ?? 'objective')}</th>`).join('')}</tr>`;
   const winRows = s.presetNames
@@ -375,7 +380,7 @@ function missionSection(s: Summary, config: GameConfig, meta: ReportMeta): strin
 <h3>Preset score (%)</h3><table>${head('Army')}${presets}</table>
 <h3>How each preset wins</h3><table>${winHead}${winRows}</table>
 <p class="muted">Wins in preset games, and the share of them by wipeout or by the mission's objective
-(King of the Hill: points; Capture the Flag: a flag capture). A draw is not a win.</p>
+(King of the Hill and Domination: points; Capture the Flag: a flag capture). A draw is not a win.</p>
 ${captures}
 <h3>Random armies: hero score (%)</h3><table>${head('Hero')}${entries(true)}</table>
 <h3>Random armies: unit score (%)</h3><table>${head('Unit')}${entries(false)}</table>
@@ -443,7 +448,7 @@ export function reportHtml(s: Summary, config: GameConfig, meta: ReportMeta): st
     .join('')}`;
 
   const reasonNames: Record<string, string> = {
-    points: 'Points (King of the Hill)',
+    points: 'Points (King of the Hill / Domination)',
     capture: 'Flag capture (Capture the Flag)',
     elimination: 'Wipeout',
     draw: 'Draw (simultaneous wipeout)',

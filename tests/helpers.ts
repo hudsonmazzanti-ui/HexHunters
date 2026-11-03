@@ -24,6 +24,7 @@ export function makeState(opts: { terrain?: [Hex, TerrainHeight][] } = {}): Game
     condition: 'clear',
     flag: null,
     flagChanges: [],
+    siteOwners: [],
     units: [],
     phase: 'play',
     current: 0,

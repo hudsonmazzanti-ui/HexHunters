@@ -15,6 +15,7 @@ import {
   hexAdd,
   hexDistance,
   hexKey,
+  hexToPixel,
   hexagon,
   mirror,
   neighbors,
@@ -64,11 +65,53 @@ export function pickDeployShape(cfg: GameConfig, seed: number): string {
   return new Rng((seed ^ 0x2c1b3c6d) | 0).pick(cfg.deployShapes);
 }
 
+/**
+ * Domination's three sites: the center site (center hex + its 6 neighbors) and two flank
+ * sites, mirrored through the center. A flank site sits on the axis perpendicular to the
+ * line between the deployment zones (it turns with the shape), about radius - 2 hexes from
+ * the center, as equidistant from both zones as the hex grid allows. Candidates that would
+ * leave the board, touch a zone or overlap the center site are skipped (then the next ring
+ * inward is tried).
+ */
+export function dominationSites(radius: number, zones: [Hex[], Hex[]]): Hex[][] {
+  const area = (h: Hex) => [h, ...neighbors(h)];
+  const zoneKeys = new Set([...zones[0], ...zones[1]].map(hexKey));
+  const toZone = (h: Hex, z: Hex[]) => Math.min(...z.map((x) => hexDistance(h, x)));
+  // Axis toward Player 1's zone (its centroid, in screen space); flank sites lie across it.
+  const pts = zones[0].map((h) => hexToPixel(h, 1));
+  const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+  const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+  const len = Math.hypot(cx, cy) || 1;
+  const along = (h: Hex) => {
+    const p = hexToPixel(h, 1);
+    return Math.abs((p.x * cx + p.y * cy) / (len * Math.hypot(p.x, p.y)));
+  };
+  for (let ring = radius - 2; ring >= 3; ring--) {
+    const options = hexagon(radius).filter(
+      (h) =>
+        hexDistance(h, ORIGIN) === ring &&
+        area(h).every((a) => hexDistance(a, ORIGIN) <= radius && !zoneKeys.has(hexKey(a))) &&
+        area(mirror(h)).every((a) => !zoneKeys.has(hexKey(a))),
+    );
+    if (!options.length) continue;
+    // Equal distance to both zones first, then closest to the perpendicular, then board order.
+    const score = (h: Hex) => Math.abs(toZone(h, zones[0]) - toZone(h, zones[1])) * 10 + along(h);
+    const best = options.reduce((a, b) => (score(b) < score(a) - 1e-9 ? b : a));
+    // Of the pair, list the one on the left (or top) of the screen first, so the order is stable.
+    const p = hexToPixel(best, 1);
+    const first = p.x < -1e-9 || (Math.abs(p.x) < 1e-9 && p.y < 0) ? best : mirror(best);
+    return [area(ORIGIN), area(first), area(mirror(first))];
+  }
+  throw new Error('No room for the Domination sites');
+}
+
 export interface MapOptions {
   /** Use this deployment shape instead of a random one (Hot Drop). */
   shape?: string;
   /** Extra models each army gets on top of the largest army (Bonus Bones), so zones must fit them. */
   extraModels?: number;
+  /** Domination: place the three sites (kept clear of terrain, and reachable). */
+  sites?: boolean;
 }
 
 /** Can terrain go on this hex? Not in or next to a deployment zone, nor on or next to the control point. */
@@ -143,6 +186,7 @@ export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}
   const rng = new Rng(seed);
   const deployShape = opts.shape ?? pickDeployShape(cfg, seed);
   const zones = shapeZones(cfg, deployShape, largestArmy(cfg) + (opts.extraModels ?? 0));
+  const sites = opts.sites ? dominationSites(cfg.boardRadius, zones) : undefined;
   // A fractional terrainPairs (density) rounds up or down at random: 4.5 = 4 or 5 pairs, 50/50.
   // (Only draws a random number when fractional, so whole-number maps are unchanged.)
   const whole = Math.floor(cfg.terrainPairs);
@@ -150,6 +194,8 @@ export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}
   const pairCount = frac > 0 && rng.next() < frac ? whole + 1 : whole;
   // Zone hexes plus a one-hex buffer around them stay free of terrain.
   const nearZones = new Set([...zones[0], ...zones[1]].flatMap((h) => [h, ...neighbors(h)]).map(hexKey));
+  // Domination's site hexes stay clear of terrain (the center one already is).
+  for (const site of sites ?? []) for (const h of site) nearZones.add(hexKey(h));
   const allowed = (h: Hex) => terrainAllowed(h, cfg, nearZones);
   const candidates = hexagon(cfg.boardRadius).filter(allowed);
 
@@ -160,7 +206,8 @@ export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}
     const touches = (hexes: Hex[]) =>
       hexes.some((h) => used.has(hexKey(h)) || neighbors(h).some((n) => used.has(hexKey(n))));
 
-    for (let pair = 0; pair < pairCount; pair++) {
+    // (A cramped board, e.g. Small Map with Domination's sites, may have no room for terrain.)
+    for (let pair = 0; pair < (candidates.length ? pairCount : 0); pair++) {
       for (let tries = 0; tries < (cfg.terrainTries ?? 50); tries++) {
         const piece = randomPiece(rng, cfg, candidates);
         const twin = piece.hexes.map(mirror);
@@ -180,6 +227,7 @@ export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}
 
     if (!isConnected(cfg.boardRadius, used)) continue;
     if (!zonesConnected(cfg.boardRadius, used, zones, controlPointHexes())) continue;
+    if (sites && !sites.every((site) => zonesConnected(cfg.boardRadius, used, zones, site))) continue;
 
     const heights: Record<string, TerrainHeight> = {};
     for (const t of terrain) for (const h of t.hexes) heights[hexKey(h)] = t.height;
@@ -190,6 +238,7 @@ export function generateMap(cfg: GameConfig, seed: number, opts: MapOptions = {}
       controlPoint: controlPointHexes(),
       deployShape,
       deployZones: zones,
+      ...(sites ? { sites } : {}),
     };
   }
   throw new Error('Could not generate a valid map');

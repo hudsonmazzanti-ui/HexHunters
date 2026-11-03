@@ -10,7 +10,7 @@ export interface MissionWin {
 /**
  * One mission (the game's objective). Picked at random each game from config.missions.
  * The engine calls the scoring hooks. A mission adds points and events, and the engine
- * ends the game when a side reaches config.pointsToWin, or when a hook returns a win.
+ * ends the game when a side reaches the mission's points to win, or when a hook returns a win.
  */
 export interface MissionDef {
   name: string;
@@ -26,6 +26,10 @@ export interface MissionDef {
   usesControlPoint: boolean;
   /** Is the game won on points (shown in the top bar)? */
   usesPoints: boolean;
+  /** Points needed to win (default config.pointsToWin). */
+  pointsToWin?(config: GameConfig): number;
+  /** Does the map need Domination's three sites? */
+  sites?: boolean;
   /** Extra state at the start of the game (e.g. the flag on the center hex). */
   setup?(state: GameState): void;
   /** Models the Standard Bearer's aura boosts (+2 when acting): on the point, or the flag carrier. */

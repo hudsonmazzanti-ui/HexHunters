@@ -32,7 +32,7 @@ export type SpecialId =
   | 'premiumShot';
 
 /** Game objectives (see src/core/missions/). One is picked at random each game. */
-export type MissionId = 'koth' | 'ctf';
+export type MissionId = 'koth' | 'ctf' | 'dom';
 
 /** Battlefield Conditions (see src/core/conditions/). One is picked at random each game. */
 export type ConditionId =
@@ -141,7 +141,10 @@ export interface GameConfig {
    * weight / total (see src/core/conditions/). Leave one out, or give it 0, to disable it.
    */
   conditions: Partial<Record<ConditionId, number>>;
+  /** Points to win King of the Hill. */
   pointsToWin: number;
+  /** Points to win Domination. */
+  dominationPointsToWin: number;
   /** Maximum total cost of each player's army. */
   armyPointLimit: number;
   /** Max heroes per army. */
@@ -250,6 +253,11 @@ export interface GameMap {
   deployShape: string;
   /** deployZones[player] = hexes that player may deploy on. */
   deployZones: [Hex[], Hex[]];
+  /**
+   * Domination: the three 7-hex sites (center site first, then the two mirrored flank
+   * sites); each lists its center hex first. Absent in other missions.
+   */
+  sites?: Hex[][];
 }
 
 export interface Unit {
@@ -341,6 +349,8 @@ export interface GameState {
   flag: Flag | null;
   /** Flag drops made during the current action (reported as events when it finishes). */
   flagChanges: FlagChange[];
+  /** Domination: who owns each of map.sites (null = nobody yet). Empty in other missions. */
+  siteOwners: (PlayerId | null)[];
   units: Unit[];
   phase: Phase;
   current: PlayerId;

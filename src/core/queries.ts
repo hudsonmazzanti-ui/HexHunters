@@ -143,6 +143,25 @@ export const maxReach = (state: GameState): number => CONDITIONS[state.condition
 /** Attack range after the Condition (Fog caps it). */
 export const effectiveRange = (state: GameState, unit: Unit): number => Math.min(unitDef(state, unit).range, maxReach(state));
 
+/** Domination: which site (index into map.sites) this hex is in, or -1. */
+export const siteIndexAt = (state: GameState, h: Hex): number =>
+  (state.map.sites ?? []).findIndex((site) => site.some((s) => hexEquals(s, h)));
+
+/** Domination: living models of `player` inside site `i`. */
+export const unitsInSite = (state: GameState, i: number, player: PlayerId): Unit[] =>
+  livingUnits(state, player).filter((u) => state.map.sites![i].some((h) => hexEquals(h, u.pos!)));
+
+/** Why this model can't claim the site it stands in right now, or null if it can (Domination). */
+export function claimBlockedReason(state: GameState, unit: Unit): string | null {
+  const i = unit.pos ? siteIndexAt(state, unit.pos) : -1;
+  if (i < 0) return 'Not in a site';
+  if (state.siteOwners[i] === unit.owner) return 'Already yours';
+  if (unitsInSite(state, i, other(unit.owner)).length) return 'Enemy inside';
+  if (!canAct(state, unit)) return 'This model cannot act';
+  if (unit.specialUsed || unit.attacked) return 'Already acted';
+  return null;
+}
+
 /** Why this model can't pick up the flag right now, or null if it can (Capture the Flag). */
 export function pickUpBlockedReason(state: GameState, unit: Unit): string | null {
   if (!state.flag?.pos || !unit.pos || !hexEquals(state.flag.pos, unit.pos)) return 'Not on the flag';

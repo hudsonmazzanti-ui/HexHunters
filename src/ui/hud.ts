@@ -4,7 +4,7 @@
  * The controller builds a plain PanelModel; this module only draws it.
  */
 import { firstPlayerOfRound } from '../core/game';
-import { MISSIONS } from '../core/missions';
+import { MISSIONS, missionPointsToWin } from '../core/missions';
 import type { GameState } from '../core/types';
 
 export { PLAYER_COLORS } from './theme';
@@ -61,7 +61,8 @@ export function renderTopBar(state: GameState): void {
       return div;
     }
     const pts = h('span', 'pts', String(state.scores[p]));
-    const of = h('span', 'of', `/${state.config.pointsToWin}`);
+    // The target depends on the mission, which isn't revealed until the armies are built.
+    const of = h('span', 'of', state.phase === 'build' ? '' : `/${missionPointsToWin(state.config, state.mission)}`);
     if (p === 0) div.append(dot, pts, of);
     else div.append(pts, of, dot);
     return div;

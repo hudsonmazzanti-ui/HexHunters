@@ -422,9 +422,11 @@ describe('Random missions', () => {
   it('each game picks one from the pool, seeded: the same seed always gives the same mission', () => {
     const seeds = Array.from({ length: 400 }, (_, i) => i + 1);
     const picks = seeds.map((seed) => newGame(DEFAULT_CONFIG, seed).mission);
-    const ctfShare = picks.filter((m) => m === 'ctf').length / picks.length;
-    expect(ctfShare).toBeGreaterThan(0.4);
-    expect(ctfShare).toBeLessThan(0.6);
+    for (const m of ['koth', 'ctf', 'dom']) {
+      const share = picks.filter((x) => x === m).length / picks.length;
+      expect(share).toBeGreaterThan(0.27); // a third each
+      expect(share).toBeLessThan(0.4);
+    }
     expect(seeds.map((seed) => pickMission(DEFAULT_CONFIG, seed))).toEqual(picks);
   });
 

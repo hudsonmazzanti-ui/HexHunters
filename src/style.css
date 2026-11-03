@@ -1530,3 +1530,32 @@ button.danger {
   display: grid;
   place-items: center;
 }
+
+/* ---- Domination: three sites, tinted and outlined in their owner's color ---- */
+.site {
+  pointer-events: none;
+}
+.site-hex {
+  stroke: none;
+  fill: color-mix(in srgb, var(--c-accent) 26%, transparent);
+}
+.site-outline {
+  stroke: var(--c-cp-edge);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+.site.owner-0 .site-hex {
+  fill: color-mix(in srgb, var(--c-p0) 34%, transparent);
+}
+.site.owner-0 .site-outline {
+  stroke: var(--c-p0-dark);
+}
+.site.owner-1 .site-hex {
+  fill: color-mix(in srgb, var(--c-p1) 34%, transparent);
+}
+.site.owner-1 .site-outline {
+  stroke: var(--c-p1-dark);
+}
+.zone-map .site {
+  fill: var(--c-accent);
+}
