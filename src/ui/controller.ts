@@ -939,6 +939,7 @@ export class Controller {
         model.roster.push({
           id: u.id,
           label: def.label,
+          type: u.type,
           owner: u.owner,
           // The Behemoth has no die: its chip shows its armor instead.
           die:

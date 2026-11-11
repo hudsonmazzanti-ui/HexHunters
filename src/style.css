@@ -70,7 +70,6 @@ h2,
 .result-miss,
 .unit .label,
 .badge text,
-.terrain-label,
 .float-text,
 .moon text,
 .uses text,
@@ -219,7 +218,8 @@ button.danger {
 }
 
 .hex-base {
-  fill: var(--c-tile);
+  /* The felt mat: the tile color with a fine noise texture (pattern in board.ts). */
+  fill: url(#felt);
   stroke: var(--c-tile-edge);
   stroke-width: 1;
 }
@@ -236,29 +236,41 @@ button.danger {
   stroke-linejoin: round;
 }
 
-.terrain {
-  stroke-width: 1.5;
+/* Raised stone terrain (board.ts drawTerrain): shadow, two lit side faces, top face. */
+.terrain polygon {
   stroke-linejoin: round;
-}
-
-.terrain.h1 {
-  fill: var(--c-terrain1);
-  stroke: var(--c-terrain1-edge);
-}
-
-.terrain.h2 {
-  fill: var(--c-terrain2);
-  stroke: var(--c-terrain2-edge);
-}
-
-.terrain-label {
-  font-size: 14px;
-  font-weight: 700;
-  fill: color-mix(in srgb, var(--c-white) 85%, transparent);
-  text-anchor: middle;
-  dominant-baseline: central;
   pointer-events: none;
 }
+.terrain-shadow {
+  fill: color-mix(in srgb, var(--c-terrain-shadow) 22%, transparent);
+}
+.terrain-side {
+  stroke: var(--c-stone-edge);
+  stroke-width: 1;
+}
+.terrain-side.side-light {
+  fill: var(--c-stone-side-light);
+}
+.terrain-side.side-dark {
+  fill: var(--c-stone-side-dark);
+}
+.terrain-top {
+  stroke: var(--c-stone-edge);
+  stroke-width: 1.5;
+}
+.terrain.h1 .terrain-top {
+  fill: var(--c-stone1-top);
+}
+.terrain.h2 .terrain-top {
+  fill: var(--c-stone2-top);
+}
+.terrain.boulder .terrain-top {
+  fill: var(--c-boulder-top);
+}
+.terrain.boulder .terrain-side {
+  fill: var(--c-boulder-side);
+}
+
 
 .shade {
   fill: transparent;
@@ -299,7 +311,7 @@ button.danger {
 }
 
 /* The Dragon lifts off while flying. */
-.unit.airborne .body {
+.unit.airborne .mini {
   filter: drop-shadow(0 7px 5px color-mix(in srgb, var(--c-black) 55%, transparent));
 }
 
@@ -307,9 +319,33 @@ button.danger {
   opacity: 0;
 }
 
+/* Tabletop miniature (board.ts createUnit): base edge, team rim, bevel, dark top, figure. */
 .unit .body {
-  stroke: var(--c-white);
-  stroke-width: 2.5;
+  stroke: var(--c-mini-ink);
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+}
+.unit .mini-shadow {
+  fill: color-mix(in srgb, var(--c-black) 28%, transparent);
+}
+.unit.p0 .mini-edge {
+  fill: var(--c-p0-dark);
+}
+.unit.p1 .mini-edge {
+  fill: var(--c-p1-dark);
+}
+.unit .mini-bevel,
+.unit .mini-icon,
+.unit .mini-shine {
+  pointer-events: none;
+}
+.unit .mini-top {
+  stroke: var(--c-mini-ink);
+  stroke-opacity: 0.45;
+  stroke-width: 1.2;
+}
+.unit .mini-shine {
+  fill: color-mix(in srgb, var(--c-white) 22%, transparent);
 }
 
 .unit.p0 .body {
@@ -319,7 +355,7 @@ button.danger {
   fill: var(--p1);
 }
 
-.unit.spent .body {
+.unit.spent .mini {
   filter: saturate(0.35) brightness(0.8);
 }
 
@@ -1055,6 +1091,8 @@ button.danger {
 /* A crawling Zombie is drawn small with a ragged, dashed outline. */
 .unit.crawling .body {
   stroke-dasharray: 3 2;
+}
+.unit.crawling .mini {
   filter: saturate(0.6) brightness(0.85);
 }
 .unit.resting {
@@ -1577,4 +1615,46 @@ button.danger {
 }
 .unit.in-aura .aura-ring {
   display: block;
+}
+
+/* ---- Objective props: banners on the control point and Domination sites ---- */
+.prop-banner {
+  pointer-events: none;
+}
+.prop-pole {
+  stroke: var(--c-mini-ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.prop-tip {
+  fill: var(--c-mini-gold);
+  stroke: var(--c-mini-ink);
+  stroke-width: 1;
+}
+.prop-shadow {
+  fill: color-mix(in srgb, var(--c-black) 30%, transparent);
+}
+.prop-cloth {
+  stroke: var(--c-mini-ink);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  fill: var(--c-accent);
+}
+.prop-banner.owner-0 .prop-cloth {
+  fill: var(--c-p0);
+}
+.prop-banner.owner-1 .prop-cloth {
+  fill: var(--c-p1);
+}
+
+/* Roster chips and builder cards show the model's miniature instead of a letter. */
+.chip .tag.mini,
+.unit-tag.mini {
+  background: none;
+  width: auto;
+  height: auto;
+}
+.mini-badge {
+  display: block;
+  filter: drop-shadow(0 1px 1.5px color-mix(in srgb, var(--c-black) 45%, transparent));
 }

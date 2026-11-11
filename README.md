@@ -425,6 +425,11 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
 - **Theme:** all colors, fonts (Rajdhani for headings, buttons and numbers; Inter for text), spacing and
   radii live in `src/ui/theme.ts`, which sets them as CSS variables at startup. `style.css` contains no raw colors
   (a test enforces this).
+- **Tabletop look:** the board is a felt game mat on a dark wooden table. Each model is a painted miniature: a
+  round base with a beveled rim in its team's color (base size = model size) and a figure icon on the base's dark
+  top (`src/ui/minis.ts`, one icon per unit type, also used in the roster chips and the army builder). Terrain is
+  raised stone, drawn back to front with lit side faces and a shadow; height 2 stands twice as tall as height 1
+  (no height numbers). Banners stand on the control point (gold) and on each Domination site (its owner's color).
 - **Movement:** models glide hex by hex along their real path (never through walls), about 130 ms per hex with
   eased start and stop. Hook pulls, Shove and Vault glide too; the Dragon lifts off while flying. Swap is
   instant; Undo slides the model straight back in 180 ms. Input is locked while an animation plays.
@@ -457,6 +462,7 @@ src/data/deployShapes.ts   deployment shapes (zone rules)
 sim/             balance simulator: headless runner, bot, armies, report (npm run sim)
 src/ui/          SVG board, pan/zoom camera, HUD, army builder, overlays, controller
 src/ui/theme.ts  every color, font, spacing step and radius (applied as CSS variables)
+src/ui/minis.ts  tabletop miniature figure icons, one per unit type
 src/ui/settings.ts, haptics.ts   menu settings (animations, haptics) and vibration
 tests/           Vitest unit tests
 ```

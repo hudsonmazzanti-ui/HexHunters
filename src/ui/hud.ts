@@ -9,11 +9,14 @@ import type { GameState } from '../core/types';
 
 export { PLAYER_COLORS } from './theme';
 import { COLORS, PLAYER_COLORS } from './theme';
+import { miniBadge } from './minis';
 export const PLAYER_NAMES = ['Player 1', 'Player 2'] as const;
 
 export interface RosterChip {
   id: string;
   label: string;
+  /** Unit type, for its miniature icon. */
+  type?: string;
   owner: 0 | 1;
   die: number | string | null;
   hp: number;
@@ -115,8 +118,11 @@ export function renderPanel(model: PanelModel, onChip: (id: string) => void): vo
     const roster = h('div', 'roster');
     for (const c of model.roster) {
       const chip = h('button', `chip${c.selected ? ' selected' : ''}${c.spent ? ' spent' : ''}`);
-      const tag = h('span', 'tag', c.label);
-      tag.style.background = PLAYER_COLORS[c.owner];
+      // The model's miniature (its letter label if it has no icon).
+      const badge = c.type ? miniBadge(c.type, PLAYER_COLORS[c.owner], c.owner === 0 ? COLORS.p0Dark : COLORS.p1Dark, 28) : null;
+      const tag = h('span', `tag${badge ? ' mini' : ''}`, badge ? '' : c.label);
+      if (badge) tag.append(badge);
+      else tag.style.background = PLAYER_COLORS[c.owner];
       chip.append(tag);
       if (c.die !== null) chip.append(h('span', 'd', String(c.die)));
       chip.append(h('span', 'h', c.note ?? `♥${c.hp}`));
