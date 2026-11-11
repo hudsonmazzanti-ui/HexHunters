@@ -17,7 +17,7 @@ import { play } from './sound';
 
 export const HEX_SIZE = 32;
 
-const BODY_RADIUS: Record<number, number> = { 1: 12, 2: 16, 3: 21 };
+const BODY_RADIUS: Record<number, number> = { 1: 14, 2: 18, 3: 23 };
 const LABEL_SIZE: Record<number, number> = { 1: 11, 2: 14, 3: 17 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
