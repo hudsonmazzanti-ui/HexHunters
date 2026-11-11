@@ -91,17 +91,29 @@ button {
   border-radius: var(--radius-md);
   min-height: var(--tap);
   padding: 0 var(--space-4);
-  background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent);
+  /* A raised key: lit top edge, darker lip underneath that it presses into. */
+  background: linear-gradient(180deg, var(--c-raised), var(--panel-2));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent),
+    0 3px 0 color-mix(in srgb, var(--c-black) 45%, transparent);
   cursor: pointer;
   touch-action: manipulation;
   transition:
     transform 80ms ease-out,
-    background-color 120ms;
+    box-shadow 80ms ease-out,
+    filter 120ms;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.12);
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translateY(2px) scale(0.985);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 10%, transparent),
+    0 1px 0 color-mix(in srgb, var(--c-black) 45%, transparent);
 }
 
 button:disabled {
@@ -110,15 +122,32 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--c-moon), var(--accent));
   color: var(--c-ink);
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 60%, transparent),
+    0 3px 0 var(--c-cp-edge),
+    0 6px 16px color-mix(in srgb, var(--c-accent) 28%, transparent);
+}
+button.primary:active:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 40%, transparent),
+    0 1px 0 var(--c-cp-edge);
 }
 
 button.danger {
-  background: var(--bad);
+  background: linear-gradient(180deg, var(--c-p1-light), var(--bad));
   color: var(--c-ink);
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 50%, transparent),
+    0 3px 0 var(--c-p1-dark);
+}
+
+button.big {
+  min-height: 60px;
+  font-size: 24px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 #app {
@@ -136,8 +165,14 @@ button.danger {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: var(--panel);
-  border-bottom: 4px solid var(--turn-color, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--turn-color, transparent) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--c-panel2), var(--panel));
+  border-bottom: 3px solid var(--turn-color, transparent);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--c-black) 55%, transparent);
+  position: relative;
+  z-index: 2;
+  transition: border-color 300ms;
 }
 
 .score {
@@ -153,9 +188,13 @@ button.danger {
 }
 
 .score .dot {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
+  box-shadow:
+    inset 0 2px 2px color-mix(in srgb, var(--c-white) 45%, transparent),
+    inset 0 -2px 2px color-mix(in srgb, var(--c-black) 35%, transparent),
+    0 0 8px currentColor;
 }
 
 .score .pts {
@@ -176,7 +215,10 @@ button.danger {
 
 .turn-label .who {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 0 14px color-mix(in srgb, currentColor 55%, transparent);
 }
 
 .turn-label .round {
@@ -610,7 +652,10 @@ button.danger {
 /* ---------- Bottom panel ---------- */
 
 #panel {
-  background: var(--panel);
+  background: linear-gradient(180deg, var(--c-panel2), var(--panel) 40%);
+  box-shadow: 0 -6px 20px color-mix(in srgb, var(--c-black) 50%, transparent);
+  position: relative;
+  z-index: 2;
   padding: var(--space-3) var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
@@ -648,6 +693,7 @@ button.danger {
 
 .chip.selected {
   border-color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
 
 .chip.spent {
@@ -762,8 +808,32 @@ button.danger {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--overlay-bg, color-mix(in srgb, var(--c-overlay) 94%, transparent));
+  /* The base color (a team's on handoffs), lit in the middle and dark at the edges. */
+  background:
+    radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--c-white) 13%, transparent), transparent 62%),
+    radial-gradient(ellipse at 50% 50%, transparent 45%, color-mix(in srgb, var(--c-black) 62%, transparent)),
+    var(--overlay-bg, color-mix(in srgb, var(--c-overlay) 94%, transparent));
   text-align: center;
+  overflow: hidden;
+  animation: overlay-in 220ms ease-out;
+}
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ov-hex-rect {
+  animation: hex-drift 26s linear infinite;
+}
+@keyframes hex-drift {
+  to {
+    transform: translate(-93.6px, -162px);
+  }
 }
 
 #overlay[hidden] {
@@ -771,6 +841,7 @@ button.danger {
 }
 
 .overlay-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -778,11 +849,111 @@ button.danger {
   max-width: 420px;
   width: 100%;
 }
+/* Each part rises in, one after the other. */
+.overlay-card > * {
+  animation: rise-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 60ms);
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+}
 
 .overlay-card h1 {
   margin: 0;
-  font-size: 38px;
+  font-size: 40px;
   line-height: 1.05;
+  letter-spacing: 0.02em;
+  text-shadow: 0 3px 0 color-mix(in srgb, var(--c-black) 45%, transparent), 0 0 28px color-mix(in srgb, var(--c-white) 25%, transparent);
+}
+.overlay-card .eyebrow {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  margin-bottom: -8px;
+}
+
+/* Logo, crests and trophy (emblems.ts). */
+.logo {
+  width: min(86vw, 380px);
+}
+.logo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--c-black) 60%, transparent));
+}
+.logo-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 58px;
+  letter-spacing: 0.04em;
+}
+.logo-tag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.3em;
+}
+.logo-emblem {
+  transform-origin: 160px 78px;
+  animation: emblem-pulse 3.2s ease-in-out infinite;
+}
+@keyframes emblem-pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}
+.title-screen {
+  gap: 34px;
+}
+.crest,
+.trophy {
+  position: relative;
+  width: 150px;
+  height: 160px;
+  display: grid;
+  place-items: center;
+}
+.crest svg,
+.trophy svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 14px color-mix(in srgb, var(--c-black) 55%, transparent));
+}
+.crest-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 46px;
+}
+/* Slowly turning rays of light behind a crest or trophy. */
+.crest-rays {
+  position: absolute;
+  inset: -90px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--ray) 34%, transparent) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask-image: radial-gradient(circle, var(--c-black) 22%, transparent 68%);
+  mask-image: radial-gradient(circle, var(--c-black) 22%, transparent 68%);
+  animation: rays-turn 26s linear infinite;
+}
+@keyframes rays-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.trophy svg {
+  animation: trophy-bob 2.4s ease-in-out infinite;
+}
+@keyframes trophy-bob {
+  50% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
 }
 
 .overlay-card p {
@@ -1484,6 +1655,12 @@ button.danger {
 }
 
 /* Animations off (menu setting): skip decorative motion. */
+.no-anim #overlay,
+.no-anim .overlay-card > *,
+.no-anim .ov-hex-rect,
+.no-anim .crest-rays,
+.no-anim .trophy svg,
+.no-anim .logo-emblem,
 .no-anim .die.rolling,
 .no-anim .reach-dot,
 .no-anim .unit.selected .ring.sel,

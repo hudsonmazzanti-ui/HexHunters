@@ -81,6 +81,7 @@ import { play } from './sound';
 import type { AttackStyle } from './fx';
 import { applySettingsClasses, getSettings, updateSettings } from './settings';
 import { showOverlay } from './overlay';
+import { crest, logo, trophy } from './emblems';
 
 // Opaque, so the next player's freshly rolled dice (or army) aren't visible during handoff.
 const HANDOFF_BG = HANDOFF_COLORS;
@@ -109,6 +110,8 @@ export class Controller {
   private board: BoardView;
   private camera!: Camera;
   private busy = false;
+  /** The title screen shows once per page load. */
+  private titleShown = false;
   /** The action whose events are playing (Undo snaps instead of gliding). */
   private action: Action | null = null;
 
@@ -143,6 +146,10 @@ export class Controller {
     }
     this.camera.fit();
     this.render();
+    if (!this.titleShown) {
+      this.titleShown = true;
+      await showOverlay({ title: '', art: logo(), className: 'title-screen', buttons: [{ label: 'Play', className: 'primary big', onClick: () => {} }] });
+    }
     await this.buildArmies();
   }
 
@@ -535,8 +542,10 @@ export class Controller {
     const limit = this.state.config.armyPointLimit;
     for (const p of [0, 1] as const) {
       await showOverlay({
+        eyebrow: 'Army building',
         title: `${PLAYER_NAMES[p]}: build your army`,
         lines: [`Spend up to ${limit} points.`, `${PLAYER_NAMES[other(p)]}, look away!`],
+        art: crest(p),
         color: HANDOFF_BG[p],
         tapText: 'Tap to start',
       });
@@ -643,6 +652,8 @@ export class Controller {
     const theirs = unplacedUnits(this.state, other(p)).length;
     const shape = DEPLOY_SHAPES[this.state.map.deployShape];
     await showOverlay({
+      eyebrow: 'Deployment',
+      art: crest(p),
       title: `${PLAYER_NAMES[p]}: place a model`,
       lines: [
         `Deployment: ${shape.name}. Place one model in your highlighted zone.`,
@@ -685,8 +696,9 @@ export class Controller {
       );
       lines.push(`Score: ${this.state.scores[0]} – ${this.state.scores[1]}`);
     }
-    lines.push(`Round ${round}, turn ${this.state.turnInRound + 1} of 2.`);
     await showOverlay({
+      eyebrow: `Round ${round} · Turn ${this.state.turnInRound + 1} of 2`,
+      art: crest(player),
       title: `${PLAYER_NAMES[player]}'s turn`,
       lines,
       color: HANDOFF_BG[player],
@@ -702,8 +714,11 @@ export class Controller {
       draw: 'Both armies were wiped out at the same time.',
     };
     await showOverlay({
+      eyebrow: winner === null ? 'Game over' : 'Victory',
+      art: winner === null ? undefined : trophy(),
+      className: 'victory',
       title: winner === null ? 'Draw!' : `${PLAYER_NAMES[winner]} wins!`,
-      lines: [reasons[reason]],
+      lines: [reasons[reason], `${this.state.round} round${this.state.round === 1 ? '' : 's'} played · ${survivors(this.state)}`],
       color: winner === null ? NEUTRAL_BG : HANDOFF_BG[winner],
       buttons: [
         { label: 'New game', className: 'primary', onClick: () => void this.start(randomSeed()) },
@@ -716,6 +731,7 @@ export class Controller {
     if (this.busy) return;
     const settings = getSettings();
     void showOverlay({
+      eyebrow: 'Paused',
       title: 'HexHunters',
       lines: [`Map seed: ${this.state.seed}`],
       buttons: [
@@ -1490,6 +1506,10 @@ export class Controller {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** "5 – 2 models left" for the win screen. */
+const survivors = (state: GameState): string =>
+  `${livingUnits(state, 0).length} – ${livingUnits(state, 1).length} models left`;
 
 /** How a unit's basic attack looks and sounds. */
 export function attackStyle(state: GameState, unit: Unit): AttackStyle {
