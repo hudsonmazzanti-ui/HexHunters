@@ -12,6 +12,8 @@ import type { Bounds } from './camera';
 import { getSettings } from './settings';
 import { miniIcon, miniIconScale } from './minis';
 import { COLORS } from './theme';
+import { type AttackStyle, Fx } from './fx';
+import { play } from './sound';
 
 export const HEX_SIZE = 32;
 
@@ -141,6 +143,8 @@ interface UnitNodes {
   size: number;
   /** Unit type it was drawn as; redrawn if it changes (a Werewolf transforming). */
   type: string;
+  /** Where it was last drawn (for its death effect). */
+  at: Point;
   moonText: SVGTextElement;
   /** Cracking Armor (Behemoth): current defense, "DEF 7 (-3)". */
   armor: SVGGElement;
@@ -152,12 +156,15 @@ interface UnitNodes {
 
 export class BoardView {
   readonly world: SVGGElement;
+  /** Combat and feedback effects (tracers, explosions, sparks...). */
+  readonly fx!: Fx;
   private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'goal' | 'cp' | 'dots' | 'units' | 'flag' | 'fx', SVGGElement>;
   private goals = new Map<string, SVGPolygonElement>();
   /** Domination: one group per site (its tinted hexes and outline), colored by owner. */
   private sites: SVGGElement[] = [];
   /** Domination: the banner standing on each site. */
   private siteBanners: SVGGElement[] = [];
+  private bounds: Bounds | null = null;
   /** Capture the Flag: the flag lying on the ground (hidden while carried). */
   private groundFlag: SVGGElement | null = null;
   private shades = new Map<string, SVGPolygonElement>();
@@ -172,18 +179,21 @@ export class BoardView {
   constructor(svg: SVGSVGElement) {
     svg.prepend(boardDefs());
     this.world = el('g', {}, svg);
+    // Effects shake an inner group, so the camera's transform on `world` is left alone.
+    const stage = el('g', { class: 'fx-stage' }, this.world);
     this.layers = {
-      base: el('g', {}, this.world),
-      terrain: el('g', {}, this.world),
-      watch: el('g', {}, this.world),
-      shade: el('g', {}, this.world),
-      goal: el('g', {}, this.world),
-      cp: el('g', {}, this.world),
-      dots: el('g', {}, this.world),
-      units: el('g', {}, this.world),
-      flag: el('g', {}, this.world),
-      fx: el('g', {}, this.world),
+      base: el('g', {}, stage),
+      terrain: el('g', {}, stage),
+      watch: el('g', {}, stage),
+      shade: el('g', {}, stage),
+      goal: el('g', {}, stage),
+      cp: el('g', {}, stage),
+      dots: el('g', {}, stage),
+      units: el('g', {}, stage),
+      flag: el('g', {}, stage),
+      fx: el('g', {}, stage),
     };
+    this.fx = new Fx(this.layers.fx, stage);
   }
 
   /**
@@ -235,6 +245,7 @@ export class BoardView {
     // owner's color), standing at the center hex's left so a model there doesn't hide it.
     this.siteBanners = (map.sites ?? []).map((site) => banner(site[0], this.layers.flag, 'owner-none'));
     if (showControlPoint) banner(map.controlPoint[0], this.layers.flag, 'cp');
+    this.bounds = bounds;
 
     return bounds;
   }
@@ -303,8 +314,10 @@ export class BoardView {
     for (const [id, nodes] of this.units) {
       if (alive.has(id)) continue;
       this.units.delete(id);
+      // Destroyed: the mini topples and fades in a puff of smoke.
       nodes.g.classList.add('dead');
-      setTimeout(() => nodes.g.remove(), 400);
+      this.fx.smoke(nodes.at, 7);
+      setTimeout(() => nodes.g.remove(), 450);
     }
   }
 
@@ -427,9 +440,17 @@ export class BoardView {
     el('rect', { x: -9, y: -6, width: 18, height: 12, rx: 3 }, uses);
     const usesText = el('text', {}, uses);
 
-    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, type: unit.type, armor, armorText, armorRect, usesText };
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, type: unit.type, at: { x: 0, y: 0 }, armor, armorText, armorRect, usesText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
+    // A new model drops onto the board.
+    if (getSettings().animations) {
+      try {
+        mini.animate([{ transform: 'translateY(-26px) scale(1.25)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translateY(-3px)', offset: 0.85 }, { transform: 'translateY(0)' }], { duration: 320, easing: 'ease-in' });
+      } catch {
+        // No animation support.
+      }
+    }
     return nodes;
   }
 
@@ -439,6 +460,7 @@ export class BoardView {
     if (!this.moving.has(unit.id)) {
       const p = hexToPixel(unit.pos!, HEX_SIZE);
       n.g.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      n.at = p;
     }
 
     const isCurrent = state.phase === 'play' && unit.owner === state.current;
@@ -529,6 +551,8 @@ export class BoardView {
     place(pts[0]); // start where it was (a render may already have drawn it at the end)
     try {
       const start = performance.now();
+      let step = -1;
+      if (opts.airborne) play('whoosh');
       await new Promise<void>((resolve) => {
         const frame = (now: number) => {
           const t = Math.min(1, (now - start) / duration);
@@ -536,7 +560,13 @@ export class BoardView {
           let i = 0;
           while (i < seg.length - 1 && d > seg[i]) d -= seg[i++];
           const k = seg[i] ? Math.min(1, d / seg[i]) : 1;
-          place({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k });
+          // A little hop on each hex (a footstep each time it lands); flyers glide.
+          const hop = opts.airborne || opts.durationMs ? 0 : Math.sin(Math.PI * k) * 5;
+          if (i !== step) {
+            step = i;
+            if (!opts.airborne) play('step');
+          }
+          place({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k - hop });
           if (t < 1) requestAnimationFrame(frame);
           else resolve();
         };
@@ -549,13 +579,86 @@ export class BoardView {
     }
   }
 
-  /** Brief line from attacker to target. */
-  shot(from: Hex, to: Hex, color: string): void {
-    const a = hexToPixel(from, HEX_SIZE);
-    const b = hexToPixel(to, HEX_SIZE);
-    const line = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: 'shot', stroke: color }, this.layers.fx);
-    line.style.stroke = color;
-    setTimeout(() => line.remove(), 650);
+  /** Pixel center of a hex (for effects). */
+  at(h: Hex): Point {
+    return hexToPixel(h, HEX_SIZE);
+  }
+
+  /**
+   * Plays an attack from one hex to another in the weapon's style and resolves when it
+   * lands: a tracer, a lobbed shell, a fire bolt, or (melee) the attacker lunging in.
+   */
+  async attackFx(unitId: string, from: Hex, to: Hex, style: AttackStyle, color: string): Promise<void> {
+    const a = this.at(from);
+    const b = this.at(to);
+    switch (style) {
+      case 'melee':
+        play('slash');
+        await this.lunge(unitId, a, b);
+        void this.fx.slash(b);
+        break;
+      case 'shell':
+        play('heavyShot');
+        await this.fx.shell(a, b);
+        break;
+      case 'fire':
+        play('flame');
+        await this.fx.fireBolt(a, b);
+        break;
+      case 'heavy':
+        play('heavyShot');
+        await this.fx.tracer(a, b, color, true);
+        break;
+      default:
+        play('shot');
+        await this.fx.tracer(a, b, color);
+    }
+  }
+
+  /** The model darts toward a point and back (melee). */
+  async lunge(unitId: string, a: Point, b: Point): Promise<void> {
+    const n = this.units.get(unitId);
+    if (!n || !getSettings().animations) return;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const reach = Math.min(len * 0.55, HEX_SIZE);
+    const to = `${((b.x - a.x) / len) * reach}px ${((b.y - a.y) / len) * reach}px`;
+    try {
+      const anim = n.g.animate([{ translate: '0px 0px' }, { translate: to, offset: 0.45 }, { translate: '0px 0px' }], { duration: 260, easing: 'ease-in-out' });
+      await new Promise((r) => setTimeout(r, 120)); // the blow lands at the far point
+      void anim.finished.catch(() => {});
+    } catch {
+      // No animation support.
+    }
+  }
+
+  /**
+   * A model's reaction to being attacked: sparks and a shake on a hit, a dust puff on a
+   * miss. (A destroyed model's own puff of smoke comes from render.)
+   */
+  impact(unitId: string, at: Hex, result: { hit: boolean; killed?: boolean }): void {
+    const p = this.at(at);
+    if (!result.hit) {
+      play('miss');
+      this.fx.sparks({ x: p.x + 14, y: p.y - 10 }, COLORS.fxMiss, 3, 12);
+      return;
+    }
+    play(result.killed ? 'kill' : 'hit');
+    this.fx.burstAt(p, 14, COLORS.white, 140);
+    this.fx.sparks(p, COLORS.fxGold, result.killed ? 12 : 7, result.killed ? 30 : 22);
+    if (result.killed) this.fx.shake(5);
+    const n = this.units.get(unitId);
+    if (n && getSettings().animations) {
+      n.g.classList.remove('hit');
+      void n.g.getBoundingClientRect(); // restart the animation
+      n.g.classList.add('hit');
+      setTimeout(() => n.g.classList.remove('hit'), 400);
+    }
+  }
+
+  /** Victory: confetti in the winner's colors over the whole board. */
+  celebrate(winner: PlayerId): void {
+    const c = winner === 0 ? [COLORS.p0, COLORS.p0Light] : [COLORS.p1, COLORS.p1Light];
+    if (this.bounds) this.fx.confetti(this.bounds, [...c, COLORS.accent, COLORS.white]);
   }
 
   /** Briefly highlights hexes (explosions, flames). */
@@ -569,7 +672,8 @@ export class BoardView {
   /** Text that floats up from a hex and fades out. */
   floatText(at: Hex, text: string, color: string): void {
     const p: Point = hexToPixel(at, HEX_SIZE);
-    const t = el('text', { x: p.x, y: p.y - 22, class: 'float-text', fill: color }, this.layers.fx);
+    const t = el('text', { x: p.x, y: p.y - 22, class: `float-text${/^-\d/.test(text) ? ' dmg' : ''}`, fill: color }, this.layers.fx);
+    t.style.transformOrigin = `${p.x}px ${p.y - 22}px`;
     t.textContent = text;
     setTimeout(() => t.remove(), 1150);
   }
@@ -581,6 +685,7 @@ export class BoardView {
       this.rolling.add(id);
       this.units.get(id)!.die.classList.add('rolling');
     });
+    if (ids.length && getSettings().animations) play('dice');
     const end = performance.now() + (getSettings().animations ? 700 : 0);
     while (performance.now() < end) {
       for (const id of ids) this.units.get(id)!.dieText.textContent = String(1 + Math.floor(Math.random() * sides));
@@ -595,5 +700,6 @@ export class BoardView {
       void n.die.getBoundingClientRect(); // restart the animation
       n.die.classList.add('pop');
     }
+    if (ids.length) play('diceLand');
   }
 }

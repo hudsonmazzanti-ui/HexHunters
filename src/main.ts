@@ -1,9 +1,15 @@
 import './style.css';
 import { applySettingsClasses } from './ui/settings';
 import { applyTheme } from './ui/theme';
+import { play, unlockSound } from './ui/sound';
 
 applyTheme();
 applySettingsClasses();
+unlockSound();
+// Every button gives a soft click.
+document.addEventListener('click', (e) => {
+  if ((e.target as Element | null)?.closest?.('button')) play('tap');
+});
 import { randomSeed } from './core/rng';
 import { DEFAULT_CONFIG } from './data/config';
 import { Controller } from './ui/controller';

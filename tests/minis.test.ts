@@ -20,3 +20,24 @@ describe('tabletop miniatures', () => {
     expect(miniIconScale(12, 1) / 12).toBeGreaterThan(miniIconScale(16, 2) / 16);
   });
 });
+
+describe('sound and attack styles', () => {
+  it('playing a sound without audio support (tests, old browsers) does nothing and never throws', async () => {
+    const { SOUND_NAMES, play } = await import('../src/ui/sound');
+    expect(SOUND_NAMES.length).toBeGreaterThan(15);
+    for (const name of SOUND_NAMES) expect(() => play(name)).not.toThrow();
+  });
+
+  it('each unit attacks in a fitting style', async () => {
+    const { attackStyle } = await import('../src/ui/controller');
+    const { makeState, addUnit } = await import('./helpers');
+    const { hex } = await import('../src/core/hex');
+    const s = makeState();
+    const style = (type: string) => attackStyle(s, addUnit(s, type, 0, hex(0, 0)));
+    expect(style('monster')).toBe('melee');
+    expect(style('artillery')).toBe('shell');
+    expect(style('dragon')).toBe('fire');
+    expect(style('sniper')).toBe('heavy');
+    expect(style('infantry')).toBe('bullet');
+  });
+});

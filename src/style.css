@@ -303,6 +303,15 @@ button.danger {
   stroke: var(--c-white);
   stroke-width: 1.5;
   pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    transform: scale(0.72);
+    opacity: 0.8;
+  }
 }
 
 /* Movement is tweened in JS (board.ts); anything else (Swap, Undo) snaps instantly. */
@@ -315,8 +324,41 @@ button.danger {
   filter: drop-shadow(0 7px 5px color-mix(in srgb, var(--c-black) 55%, transparent));
 }
 
+/* Destroyed: the mini topples, shrinks and fades (with a puff of smoke from fx.ts). */
 .unit.dead {
   opacity: 0;
+  transition: opacity 420ms ease-in;
+}
+.unit.dead .mini {
+  transform: rotate(50deg) scale(0.5);
+  transition: transform 420ms ease-in;
+}
+.unit.dead .badge,
+.unit.dead .ring {
+  display: none;
+}
+/* Hit: a white flash and a shake. */
+.unit.hit .mini {
+  animation: hit-flash 380ms ease-out;
+}
+@keyframes hit-flash {
+  0% {
+    filter: brightness(3) saturate(0);
+    transform: translate(0, 0) scale(1.12);
+  }
+  25% {
+    transform: translate(-4px, 1px);
+  }
+  45% {
+    filter: none;
+    transform: translate(4px, -1px);
+  }
+  65% {
+    transform: translate(-2px, 0);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 /* Tabletop miniature (board.ts createUnit): base edge, team rim, bevel, dark top, figure. */
@@ -376,6 +418,14 @@ button.danger {
 .unit.selected .ring.sel {
   display: block;
   stroke: var(--accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-accent) 90%, transparent));
+  animation: ring-breathe 1.6s ease-in-out infinite;
+}
+@keyframes ring-breathe {
+  50% {
+    stroke-width: 5;
+    opacity: 0.75;
+  }
 }
 
 .unit.target .ring.tgt {
@@ -449,6 +499,29 @@ button.danger {
 .die.rolling text {
   fill: var(--c-muted);
 }
+/* Rolling: the die tumbles and bounces until it lands. */
+.die.rolling {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: die-tumble 240ms linear infinite;
+}
+@keyframes die-tumble {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-7px) rotate(90deg);
+  }
+  50% {
+    transform: translateY(0) rotate(180deg);
+  }
+  75% {
+    transform: translateY(-4px) rotate(270deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
 .die.pop {
   animation: pop 300ms ease-out;
   transform-box: fill-box;
@@ -493,25 +566,39 @@ button.danger {
 
 @keyframes pop {
   0% {
-    transform: scale(1.8);
+    transform: scale(1.9);
+  }
+  55% {
+    transform: scale(0.88);
   }
   100% {
     transform: scale(1);
   }
 }
 
+/* Floating text punches in, hangs, then drifts up and fades. */
 @keyframes rise {
   0% {
     opacity: 0;
-    transform: translateY(0);
+    transform: translateY(6px) scale(0.4);
   }
-  15% {
+  12% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.35);
+  }
+  22% {
+    transform: translateY(-4px) scale(1);
+  }
+  70% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateY(-28px);
+    transform: translateY(-30px) scale(1);
   }
+}
+.float-text.dmg {
+  font-size: 28px;
 }
 
 @keyframes fade {
@@ -1397,6 +1484,9 @@ button.danger {
 }
 
 /* Animations off (menu setting): skip decorative motion. */
+.no-anim .die.rolling,
+.no-anim .reach-dot,
+.no-anim .unit.selected .ring.sel,
 .no-anim .die.pop,
 .no-anim .coin,
 .no-anim .overlay-card .tap {

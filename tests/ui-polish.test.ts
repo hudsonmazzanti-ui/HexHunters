@@ -23,8 +23,8 @@ afterEach(() => {
 describe('settings', () => {
   it('uses defaults when storage is missing, and still applies changes for the session', () => {
     vi.stubGlobal('localStorage', undefined);
-    expect(getSettings()).toEqual({ animations: true, haptics: true });
-    expect(updateSettings({ haptics: false })).toEqual({ animations: true, haptics: false });
+    expect(getSettings()).toEqual({ animations: true, haptics: true, sound: true });
+    expect(updateSettings({ haptics: false, sound: true })).toEqual({ animations: true, haptics: false, sound: true });
     expect(getSettings().haptics).toBe(false);
   });
 
@@ -32,9 +32,9 @@ describe('settings', () => {
     const storage = fakeStorage();
     vi.stubGlobal('localStorage', storage);
     updateSettings({ animations: false });
-    expect(JSON.parse(storage.data['hexhunters.settings'])).toEqual({ animations: false, haptics: true });
+    expect(JSON.parse(storage.data['hexhunters.settings'])).toEqual({ animations: false, haptics: true, sound: true });
     resetSettingsCache();
-    expect(getSettings()).toEqual({ animations: false, haptics: true });
+    expect(getSettings()).toEqual({ animations: false, haptics: true, sound: true });
   });
 
   it('ignores corrupted or blocked storage', () => {
