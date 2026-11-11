@@ -82,6 +82,20 @@ function boardDefs(): SVGDefsElement {
       <rect width="96" height="96" fill="${COLORS.tile}"/>
       <rect width="96" height="96" filter="url(#felt-noise)" fill="${COLORS.feltNoise}"/>
     </pattern>
+    <filter id="wood-grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="3"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 -0.12"/>
+    </filter>
+    <pattern id="wood" width="512" height="512" patternUnits="userSpaceOnUse">
+      <rect width="512" height="512" fill="${COLORS.boardGlow}"/>
+      <rect width="512" height="512" filter="url(#wood-grain)" fill="${COLORS.boardEdge}"/>
+      <path d="M0 170H512M0 342H512" stroke="${COLORS.boardEdge}" stroke-width="3" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="table-light" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="${COLORS.moon}" stop-opacity="0.10"/>
+      <stop offset="0.55" stop-color="${COLORS.black}" stop-opacity="0"/>
+      <stop offset="1" stop-color="${COLORS.black}" stop-opacity="0.6"/>
+    </radialGradient>
     <radialGradient id="mini-top" cx="0.4" cy="0.35" r="0.8">
       <stop offset="0" stop-color="${COLORS.miniTop}"/><stop offset="1" stop-color="${COLORS.miniTopDark}"/>
     </radialGradient>
@@ -178,6 +192,9 @@ export class BoardView {
 
   constructor(svg: SVGSVGElement) {
     svg.prepend(boardDefs());
+    // The wooden table under the mat (fixed: it doesn't pan or zoom with the board).
+    el('rect', { class: 'table-wood', width: '100%', height: '100%', fill: 'url(#wood)' }, svg);
+    el('rect', { class: 'table-light', width: '100%', height: '100%', fill: 'url(#table-light)' }, svg);
     this.world = el('g', {}, svg);
     // Effects shake an inner group, so the camera's transform on `world` is left alone.
     const stage = el('g', { class: 'fx-stage' }, this.world);
@@ -281,6 +298,15 @@ export class BoardView {
         el('polygon', { points: pts([a, b2, top[(i + 1) % 6], top[i]]), class: `terrain-side ${cls}` }, g);
       }
       el('polygon', { points: pts(top), class: 'terrain-top' }, g);
+      // Stone detail: a lit upper-left rim and a couple of cracks (fixed per hex).
+      const cx = top.reduce((a, p) => a + p.x, 0) / 6;
+      const cy = top.reduce((a, p) => a + p.y, 0) / 6;
+      const inner = top.map((p) => ({ x: cx + (p.x - cx) * 0.84, y: cy + (p.y - cy) * 0.84 }));
+      el('polyline', { points: pts([inner[3], inner[4], inner[5], inner[0]]), class: 'terrain-rim' }, g);
+      const k = Math.abs(h.q * 7 + h.r * 13) % 6;
+      const a1 = inner[k];
+      const a2 = inner[(k + 2) % 6];
+      el('path', { d: `M${a1.x.toFixed(1)} ${a1.y.toFixed(1)} L${(cx + (k % 2 ? 3 : -3)).toFixed(1)} ${(cy + 2).toFixed(1)} L${((a2.x + cx) / 2).toFixed(1)} ${((a2.y + cy) / 2).toFixed(1)}`, class: 'terrain-crack' }, g);
     }
   }
 
@@ -362,6 +388,7 @@ export class BoardView {
     // painted figure on the base's dark top (src/ui/minis.ts). Units without an icon keep
     // their letter label.
     const mini = el('g', { class: 'mini' }, g);
+    mini.style.animationDelay = `${-(this.units.size % 7) * 0.33}s`; // so they don't bob in unison
     el('ellipse', { cx: 2, cy: r * 0.5, rx: r * 1.02, ry: r * 0.45, class: 'mini-shadow' }, mini);
     el('circle', { cy: 2.5, r, class: 'mini-edge' }, mini);
     el('circle', { r, class: 'body' }, mini);
@@ -474,6 +501,8 @@ export class BoardView {
     cls.toggle('p0', unit.owner === 0);
     cls.toggle('p1', unit.owner === 1);
     cls.toggle('spent', spent);
+    // Models that can still do something this turn stand at the ready (a gentle bob).
+    cls.toggle('ready', isCurrent && !spent);
     cls.toggle('selected', o.selectedId === unit.id);
     cls.toggle('target', o.targetIds.has(unit.id));
     cls.toggle('special-target', o.specialTargetIds.has(unit.id));

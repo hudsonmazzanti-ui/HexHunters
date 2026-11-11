@@ -9,6 +9,8 @@ export interface Settings {
   haptics: boolean;
   /** Sound effects (synthesized; see sound.ts). */
   sound: boolean;
+  /** Background music (generated; see sound.ts). */
+  music: boolean;
 }
 
 const KEY = 'hexhunters.settings';
@@ -22,7 +24,7 @@ function prefersReducedMotion(): boolean {
 }
 
 export function defaultSettings(): Settings {
-  return { animations: !prefersReducedMotion(), haptics: true, sound: true };
+  return { animations: !prefersReducedMotion(), haptics: true, sound: true, music: true };
 }
 
 function load(): Settings {
@@ -35,6 +37,7 @@ function load(): Settings {
       animations: typeof saved.animations === 'boolean' ? saved.animations : defaults.animations,
       haptics: typeof saved.haptics === 'boolean' ? saved.haptics : defaults.haptics,
       sound: typeof saved.sound === 'boolean' ? saved.sound : defaults.sound,
+      music: typeof saved.music === 'boolean' ? saved.music : defaults.music,
     };
   } catch {
     return defaults;

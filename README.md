@@ -435,7 +435,9 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   Every special has its own effect (grenade blast, Hack and Spot beams, flame wash, Hook rope, rubble...).
   Dice tumble and bounce; floating numbers punch in; victory showers confetti.
 - **Sound** (`src/ui/sound.ts`): synthesized effects with no audio files (shots, hits, explosions, dice, steps,
-  claims, turn and victory jingles). The ☰ menu has a Sound toggle.
+  claims, turn and victory jingles), and a quiet generated score: slow pads, bass and a sparse melody, with a soft
+  pulse joining during play. Levels were set from offline renders (no clipping, effects above the music). The ☰
+  menu has Sound and Music toggles.
 - **Screens** (`src/ui/emblems.ts`): a title screen with the logo, player crests on every handoff, a trophy on the
   win screen, a drifting hex backdrop, and parts that rise in one after the other.
 - **Weather:** the Condition shows over the board (drifting fog, sand or wind streaks, a red moon cast, mud).
@@ -445,7 +447,7 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
 - **Haptics:** a short tap when selecting a model or confirming a move or placement, a buzz on a hit, and a
   stronger pattern when a model dies (`navigator.vibrate`; silently does nothing where unsupported, e.g. iOS
   Safari).
-- **Settings:** the ☰ menu has Animations, Sound and Haptics toggles, remembered in the browser. Animations default to
+- **Settings:** the ☰ menu has Animations, Sound, Music and Haptics toggles, remembered in the browser. Animations default to
   off when the device asks for reduced motion.
 
 ## Code layout

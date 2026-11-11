@@ -77,7 +77,7 @@ import { Camera } from './camera';
 import { PLAYER_COLORS, PLAYER_NAMES, type PanelAction, type PanelModel, renderPanel, renderTopBar } from './hud';
 import { COLORS, HANDOFF_COLORS } from './theme';
 import { haptics } from './haptics';
-import { play } from './sound';
+import { play, setMusic } from './sound';
 import type { AttackStyle } from './fx';
 import { applySettingsClasses, getSettings, updateSettings } from './settings';
 import { showOverlay } from './overlay';
@@ -770,6 +770,15 @@ export class Controller {
           },
         },
         {
+          label: `Music: ${settings.music ? 'On' : 'Off'}`,
+          className: 'toggle',
+          onClick: () => {
+            updateSettings({ music: !settings.music });
+            setMusic(this.state.phase === 'play' ? 'battle' : 'menu');
+            this.openMenu();
+          },
+        },
+        {
           label: `Haptics: ${settings.haptics ? 'On' : 'Off'}`,
           className: 'toggle',
           onClick: () => {
@@ -959,6 +968,7 @@ export class Controller {
     renderTopBar(this.state);
     this.renderBriefTools();
     this.renderWeather();
+    setMusicFor(this.state.phase);
     this.board.render(this.state, this.boardOverlay());
     renderPanel(this.panelModel(), (id) => this.onChip(id));
   }
@@ -1521,6 +1531,14 @@ export class Controller {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Calm music in menus and setup, the battle pulse during play. */
+let musicPhase = '';
+function setMusicFor(phase: string): void {
+  if (phase === musicPhase) return;
+  musicPhase = phase;
+  setMusic(phase === 'play' ? 'battle' : 'menu');
+}
 
 /** "5 – 2 models left" for the win screen. */
 const survivors = (state: GameState): string =>
