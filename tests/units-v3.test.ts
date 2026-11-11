@@ -36,7 +36,8 @@ describe('Monster', () => {
   it('large models are one step slower, but never below speed 2 (pacing rebalance)', () => {
     expect([UNITS.monster.speed, UNITS.warlord.speed, UNITS.dragon.speed, UNITS.werewolfbeast.speed]).toEqual([2, 2, 3, 3]);
     for (const def of Object.values(UNITS)) if (def.size === 3) expect(def.speed).toBeGreaterThanOrEqual(2);
-    expect([UNITS.heavy.speed, UNITS.grappler.speed, UNITS.hillgiant.speed, UNITS.behemoth.speed]).toEqual([2, 2, 2, 2]);
+    expect([UNITS.heavy.speed, UNITS.grappler.speed, UNITS.hillgiant.speed]).toEqual([2, 2, 2]);
+    expect(UNITS.behemoth.speed).toBe(3); // balance: +1 after the large-model rule
   });
 
   it('Heavy deals 3 and the Hill Giant has defense 5 (rebalanced)', () => {

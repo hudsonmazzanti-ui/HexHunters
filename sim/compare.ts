@@ -12,7 +12,7 @@
 import { entryName } from '../src/core/army';
 import { Rng } from '../src/core/rng';
 import type { GameConfig } from '../src/core/types';
-import { type Summary, score, summarize } from './report';
+import { type SeatSplit, type Summary, score, seatGap, summarize } from './report';
 import { MISSIONS } from '../src/core/missions';
 import type { MissionId } from '../src/core/types';
 import type { GameRecord } from './runGame';
@@ -104,6 +104,10 @@ export interface MetricGroups {
   units: Metric[];
   heroes: Metric[];
   spread: Metric[];
+  /** The same preset and focus unit/hero scores, for each mission's games alone. */
+  byMission: { mission: MissionId; name: string; presets: Metric[]; units: Metric[]; heroes: Metric[] }[];
+  /** Going first minus going second (score gap): every preset, hero and unit, overall; presets per mission. */
+  seat: { presets: Metric[]; heroes: Metric[]; units: Metric[]; presetsByMission: { name: string; presets: Metric[] }[] };
 }
 
 export function compareMetrics(results: VariantResult[], exp: Experiment, minGames: number): MetricGroups {
@@ -153,28 +157,33 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
       },
       rate(`${name}: wipeout wins`, (x) => ({ k: of(x)?.reasons.elimination ?? 0, n: of(x)?.games ?? 0 })),
       rate(`${name}: objective wins`, (x) => ({ k: (of(x)?.reasons.points ?? 0) + (of(x)?.reasons.capture ?? 0), n: of(x)?.games ?? 0 })),
+      rate(`${name}: first mover wins`, (x) => ({ k: of(x)?.firstMover.wins ?? 0, n: (of(x)?.firstMover.wins ?? 0) + (of(x)?.firstMover.losses ?? 0) })),
     );
   }
 
   const presetNames = [...new Set(results.flatMap((r) => r.summary.presetNames).concat(results.flatMap((r) => r.excluded.map((e) => e.split(':')[0]))))];
-  const presets: Metric[] = presetNames.map((name) => ({
+  // `pick` chooses the summary: the whole run, or one mission's games.
+  type Pick = (x: Summary) => Summary | undefined;
+  const all: Pick = (x) => x;
+  const presetMetrics = (pick: Pick): Metric[] => presetNames.map((name) => ({
     label: name,
     format: 'pct',
     cells: results.map((r) => {
-      const t = r.summary.presets[name];
+      const t = pick(r.summary)?.presets[name];
       if (!t?.games) return { value: null, se: null, n: 0, note: r.excluded.some((e) => e.startsWith(`${name}:`)) ? 'not legal' : undefined };
       const p = score(t);
       return { value: p, se: propSe(p, t.games), n: t.games };
     }),
   }));
+  const presets = presetMetrics(all);
 
   const config = results[0].config;
   const isHero = (id: string) => !!(config.units[id]?.hero ?? config.squads[id]?.hero);
-  const focus = (ids: string[]): Metric[] => ids.map((id) => ({
+  const focus = (ids: string[], pick: Pick = all): Metric[] => ids.map((id) => ({
     label: entryName(config, id),
     format: 'pct',
     cells: results.map((r) => {
-      const t = r.summary.entries[id];
+      const t = pick(r.summary)?.entries[id];
       if (!t?.games) return { value: null, se: null, n: 0 };
       const p = score(t);
       return { value: p, se: propSe(p, t.games), n: t.games };
@@ -194,7 +203,36 @@ export function compareMetrics(results: VariantResult[], exp: Experiment, minGam
     spreadMetric(`Unit/hero spread (SD, ${minGames}+ games)`, (x) => x.entries, 'sd', 'entriesSd'),
     spreadMetric('Unit/hero range (best − worst)', (x) => x.entries, 'range', 'entriesRange'),
   ];
-  return { flow, presets, units: focus(exp.focusUnits.filter((id) => !isHero(id))), heroes: focus(exp.focusUnits.filter(isHero)), spread };
+  const unitIds = exp.focusUnits.filter((id) => !isHero(id));
+  const heroIds = exp.focusUnits.filter(isHero);
+  const byMission = missions.map((m) => {
+    const pick: Pick = (x) => x.byMission[m];
+    return { mission: m, name: MISSIONS[m].name, presets: presetMetrics(pick), units: focus(unitIds, pick), heroes: focus(heroIds, pick) };
+  });
+  // Going first vs second: the score gap (1st − 2nd) and its standard error.
+  const gapMetric = (label: string, pick: (x: Summary) => SeatSplit | undefined): Metric => ({
+    label,
+    format: 'pct',
+    cells: results.map((r) => {
+      const g = seatGap(pick(r.summary));
+      if (!g) return { value: null, se: null, n: 0 };
+      const se = Math.sqrt((g.first * (1 - g.first)) / g.n1 + (g.second * (1 - g.second)) / g.n2);
+      return { value: g.gap, se, n: g.n1 + g.n2 };
+    }),
+  });
+  const entryIds = [...new Set(results.flatMap((r) => Object.keys(r.summary.entries)))].sort((a, b) =>
+    entryName(config, a).localeCompare(entryName(config, b)),
+  );
+  const seat = {
+    presets: presetNames.map((n) => gapMetric(n, (x) => x.seat.presets[n])),
+    heroes: entryIds.filter(isHero).map((id) => gapMetric(entryName(config, id), (x) => x.seat.entries[id])),
+    units: entryIds.filter((id) => !isHero(id)).map((id) => gapMetric(entryName(config, id), (x) => x.seat.entries[id])),
+    presetsByMission: missions.map((m) => ({
+      name: MISSIONS[m].name,
+      presets: presetNames.map((n) => gapMetric(n, (x) => x.byMission[m]?.seat.presets[n])),
+    })),
+  };
+  return { flow, presets, units: focus(unitIds), heroes: focus(heroIds), spread, byMission, seat };
 }
 
 /** Change from the baseline and whether it's beyond 2 standard errors (null when it can't be judged). */
@@ -233,6 +271,15 @@ export function compareCsv(results: VariantResult[], exp: Experiment, minGames: 
     ...g.presets.map((m) => ({ ...m, label: `Preset: ${m.label}` })),
     ...g.units.map((m) => ({ ...m, label: `Random armies: ${m.label}` })),
     ...g.heroes.map((m) => ({ ...m, label: `Random armies (hero): ${m.label}` })),
+    ...g.byMission.flatMap((b) => [
+      ...b.presets.map((m) => ({ ...m, label: `${b.name}: preset ${m.label}` })),
+      ...b.units.map((m) => ({ ...m, label: `${b.name}: random armies ${m.label}` })),
+      ...b.heroes.map((m) => ({ ...m, label: `${b.name}: random armies (hero) ${m.label}` })),
+    ]),
+    ...g.seat.presets.map((m) => ({ ...m, label: `1st − 2nd gap: preset ${m.label}` })),
+    ...g.seat.presetsByMission.flatMap((b) => b.presets.map((m) => ({ ...m, label: `1st − 2nd gap (${b.name}): preset ${m.label}` }))),
+    ...g.seat.heroes.map((m) => ({ ...m, label: `1st − 2nd gap: hero ${m.label}` })),
+    ...g.seat.units.map((m) => ({ ...m, label: `1st − 2nd gap: unit ${m.label}` })),
     ...g.spread,
   ];
   const header = ['variant', ...metrics.flatMap((m) => [m.label, `${m.label} (change)`, `${m.label} (beyond noise)`])];
@@ -321,6 +368,21 @@ ${table('Game flow', g.flow, results)}
 ${table('Preset armies (score)', g.presets, results)}
 ${g.units.length ? table('Random armies: score when the army includes the unit…', g.units, results) : ''}
 ${g.heroes.length ? table('Random armies: score when the army includes the hero…', g.heroes, results) : ''}
+${g.byMission
+  .map(
+    (b) =>
+      table(`${b.name}: preset armies (score)`, b.presets, results) +
+      (b.heroes.length || b.units.length ? table(`${b.name}: random armies, heroes and units (score)`, [...b.heroes, ...b.units], results) : ''),
+  )
+  .join('\n')}
+<h2>Going first vs second</h2>
+<p class="muted">Each value is the score gap 1st − 2nd (how much better the army does when it wins the coin flip), in points.
+The baseline row shows its 95% margin; under the other rows, the change from the baseline (green/red bold = beyond noise).
+Each variant's own report has the full table (1st and 2nd scores, overall and per mission).</p>
+${table('Gap: preset armies (overall)', g.seat.presets, results)}
+${g.seat.presetsByMission.map((b) => table(`Gap: preset armies (${b.name})`, b.presets, results)).join('\n')}
+${table('Gap: heroes in random armies (overall)', g.seat.heroes, results)}
+${table('Gap: units in random armies (overall)', g.seat.units, results)}
 ${table('Overall spread', g.spread, results)}
 
 <h2>Variants</h2>

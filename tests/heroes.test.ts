@@ -68,11 +68,11 @@ describe('hero data and army limit', () => {
 });
 
 describe('Field Marshal', () => {
-  it('gives your Infantry +2 on their roll every turn, without an action', () => {
+  it('gives your Infantry within 3 hexes +2 on their roll every turn, without an action', () => {
     const s = makeState();
-    addUnit(s, 'marshal', 0, hex(-5, 5));
-    const inf = addUnit(s, 'infantry', 0, hex(0, 3));
-    const medic = addUnit(s, 'medic', 0, hex(1, 3));
+    addUnit(s, 'marshal', 0, hex(-2, 5));
+    const inf = addUnit(s, 'infantry', 0, hex(0, 3)); // 2 away
+    const medic = addUnit(s, 'medic', 0, hex(-1, 4));
     const enemyInf = addUnit(s, 'infantry', 1, hex(0, -3));
     expect(aurasOn(s, inf)).toEqual(['marshal']);
     expect(aurasOn(s, medic)).toEqual([]);
@@ -85,9 +85,25 @@ describe('Field Marshal', () => {
     expect(getUnit(p1, medic.id)!.dieBonus).toBe(0);
   });
 
+  it('only reaches Infantry within 3 hexes at the start of the turn', () => {
+    const s = makeState();
+    addUnit(s, 'marshal', 0, hex(0, 5));
+    const at3 = addUnit(s, 'infantry', 0, hex(3, 4)); // 3 away
+    const at4 = addUnit(s, 'infantry', 0, hex(-4, 5)); // 4 away
+    addUnit(s, 'infantry', 1, hex(0, -3));
+    expect(aurasOn(s, at3)).toEqual(['marshal']);
+    expect(aurasOn(s, at4)).toEqual([]);
+    const p1 = run(s, ...NEXT_P1_TURN).state;
+    expect(getUnit(p1, at3.id)!.dieBonus).toBe(2);
+    expect(getUnit(p1, at4.id)!.dieBonus).toBe(0);
+    // The bonus is decided when the turn starts: walking away afterwards keeps this turn's die.
+    const moved = run(p1, { type: 'move', unitId: at3.id, to: hex(3, 1) }).state;
+    expect(getUnit(moved, at3.id)!.die).toBe(getUnit(p1, at3.id)!.die);
+  });
+
   it('stacks with manual Prep for +4', () => {
     const s = makeState();
-    addUnit(s, 'marshal', 0, hex(-5, 5));
+    addUnit(s, 'marshal', 0, hex(-2, 5));
     const inf = addUnit(s, 'infantry', 0, hex(0, 3));
     addUnit(s, 'infantry', 1, hex(0, -3));
     const state = run(s, { type: 'special', unitId: inf.id }, ...NEXT_P1_TURN).state;
@@ -96,13 +112,21 @@ describe('Field Marshal', () => {
     expect(u.prepped).toBe(false);
   });
 
-  it('keeps working after the Field Marshal dies', () => {
+  it('stops once the Field Marshal dies (it has to be there)', () => {
     const s = makeState();
-    const fm = addUnit(s, 'marshal', 0, hex(-5, 5));
+    const fm = addUnit(s, 'marshal', 0, hex(-2, 5));
     const inf = addUnit(s, 'infantry', 0, hex(0, 3));
     addUnit(s, 'infantry', 1, hex(0, -3));
     const state = run(kill(s, fm.id), ...NEXT_P1_TURN).state;
-    expect(getUnit(state, inf.id)!.dieBonus).toBe(2);
+    expect(getUnit(state, inf.id)!.dieBonus).toBe(0);
+  });
+
+  it('says so in its description', () => {
+    expect(AURAS.marshal.describe(DEFAULT_CONFIG.specials)).toBe(
+      'Your Infantry within 3 hexes of the Field Marshal start every turn Prepped: +2 on their roll. Stacks with Prep.',
+    );
+    expect(AURAS.marshal.reach?.(DEFAULT_CONFIG.specials)).toBe(3);
+    expect(AURAS.marshal.outlivesHero?.(DEFAULT_CONFIG.specials)).toBe(false);
   });
 });
 

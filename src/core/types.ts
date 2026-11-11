@@ -149,7 +149,10 @@ export interface GameConfig {
   armyPointLimit: number;
   /** Max heroes per army. */
   maxHeroesPerArmy: number;
-  /** The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...). */
+  /**
+   * The first player flips every this many rounds (2: P1 first in rounds 1–2, P2 in 3–4, ...).
+   * 0 = never: the coin-flip winner goes first every round (no back-to-back turns).
+   */
   firstPlayerSwapEvery: number;
   units: Record<string, UnitDef>;
   /** Entries that buy several linked models at once (the Twins). */
@@ -189,6 +192,11 @@ export interface SpecialRules {
   hookDamage: number;
   /** Field Marshal aura: added to every Infantry die at turn start (stacks with Prep). */
   marshalRollBonus: number;
+  /**
+   * Field Marshal aura reach: only Infantry within this many hexes of a living Field Marshal
+   * at the start of the turn get the free Prep (3). 0 = every Infantry in the army.
+   */
+  marshalRange: number;
   /** Warlord aura: extra movement for large models. */
   warlordSpeedBonus: number;
   /**

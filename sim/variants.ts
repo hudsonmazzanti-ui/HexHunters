@@ -37,6 +37,8 @@ export interface Variant {
   settings?: Partial<Omit<GameConfig, 'units' | 'squads' | 'specials'>>;
   /** Computed changes applied last, for rules like "every large model gets -1 speed". Mutates the copy. */
   modify?: (config: GameConfig) => void;
+  /** Preset armies to rebuild under this variant (by preset name), e.g. when a cost changes. */
+  presets?: Record<string, string[]>;
 }
 
 /** Every large (size 3) model, including alternate forms and squad members, loses 1 speed (minimum 1). */
@@ -126,6 +128,47 @@ export const VARIANTS: Record<string, Variant> = {
     specials: { warlordHealthBonus: 0 },
   },
 
+  // ---- Balance pack (each against the baseline) ----
+  'dom-10': {
+    label: 'Dom-10',
+    description: 'Domination is won at 10 points instead of 8.',
+    settings: { dominationPointsToWin: 10 },
+  },
+  'behemoth-10': {
+    label: 'Behemoth-10',
+    description: 'The Behemoth costs 10 instead of 12; the Behemoth preset becomes Behemoth + Dual Gunner + Scout.',
+    units: { behemoth: { cost: 10 } },
+    presets: { Behemoth: ['behemoth', 'dualgunner', 'scout'] },
+  },
+  // Behemoth-Speed and FM-Range are now the real rules; the *-old variants keep the previous ones.
+  'behemoth-speed': {
+    label: 'Behemoth-Speed',
+    description: 'The Behemoth moves 3 (today\'s rule).',
+    units: { behemoth: { speed: 3 } },
+  },
+  'behemoth-speed-2': {
+    label: 'Behemoth speed 2 (old rule)',
+    description: 'The Behemoth moves 2, as before the change.',
+    units: { behemoth: { speed: 2 } },
+  },
+  'fm-range': {
+    label: 'FM-Range',
+    description: 'The Field Marshal\'s free Prep only reaches Infantry within 3 hexes of it at the start of the turn (today\'s rule).',
+    specials: { marshalRange: 3 },
+  },
+  'fm-whole-army': {
+    label: 'Field Marshal: whole army (old rule)',
+    description: 'The Field Marshal\'s free Prep reaches every Infantry, and outlives it, as before the change.',
+    specials: { marshalRange: 0 },
+  },
+
+  // ---- Turn order ----
+  'no-double': {
+    label: 'No-Double',
+    description: 'Strict alternation: the coin-flip winner goes first every round (P1, P2, P1, P2...), no back-to-back turns.',
+    settings: { firstPlayerSwapEvery: 0 },
+  },
+
   // ---- Pacing experiment ----
   'slow-large': {
     label: 'Slow-Large',
@@ -187,6 +230,18 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     focusUnits: ['warlord', 'heavy', 'monster', 'hillgiant', 'dragon', 'grappler'],
     focusPresets: ['Big Guys'],
   },
+  pack1: {
+    title: 'Balance pack: Domination target, Behemoth cost and speed, Field Marshal range',
+    variants: ['baseline', 'dom-10', 'behemoth-10', 'behemoth-speed', 'fm-range'],
+    focusUnits: ['behemoth', 'marshal', 'warlord', 'infantry'],
+    focusPresets: [],
+  },
+  turnorder: {
+    title: 'Turn order: flip every two rounds vs strict alternation',
+    variants: ['baseline', 'no-double'],
+    focusUnits: [],
+    focusPresets: [],
+  },
   pacing: {
     title: 'Pacing: slower large models and taller walls',
     variants: ['baseline', 'slow-large', 'slow-large-tall'],
@@ -219,6 +274,15 @@ export function applyVariant(base: GameConfig, variant: Variant): GameConfig {
   Object.assign(config, variant.settings ?? {});
   variant.modify?.(config);
   return config;
+}
+
+/** The preset armies under a variant (some variants rebuild a preset, e.g. after a cost change). */
+export function variantPresets<P extends { name: string; units: string[] }>(id: string, presets: P[]): P[] {
+  const over = VARIANTS[id]?.presets ?? {};
+  for (const name of Object.keys(over)) {
+    if (!presets.some((p) => p.name === name)) throw new Error(`Variant "${id}": unknown preset "${name}"`);
+  }
+  return presets.map((p) => (over[p.name] ? { ...p, units: over[p.name] } : p));
 }
 
 /** The config for a variant id (throws on an unknown id). */

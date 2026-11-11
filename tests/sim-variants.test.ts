@@ -1,17 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { validateConfig } from '../src/core/army';
 import { DEFAULT_CONFIG, UNITS } from '../src/data/config';
-import { checkPresets } from '../sim/armies';
+import { PRESETS, checkPresets } from '../sim/armies';
+import { armyCost } from '../src/core/army';
+import { auraEffects } from '../src/core/auras';
+import { applyAction, firstPlayerOfRound } from '../src/core/game';
+import { missionPointsToWin } from '../src/core/missions';
 import { type Metric, change, compareCsv, compareHtml, spread, spreads } from '../sim/compare';
 import { generateMap, zonesConnected } from '../src/core/mapgen';
 import { hex, hexKey } from '../src/core/hex';
 import { baseDefense, maxHealth, unitSpeed } from '../src/core/queries';
 import { addUnit, makeState } from './helpers';
 import { mapAscii, mapSvg } from '../sim/mapImage';
-import { summarize } from '../sim/report';
+import { reportHtml, seatGap, summarize } from '../sim/report';
 import { runJobs } from '../sim/runGame';
 import { buildJobs } from '../sim/schedule';
-import { EXPERIMENTS, VARIANTS, applyVariant, variantConfig } from '../sim/variants';
+import { EXPERIMENTS, VARIANTS, applyVariant, variantConfig, variantPresets } from '../sim/variants';
 
 describe('balance variants', () => {
   it('apply overrides to a copy and never touch the real data', () => {
@@ -160,7 +164,7 @@ describe('pacing variants', () => {
       const expected = def.size === 3 ? Math.max(1, def.speed - 1) : def.speed;
       expect([id, c.units[id].speed]).toEqual([id, expected]);
     }
-    expect(c.units.behemoth.speed).toBe(1);
+    expect(c.units.behemoth.speed).toBe(UNITS.behemoth.speed - 1);
     expect(c.units.dragon.speed).toBe(UNITS.dragon.speed - 1);
     expect(c.units.infantry.speed).toBe(UNITS.infantry.speed);
     expect(UNITS.monster.speed).toBe(2); // real data unchanged by the variant
@@ -224,4 +228,112 @@ describe('Warlord variants', () => {
     expect(monster.hp).toBe(UNITS.monster.health - 2);
     expect(EXPERIMENTS.warlord.variants).toEqual(['warlord-speed-only', 'warlord-armor', 'baseline']);
   });
+});
+
+describe('balance pack variants', () => {
+  it('Dom-10 raises the Domination target; the real data stays at 8', () => {
+    expect(missionPointsToWin(DEFAULT_CONFIG, 'dom')).toBe(8);
+    expect(missionPointsToWin(variantConfig('dom-10'), 'dom')).toBe(10);
+    expect(missionPointsToWin(variantConfig('dom-10'), 'koth')).toBe(5);
+  });
+
+  it('Behemoth-10: costs 10, and the Behemoth preset is rebuilt to a legal 16 points', () => {
+    const cfg = variantConfig('behemoth-10');
+    expect(cfg.units.behemoth.cost).toBe(10);
+    expect(DEFAULT_CONFIG.units.behemoth.cost).toBe(12);
+    const presets = variantPresets('behemoth-10', PRESETS);
+    expect(presets.find((p) => p.name === 'Behemoth')!.units).toEqual(['behemoth', 'dualgunner', 'scout']);
+    expect(PRESETS.find((p) => p.name === 'Behemoth')!.units).toEqual(['behemoth', 'heavy']); // untouched
+    expect(checkPresets(cfg, presets)).toEqual([]);
+    expect(armyCost(cfg, ['behemoth', 'dualgunner', 'scout'])).toBe(16);
+    expect(variantPresets('baseline', PRESETS)).toEqual(PRESETS);
+  });
+
+  it('Behemoth-Speed: the Behemoth moves 3', () => {
+    const s = makeState();
+    s.config = variantConfig('behemoth-speed');
+    const b = addUnit(s, 'behemoth', 0, hex(0, 3));
+    expect(unitSpeed(s, b)).toBe(3);
+    expect(DEFAULT_CONFIG.units.behemoth.speed).toBe(3); // now the real rule
+  });
+
+  it('FM-Range is now the real rule; fm-whole-army keeps the old one for comparison', () => {
+    const board = (cfg: typeof DEFAULT_CONFIG) => {
+      const s = makeState();
+      s.config = cfg;
+      addUnit(s, 'marshal', 0, hex(0, 4));
+      const near = addUnit(s, 'infantry', 0, hex(3, 4));
+      const far = addUnit(s, 'infantry', 0, hex(-4, 4));
+      return { s, near, far };
+    };
+    for (const cfg of [DEFAULT_CONFIG, variantConfig('fm-range')]) {
+      const b = board(cfg);
+      expect(auraEffects(b.s, b.near).rollBonus).toBe(2);
+      expect(auraEffects(b.s, b.far).rollBonus).toBeUndefined();
+    }
+    const old = board(variantConfig('fm-whole-army'));
+    expect(auraEffects(old.s, old.far).rollBonus).toBe(2);
+  });
+
+  it('the comparison breaks presets and focus heroes down by mission', () => {
+    const results = (['baseline', 'dom-10'] as const).map((id) => {
+      const config = variantConfig(id);
+      const records = runJobs(buildJobs(config, { seed: 2, perMatchup: 0, randomGames: 30 }), { config });
+      return { id, label: id, description: '', config, summary: summarize(records, config, []), excluded: [], seconds: 0 };
+    });
+    const exp = EXPERIMENTS.pack1;
+    expect(exp.variants).toEqual(['baseline', 'dom-10', 'behemoth-10', 'behemoth-speed', 'fm-range']);
+    const html = compareHtml(results, exp, { seed: 2, perMatchup: 0, randomGames: 30, minGames: 25, workers: 1 });
+    expect(html).toContain('Domination: random armies, heroes and units');
+    expect(html).toContain('Domination: first mover wins');
+    expect(compareCsv(results, exp, 25)).toContain('Domination: random armies (hero) Field Marshal');
+  }, 60_000);
+});
+
+describe('turn order: No-Double', () => {
+  it('0 means the coin-flip winner goes first every round; the real game still flips every 2', () => {
+    expect([1, 2, 3, 4, 5, 6].map((r) => firstPlayerOfRound(r, 0, 1))).toEqual([1, 1, 1, 1, 1, 1]);
+    expect([1, 2, 3, 4, 5].map((r) => firstPlayerOfRound(r, 2, 0))).toEqual([0, 0, 1, 1, 0]);
+    expect(DEFAULT_CONFIG.firstPlayerSwapEvery).toBe(2);
+    expect(variantConfig('no-double').firstPlayerSwapEvery).toBe(0);
+    expect(EXPERIMENTS.turnorder.variants).toEqual(['baseline', 'no-double']);
+  });
+
+  it('a No-Double game strictly alternates turns: never the same player twice in a row', () => {
+    const config = variantConfig('no-double');
+    const s = makeState();
+    s.config = config;
+    addUnit(s, 'infantry', 0, hex(0, 5));
+    addUnit(s, 'infantry', 1, hex(0, -5));
+    let state = s;
+    const order: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const r = applyAction(state, { type: 'endTurn' });
+      state = r.state;
+      for (const e of r.events) if (e.type === 'turnStart') order.push(e.player);
+    }
+    expect(order).toEqual([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+  });
+
+  it('the report splits every preset, hero and unit by going first vs second', () => {
+    const records = runJobs(buildJobs(DEFAULT_CONFIG, { seed: 6, perMatchup: 1, randomGames: 40 }).filter((_, i) => i % 4 === 0 || i >= 36));
+    const s = summarize(records, DEFAULT_CONFIG, PRESETS.map((p) => p.name));
+    for (const [name, t] of Object.entries(s.presets)) {
+      const sp = s.seat.presets[name];
+      if (!t.games) continue;
+      expect(sp.first.games + sp.second.games).toBe(t.games);
+      expect(sp.first.wins + sp.second.wins).toBe(t.wins);
+    }
+    for (const [id, t] of Object.entries(s.entries)) {
+      const sp = s.seat.entries[id];
+      expect(sp.first.games + sp.second.games).toBe(t.games);
+    }
+    const big = seatGap({ first: { games: 100, wins: 70, losses: 30, draws: 0 }, second: { games: 100, wins: 40, losses: 60, draws: 0 } })!;
+    expect(big.gap).toBeCloseTo(0.3);
+    expect(big.real).toBe(true);
+    expect(seatGap({ first: { games: 10, wins: 6, losses: 4, draws: 0 }, second: { games: 10, wins: 5, losses: 5, draws: 0 } })!.real).toBe(false);
+    const html = reportHtml(s, DEFAULT_CONFIG, { seed: 6, perMatchup: 1, randomGames: 40, workers: 1, seconds: 1, minGames: 25, maxRounds: 30 });
+    expect(html).toContain('Going first vs second');
+    expect(html).toContain('Heroes in random armies');
+  }, 60_000);
 });

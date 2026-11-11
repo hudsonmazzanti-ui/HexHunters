@@ -383,7 +383,7 @@ export const UNITS: Record<string, UnitDef> = {
     label: 'Bh',
     cost: 12,
     size: 3, // large
-    speed: SPEED.slow,
+    speed: SPEED.normal, // was slow (2): +1 for balance
     defense: 10,
     health: 15,
     range: 1, // melee only
@@ -495,6 +495,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     hookRange: 3,
     hookDamage: 1,
     marshalRollBonus: 2,
+    marshalRange: 3, // only Infantry within 3 of the Field Marshal at turn start (0 = the whole army)
     warlordSpeedBonus: 1,
     warlordDefenseBonus: 0,
     warlordHealthBonus: -2, // the cost of the +1 speed

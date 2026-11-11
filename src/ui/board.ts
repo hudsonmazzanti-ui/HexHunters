@@ -10,6 +10,8 @@ import { isCarrier } from '../core/flag';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 import { getSettings } from './settings';
+import { miniIcon, miniIconScale } from './minis';
+import { COLORS } from './theme';
 
 export const HEX_SIZE = 32;
 
@@ -61,6 +63,43 @@ export interface BoardOverlay {
   watch: Map<string, PlayerId>;
   /** Capture the Flag: the zone where the current player's flag carrier scores, outlined. */
   scoreZone: { player: PlayerId; hexes: Set<string> } | null;
+  /** A selected hero with a ranged aura (Field Marshal): the hexes it reaches, and the models inside getting it. */
+  auraArea: Set<string>;
+  auraUnits: Set<string>;
+}
+
+/** Shared SVG definitions: the felt mat texture and the miniatures' gradients. */
+function boardDefs(): SVGDefsElement {
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  defs.innerHTML = `
+    <filter id="felt-noise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="7"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.16 0"/>
+    </filter>
+    <pattern id="felt" width="96" height="96" patternUnits="userSpaceOnUse">
+      <rect width="96" height="96" fill="${COLORS.tile}"/>
+      <rect width="96" height="96" filter="url(#felt-noise)" fill="${COLORS.feltNoise}"/>
+    </pattern>
+    <radialGradient id="mini-top" cx="0.4" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="${COLORS.miniTop}"/><stop offset="1" stop-color="${COLORS.miniTopDark}"/>
+    </radialGradient>
+    <radialGradient id="mini-bevel" cx="0.35" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="${COLORS.white}" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="${COLORS.white}" stop-opacity="0"/>
+      <stop offset="1" stop-color="${COLORS.black}" stop-opacity="0.3"/>
+    </radialGradient>`;
+  return defs;
+}
+
+/** A standing banner prop (pole and swallowtail cloth), its foot at the left of hex `h`. */
+function banner(h: Hex, parent: SVGElement, cls: string): SVGGElement {
+  const c = hexToPixel(h, HEX_SIZE);
+  const g = el('g', { class: `prop-banner ${cls}`, transform: `translate(${c.x - HEX_SIZE * 0.62} ${c.y + HEX_SIZE * 0.25})` }, parent);
+  el('ellipse', { cx: 1, cy: 0, rx: 5, ry: 2, class: 'prop-shadow' }, g);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: -30, class: 'prop-pole' }, g);
+  el('path', { d: 'M1 -29 H15 V-15 L8 -19 L1 -15 Z', class: 'prop-cloth' }, g);
+  el('circle', { cx: 0, cy: -31, r: 2, class: 'prop-tip' }, g);
+  return g;
 }
 
 /** Thick outline around an area of hexes: draws only the edges not shared with another hex of it. */
@@ -100,6 +139,8 @@ interface UnitNodes {
   hpText: SVGTextElement;
   /** Size the model was drawn at; redrawn if it changes (a Zombie starting to crawl). */
   size: number;
+  /** Unit type it was drawn as; redrawn if it changes (a Werewolf transforming). */
+  type: string;
   moonText: SVGTextElement;
   /** Cracking Armor (Behemoth): current defense, "DEF 7 (-3)". */
   armor: SVGGElement;
@@ -115,6 +156,8 @@ export class BoardView {
   private goals = new Map<string, SVGPolygonElement>();
   /** Domination: one group per site (its tinted hexes and outline), colored by owner. */
   private sites: SVGGElement[] = [];
+  /** Domination: the banner standing on each site. */
+  private siteBanners: SVGGElement[] = [];
   /** Capture the Flag: the flag lying on the ground (hidden while carried). */
   private groundFlag: SVGGElement | null = null;
   private shades = new Map<string, SVGPolygonElement>();
@@ -127,6 +170,7 @@ export class BoardView {
   private moving = new Set<string>();
 
   constructor(svg: SVGSVGElement) {
+    svg.prepend(boardDefs());
     this.world = el('g', {}, svg);
     this.layers = {
       base: el('g', {}, this.world),
@@ -187,19 +231,40 @@ export class BoardView {
       outlineArea(site, 'site-outline', g);
       return g;
     });
+    // Props: a banner on the control point (gold), and one on each Domination site (its
+    // owner's color), standing at the center hex's left so a model there doesn't hide it.
+    this.siteBanners = (map.sites ?? []).map((site) => banner(site[0], this.layers.flag, 'owner-none'));
+    if (showControlPoint) banner(map.controlPoint[0], this.layers.flag, 'cp');
 
     return bounds;
   }
 
   /** Draws (or redraws, after a Hill Giant's Hurl changed the map) the terrain layer. */
+  /**
+   * Draws (or redraws, after a Hill Giant's Hurl changed the map) the terrain: raised stone
+   * blocks, height 2 twice as tall as height 1, drawn back to front so nearer blocks cover
+   * the ones behind them. Each has a soft shadow, two lit side faces and a top face.
+   */
   drawTerrain(map: GameMap): void {
     this.layers.terrain.replaceChildren();
-    for (const t of map.terrain) {
-      for (const h of t.hexes) {
-        el('polygon', { points: points(h, HEX_SIZE - 1), class: `terrain h${t.height} ${t.kind}` }, this.layers.terrain);
-        const c = hexToPixel(h, HEX_SIZE);
-        el('text', { x: c.x, y: c.y, class: `terrain-label h${t.height}` }, this.layers.terrain).textContent = String(t.height);
+    const pieces = map.terrain
+      .flatMap((t) => t.hexes.map((h) => ({ h, t, c: hexToPixel(h, HEX_SIZE) })))
+      .sort((a, b) => a.c.y - b.c.y || a.c.x - b.c.x);
+    const size = HEX_SIZE - 1;
+    for (const { h, t } of pieces) {
+      const lift = HEX_SIZE * 0.2 * t.height;
+      const ground = hexCorners(h, size);
+      const top = ground.map((p) => ({ x: p.x, y: p.y - lift }));
+      const pts = (ps: Point[]) => ps.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const g = el('g', { class: `terrain h${t.height} ${t.kind}` }, this.layers.terrain);
+      el('polygon', { points: pts(ground.map((p) => ({ x: p.x + 4, y: p.y + 5 }))), class: 'terrain-shadow' }, g);
+      // The two front faces (lower-right and lower-left edges), lit from the upper left.
+      for (const [i, cls] of [[1, 'side-light'], [2, 'side-dark']] as const) {
+        const a = ground[i];
+        const b2 = ground[(i + 1) % 6];
+        el('polygon', { points: pts([a, b2, top[(i + 1) % 6], top[i]]), class: `terrain-side ${cls}` }, g);
       }
+      el('polygon', { points: pts(top), class: 'terrain-top' }, g);
     }
   }
 
@@ -212,12 +277,15 @@ export class BoardView {
     for (const [key, dot] of this.dots) dot.setAttribute('visibility', overlay.dots.has(key) ? 'visible' : 'hidden');
     const zone = overlay.scoreZone;
     for (const [key, poly] of this.goals) {
-      poly.setAttribute('class', zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal');
+      const cls = overlay.auraArea.has(key) ? 'goal on aura-area' : zone?.hexes.has(key) ? `goal on goal-${zone.player}` : 'goal';
+      poly.setAttribute('class', cls);
     }
     this.renderFlag(state);
     this.sites.forEach((g, i) => {
       const owner = state.siteOwners[i];
-      g.setAttribute('class', `site owner-${owner === undefined || owner === null ? 'none' : owner}`);
+      const cls = `owner-${owner === undefined || owner === null ? 'none' : owner}`;
+      g.setAttribute('class', `site ${cls}`);
+      this.siteBanners[i]?.setAttribute('class', `prop-banner ${cls}`);
     });
 
     const alive = new Set<string>();
@@ -225,7 +293,7 @@ export class BoardView {
       if (!unit.pos) continue;
       alive.add(unit.id);
       let nodes = this.units.get(unit.id);
-      if (nodes && nodes.size !== unitSize(state, unit)) {
+      if (nodes && (nodes.size !== unitSize(state, unit) || nodes.type !== unit.type)) {
         nodes.g.remove();
         nodes = undefined;
       }
@@ -270,8 +338,25 @@ export class BoardView {
     el('circle', { r: r + 9, class: 'ring tgt' }, g);
     el('circle', { r: r + 4, class: 'ring sel' }, g);
     el('circle', { r: r + 3, class: 'brace' }, g);
-    el('circle', { r, class: 'body' }, g);
-    el('text', { class: 'label', 'font-size': LABEL_SIZE[size] }, g).textContent = def.label;
+    // In a selected hero's aura area and getting its bonus (Field Marshal): a gold dashed ring.
+    el('circle', { r: r + 6, class: 'aura-ring' }, g);
+    // The miniature: a shadow, the base's thickness and team-colored beveled rim, then the
+    // painted figure on the base's dark top (src/ui/minis.ts). Units without an icon keep
+    // their letter label.
+    const mini = el('g', { class: 'mini' }, g);
+    el('ellipse', { cx: 2, cy: r * 0.5, rx: r * 1.02, ry: r * 0.45, class: 'mini-shadow' }, mini);
+    el('circle', { cy: 2.5, r, class: 'mini-edge' }, mini);
+    el('circle', { r, class: 'body' }, mini);
+    el('circle', { r, class: 'mini-bevel', fill: 'url(#mini-bevel)' }, mini);
+    const icon = miniIcon(unit.type);
+    if (icon) {
+      el('circle', { r: r * 0.78, class: 'mini-top', fill: 'url(#mini-top)' }, mini);
+      const k = miniIconScale(r, size);
+      el('g', { class: 'mini-icon', transform: `translate(${-50 * k} ${-52 * k}) scale(${k})` }, mini).innerHTML = icon;
+      el('ellipse', { cx: -r * 0.35, cy: -r * 0.55, rx: r * 0.42, ry: r * 0.16, class: 'mini-shine', transform: `rotate(-25 ${-r * 0.35} ${-r * 0.55})` }, mini);
+    } else {
+      el('text', { class: 'label', 'font-size': LABEL_SIZE[size] }, g).textContent = def.label;
+    }
 
     // Burning: a small flame at the left.
     const flame = el('g', { class: 'flame-icon', transform: `translate(${-r - 5} 0)` }, g);
@@ -342,7 +427,7 @@ export class BoardView {
     el('rect', { x: -9, y: -6, width: 18, height: 12, rx: 3 }, uses);
     const usesText = el('text', {}, uses);
 
-    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, armor, armorText, armorRect, usesText };
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, type: unit.type, armor, armorText, armorRect, usesText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
     return nodes;
@@ -381,6 +466,7 @@ export class BoardView {
     cls.toggle('counting', transformsIn !== null);
     n.moonText.textContent = transformsIn === null ? '' : String(transformsIn);
     cls.toggle('aura', aurasOn(state, unit).length > 0);
+    cls.toggle('in-aura', o.auraUnits.has(unit.id));
     cls.toggle('overwatching', !!unit.overwatch);
     n.owText.textContent = unit.overwatch ? String(unit.overwatch.die) : '';
 

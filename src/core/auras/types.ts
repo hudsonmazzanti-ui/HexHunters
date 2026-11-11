@@ -50,6 +50,13 @@ export interface AuraDef {
   appliesToType?(unit: UnitDef): boolean;
   /** What it grants a given affected unit type. */
   effects(rules: SpecialRules, unit: UnitDef): AuraEffects;
+  /**
+   * Does it keep working after the hero dies? (Default yes. The Field Marshal's free Prep
+   * needs it alive and nearby.)
+   */
+  outlivesHero?(rules: SpecialRules): boolean;
+  /** Hexes around the hero its aura reaches (shown when the hero is selected); none = army-wide. */
+  reach?(rules: SpecialRules): number;
   /** Army-wide: points scored for winning the control point at the end of a round (default 1). */
   holdPoints?(rules: SpecialRules): number;
 }

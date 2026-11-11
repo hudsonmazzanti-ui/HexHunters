@@ -105,10 +105,11 @@ export interface ActionResult {
  * Who goes first in a round. `first` won the coin flip and goes first in round 1; the
  * order flips every `swapEvery` rounds. With 2 and player 1 winning the flip: rounds
  * 1–2 player 1 first, rounds 3–4 player 2 first, and so on. Where it flips, the same
- * player takes two turns in a row.
+ * player takes two turns in a row. With 0 the order never flips: the coin-flip winner goes
+ * first every round (strict alternation, no back-to-back turns).
  */
 export const firstPlayerOfRound = (round: number, swapEvery: number, first: PlayerId = 0): PlayerId =>
-  Math.floor((round - 1) / swapEvery) % 2 === 0 ? first : other(first);
+  swapEvery <= 0 || Math.floor((round - 1) / swapEvery) % 2 === 0 ? first : other(first);
 
 /** Starts in the army-building phase: player 1 builds, then player 2. */
 export function newGame(config: GameConfig, seed: number): GameState {

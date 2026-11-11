@@ -9,6 +9,8 @@ import { SPECIALS } from '../core/specials';
 import type { AuraId, GameConfig, PlayerId } from '../core/types';
 import { heroName, speedName } from '../data/config';
 import { PLAYER_COLORS, PLAYER_NAMES } from './hud';
+import { miniBadge } from './minis';
+import { COLORS } from './theme';
 
 const SIZE_NAMES = ['', 'small', 'medium', 'large'];
 
@@ -43,6 +45,14 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
   root.style.setProperty('--player', PLAYER_COLORS[player]);
   document.body.append(root);
 
+  /** The unit's miniature in this player's colors (its letter label if it has no icon). */
+  const tagFor = (type: string, label: string): HTMLElement => {
+    const badge = miniBadge(type, PLAYER_COLORS[player], player === 0 ? COLORS.p0Dark : COLORS.p1Dark, 34);
+    const tag = h('span', `unit-tag${badge ? ' mini' : ''}`, badge ? '' : label);
+    if (badge) tag.append(badge);
+    return tag;
+  };
+
   return new Promise((resolve) => {
     /** − count + controls. `blocked`: why + is disabled (can't afford, hero limit). */
     const controls = (id: string, count: number, blocked: string | null): HTMLElement => {
@@ -71,7 +81,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       const card = h('div', `unit-card hero${count ? ' picked' : ''}${blocked ? ' blocked' : ''}`);
       const top = h('div', 'unit-card-top');
       top.append(
-        h('span', 'unit-tag', 'TT'),
+        tagFor('twintank', 'TT'),
         h('span', 'unit-name', squad.name),
         ...(squad.hero ? [h('span', 'hero-badge', 'HERO')] : []),
         h('span', 'unit-cost', `${squad.cost} pts`),
@@ -150,7 +160,7 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
 
       const card = h('div', `unit-card${count ? ' picked' : ''}${def.hero ? ' hero' : ''}${blocked ? ' blocked' : ''}`);
       const top = h('div', 'unit-card-top');
-      top.append(h('span', 'unit-tag', def.label), h('span', 'unit-name', def.name));
+      top.append(tagFor(t, def.label), h('span', 'unit-name', def.name));
       if (def.hero) top.append(h('span', 'hero-badge', 'HERO'));
       top.append(h('span', 'unit-cost', `${def.cost} pt${def.cost === 1 ? '' : 's'}`));
 
@@ -191,7 +201,14 @@ export function showBuilder(config: GameConfig, player: PlayerId): Promise<strin
       }
       // Callouts: hero rules, the unit's attack quirks, then the special's.
       const callouts = [
-        ...(def.hero?.aura ? ['Lasts all game, even if the hero dies', 'No special: die is for attacking'] : []),
+        ...(def.hero?.aura
+          ? [
+              AURAS[def.hero.aura].outlivesHero?.(config.specials) === false
+                ? `Needs the ${def.name} alive: reaches ${AURAS[def.hero.aura].reach?.(config.specials)} hexes`
+                : 'Lasts all game, even if the hero dies',
+              'No special: die is for attacking',
+            ]
+          : []),
         ...(def.hero && !def.hero.aura ? ['No passive: its ability is its special'] : []),
         ...(def.crackingArmor
           ? [`Cracking Armor: -1 def each time it's hit for damage (not Burn), min ${def.crackingArmor.minDefense}`]
