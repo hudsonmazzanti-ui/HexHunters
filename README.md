@@ -430,13 +430,22 @@ npm run sim -- --replay 123456 --a "Big Guys" --b "Gun Line"   # replay one game
   top (`src/ui/minis.ts`, one icon per unit type, also used in the roster chips and the army builder). Terrain is
   raised stone, drawn back to front with lit side faces and a shadow; height 2 stands twice as tall as height 1
   (no height numbers). Banners stand on the control point (gold) and on each Domination site (its owner's color).
-- **Movement:** models glide hex by hex along their real path (never through walls), about 130 ms per hex with
+- **Combat effects** (`src/ui/fx.ts`): attacks play in the weapon's style (melee lunge and slash, lobbed shell,
+  fire bolt, light or heavy tracer) and land with sparks, a flash and a shake; destroyed minis topple in smoke.
+  Every special has its own effect (grenade blast, Hack and Spot beams, flame wash, Hook rope, rubble...).
+  Dice tumble and bounce; floating numbers punch in; victory showers confetti.
+- **Sound** (`src/ui/sound.ts`): synthesized effects with no audio files (shots, hits, explosions, dice, steps,
+  claims, turn and victory jingles). The ☰ menu has a Sound toggle.
+- **Screens** (`src/ui/emblems.ts`): a title screen with the logo, player crests on every handoff, a trophy on the
+  win screen, a drifting hex backdrop, and parts that rise in one after the other.
+- **Weather:** the Condition shows over the board (drifting fog, sand or wind streaks, a red moon cast, mud).
+- **Movement:** models hop hex by hex along their real path (never through walls), about 130 ms per hex with
   eased start and stop. Hook pulls, Shove and Vault glide too; the Dragon lifts off while flying. Swap is
   instant; Undo slides the model straight back in 180 ms. Input is locked while an animation plays.
 - **Haptics:** a short tap when selecting a model or confirming a move or placement, a buzz on a hit, and a
   stronger pattern when a model dies (`navigator.vibrate`; silently does nothing where unsupported, e.g. iOS
   Safari).
-- **Settings:** the ☰ menu has Animations and Haptics toggles, remembered in the browser. Animations default to
+- **Settings:** the ☰ menu has Animations, Sound and Haptics toggles, remembered in the browser. Animations default to
   off when the device asks for reduced motion.
 
 ## Code layout

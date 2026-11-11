@@ -259,6 +259,12 @@ button.big {
   background: color-mix(in srgb, var(--c-panel) 85%, transparent);
 }
 
+.mat-under polygon {
+  fill: color-mix(in srgb, var(--c-black) 38%, transparent);
+}
+.mat-edge polygon {
+  fill: var(--c-tile-edge);
+}
 .hex-base {
   /* The felt mat: the tile color with a fine noise texture (pattern in board.ts). */
   fill: url(#felt);
@@ -1924,4 +1930,98 @@ button.big {
 .mini-badge {
   display: block;
   filter: drop-shadow(0 1px 1.5px color-mix(in srgb, var(--c-black) 45%, transparent));
+}
+
+/* ---- Weather: the battlefield Condition drawn over the board (controller.renderWeather) ---- */
+#weather {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+#weather i {
+  position: absolute;
+  inset: -40%;
+  display: none;
+}
+/* Fog: two soft banks drifting across. */
+#weather.w-fog i {
+  display: block;
+  background:
+    radial-gradient(ellipse 38% 22% at 30% 40%, color-mix(in srgb, var(--c-icon-fog) 42%, transparent), transparent 70%),
+    radial-gradient(ellipse 44% 26% at 70% 62%, color-mix(in srgb, var(--c-icon-fog) 36%, transparent), transparent 70%),
+    radial-gradient(ellipse 30% 18% at 55% 22%, color-mix(in srgb, var(--c-icon-fog) 30%, transparent), transparent 70%);
+  animation: weather-drift 38s ease-in-out infinite alternate;
+}
+#weather.w-fog i + i {
+  animation-duration: 56s;
+  animation-direction: alternate-reverse;
+  opacity: 0.8;
+}
+#weather.w-fog {
+  background: color-mix(in srgb, var(--c-icon-fog) 10%, transparent);
+}
+@keyframes weather-drift {
+  from {
+    transform: translate(-9%, -3%);
+  }
+  to {
+    transform: translate(9%, 4%);
+  }
+}
+/* Tailwind and Sandstorm: streaks racing across. */
+#weather.w-tailwind i,
+#weather.w-sandstorm i {
+  display: block;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 120px,
+    color-mix(in srgb, var(--streak) 26%, transparent) 120px 123px,
+    transparent 123px 260px,
+    color-mix(in srgb, var(--streak) 16%, transparent) 260px 262px
+  );
+  animation: weather-streak 1.6s linear infinite;
+}
+#weather.w-tailwind i + i,
+#weather.w-sandstorm i + i {
+  animation-duration: 2.7s;
+  opacity: 0.6;
+}
+#weather.w-tailwind {
+  --streak: var(--c-icon-wind);
+}
+#weather.w-sandstorm {
+  --streak: var(--c-icon-sand);
+  background: color-mix(in srgb, var(--c-icon-sand) 16%, transparent);
+}
+@keyframes weather-streak {
+  to {
+    transform: translateX(262px);
+  }
+}
+/* Blood Moon: a red cast, darker at the edges. */
+#weather.w-bloodmoon {
+  background:
+    radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--c-icon-blood-moon) 55%, transparent), transparent 22%),
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--c-icon-blood-moon) 5%, transparent), color-mix(in srgb, var(--c-icon-blood-moon) 24%, transparent));
+  animation: moon-throb 5s ease-in-out infinite;
+}
+@keyframes moon-throb {
+  50% {
+    opacity: 0.75;
+  }
+}
+/* Mud: a brown, heavy cast rising from the bottom. */
+#weather.w-mud {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c-icon-mud) 10%, transparent), color-mix(in srgb, var(--c-icon-mud) 34%, transparent));
+}
+.no-anim #weather i,
+.no-anim #weather {
+  animation: none;
+}
+
+/* Corner buttons sit above the weather. */
+#board-tools,
+#brief-tools {
+  z-index: 1;
 }

@@ -617,6 +617,20 @@ export class Controller {
     this.render();
   }
 
+  /** The Condition's weather over the board (fog, sand, wind streaks, a red moon tint...). */
+  private renderWeather(): void {
+    let box = document.getElementById('weather');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'weather';
+      box.append(document.createElement('i'), document.createElement('i'));
+      document.getElementById('stage')!.append(box);
+    }
+    const s = this.state;
+    const show = s.phase === 'deploy' || s.phase === 'play' || s.phase === 'over';
+    box.className = show ? `w-${s.condition}` : '';
+  }
+
   /** Small mission and Condition icons in the board's top-left corner; tapping reopens the briefing. */
   private renderBriefTools(): void {
     let box = document.getElementById('brief-tools');
@@ -944,6 +958,7 @@ export class Controller {
   private render(): void {
     renderTopBar(this.state);
     this.renderBriefTools();
+    this.renderWeather();
     this.board.render(this.state, this.boardOverlay());
     renderPanel(this.panelModel(), (id) => this.onChip(id));
   }

@@ -212,6 +212,11 @@ export class BoardView {
     const cpKeys = new Set(showControlPoint ? map.controlPoint.map(hexKey) : []);
     const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
+    // The mat's thickness and shadow on the table: a dark copy of the board, nudged down.
+    const under = el('g', { class: 'mat-under', transform: 'translate(0 7)' }, this.layers.base);
+    for (const h of hexagon(map.radius)) el('polygon', { points: points(h, HEX_SIZE + 2) }, under);
+    const edge = el('g', { class: 'mat-edge', transform: 'translate(0 3)' }, this.layers.base);
+    for (const h of hexagon(map.radius)) el('polygon', { points: points(h, HEX_SIZE + 0.5) }, edge);
     for (const h of hexagon(map.radius)) {
       const key = hexKey(h);
       el('polygon', { points: points(h), class: `hex-base${cpKeys.has(key) ? ' cp' : ''}` }, this.layers.base);
