@@ -90,6 +90,17 @@ export const WEIGHTS = {
   premiumShotCost: 1.0, // a limited shot is worth saving for a good target
   hookPull: 0.3, // per hex an enemy is pulled toward its own side
 
+  // ---- New units ----
+  /** Detonate: the Bomber's own value counts this many times against the blast's damage. */
+  detonateSelf: 0.8,
+  /** Guard: per adjacent ally, times its expected incoming damage share. */
+  guard: 0.5,
+  /** Freeze: times the target's value (more for melee models, which then can't reach anyone). */
+  freeze: 0.3,
+  freezeMelee: 0.25,
+  /** Poison: the damage it will deal over its turns, valued like direct damage. */
+  poison: 0.9,
+
   // ---- Choice ----
   /** Ignore options that gain less than this. */
   minGain: 0.05,

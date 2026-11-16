@@ -2060,3 +2060,57 @@ button.big {
 .no-anim .unit.ready .mini {
   animation: none;
 }
+
+/* ---- New unit statuses: frozen, poisoned, guarded ---- */
+.unit .status-ring,
+.unit .poison-mark,
+.unit .frozen-mark {
+  display: none;
+  pointer-events: none;
+}
+.unit .status-ring {
+  fill: none;
+  stroke-width: 3.5;
+}
+.unit.frozen .frozen-ring {
+  display: block;
+  stroke: var(--c-mini-lens);
+  fill: color-mix(in srgb, var(--c-mini-lens) 38%, transparent);
+  stroke-dasharray: 5 3;
+}
+.unit.frozen .frozen-mark {
+  display: block;
+}
+.frozen-mark circle {
+  fill: var(--c-mini-lens);
+  stroke: var(--c-mini-ink);
+  stroke-width: 1.2;
+}
+.frozen-mark path {
+  stroke: var(--c-white);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.unit.poisoned .poison-ring {
+  display: block;
+  stroke: var(--c-mini-green);
+  stroke-dasharray: 2 4;
+  animation: spin 2.5s linear infinite;
+}
+.unit.poisoned .poison-mark {
+  display: block;
+}
+.unit.frozen.poisoned .poison-mark {
+  transform: translate(8px, 14px);
+}
+.poison-mark path {
+  fill: var(--c-mini-green);
+  stroke: var(--c-mini-ink);
+  stroke-width: 1.3;
+}
+.unit.guarded .guard-ring {
+  display: block;
+  stroke: var(--c-mini-steel);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c-white) 80%, transparent));
+}

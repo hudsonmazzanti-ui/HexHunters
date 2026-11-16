@@ -10,7 +10,12 @@ import { dropFlag, flagCarrier } from '../flag';
 import { DIRECTIONS, hexDistance, hexEquals, hexagon, neighbors } from '../hex';
 import { canAct, getUnit, hasDoubleAction, maxReach } from '../queries';
 import type { GameState, SpecialId, Unit } from '../types';
+import { blink } from './blink';
 import { brace } from './brace';
+import { detonate } from './detonate';
+import { freeze } from './freeze';
+import { guard } from './guard';
+import { poison } from './poison';
 import { breath } from './breath';
 import { dash } from './dash';
 import { eat } from './eat';
@@ -70,6 +75,11 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   breath,
   smash,
   premiumShot,
+  detonate,
+  guard,
+  freeze,
+  blink,
+  poison,
 };
 
 /** The unit's special, or undefined for heroes (they have none). */

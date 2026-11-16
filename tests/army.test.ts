@@ -41,6 +41,11 @@ describe('army building', () => {
       dragon: 6,
       behemoth: 12,
       mercenary: 5,
+      bomber: 2,
+      guardian: 3,
+      cryomancer: 3,
+      blinker: 3,
+      poisoner: 3,
     });
   });
 

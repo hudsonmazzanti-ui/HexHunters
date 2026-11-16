@@ -30,6 +30,7 @@ import {
   effectiveRange,
   getUnit,
   hasDoubleAction,
+  isGuarded,
   livingUnits,
   maxHealth,
   moveReach,
@@ -306,6 +307,15 @@ export class Controller {
           this.ui.message = `${this.ui.message ?? ''} ${crackText(this.state, ev)}`.trim();
           break;
         }
+        case 'poison': {
+          const pos = getUnit(before, ev.unitId)?.pos;
+          if (pos) {
+            this.board.floatText(pos, `POISON -${ev.damage}`, COLORS.miniGreen);
+            this.board.fx.smoke(this.board.at(pos), 4, COLORS.miniGreen);
+            play(ev.killed ? 'kill' : 'hit');
+          }
+          break;
+        }
         case 'burn': {
           const pos = getUnit(before, ev.unitId)?.pos;
           if (pos) {
@@ -392,6 +402,10 @@ export class Controller {
       shove: 'SHOVED',
       vault: 'VAULT',
       hack: 'HACKED',
+      freeze: 'FROZEN',
+      poison: 'POISONED',
+      guard: 'GUARD',
+      detonate: 'BOOM',
       smash: 'SMASH',
     };
     const label = labels[ev.special];
@@ -479,6 +493,36 @@ export class Controller {
           this.board.drawTerrain(this.state.map);
         }
         break;
+      case 'detonate':
+        play('explosion');
+        fx.explosion(from, HEX_SIZE * 2);
+        this.board.flash(neighbors(unit.pos!), 'flash-splash');
+        break;
+      case 'guard':
+        play('buff');
+        fx.ring(from, COLORS.miniSteel, HEX_SIZE * 1.9, 600);
+        break;
+      case 'freeze':
+        play('hack');
+        if (there) {
+          await fx.beam(from, there, COLORS.miniLens);
+          fx.ring(there, COLORS.miniLens, 24);
+          fx.sparks(there, COLORS.white, 8, 20);
+        }
+        break;
+      case 'poison':
+        play('hook');
+        if (there) {
+          await fx.tracer(from, there, COLORS.miniGreen);
+          fx.smoke(there, 5, COLORS.miniGreen);
+        }
+        break;
+      case 'blink':
+        play('whoosh');
+        fx.ring(from, COLORS.special, 28);
+        fx.sparks(from, COLORS.special, 8, 22);
+        if (ev.to) fx.ring(this.board.at(ev.to), COLORS.special, 28);
+        break;
       case 'brace':
       case 'prep':
       case 'load':
@@ -508,7 +552,7 @@ export class Controller {
       else this.board.floatText(pos, `-${e.damage}`, COLORS.fxDamage);
     }
 
-    if (ev.special === 'swap') {
+    if (ev.special === 'swap' || ev.special === 'blink') {
       // The twins teleport: they just flip places.
       this.render();
     } else if (ev.movedId && ev.to) {
@@ -683,6 +727,11 @@ export class Controller {
     for (const e of events) {
       if (e.type === 'overwatch') lines.push(overwatchText(before, e));
       if (e.type === 'burn') lines.push(burnText(before, this.state, e));
+      if (e.type === 'poison') {
+        const u = getUnit(before, e.unitId);
+        const who = u ? `${PLAYER_NAMES[u.owner]} ${unitDef(before, u).name}` : 'A model';
+        lines.push(`${who} takes ${e.damage} poison damage${e.killed ? ': destroyed!' : e.left ? ` (${e.left} more turn${e.left === 1 ? '' : 's'}).` : ' (the poison wears off).'}`);
+      }
       if (e.type === 'transformed') lines.push(`${PLAYER_NAMES[player]}'s Werewolf transforms into a beast (+${e.healed} HP)!`);
       if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
       if (e.type === 'cracked') lines.push(crackText(this.state, e));
@@ -1128,6 +1177,7 @@ export class Controller {
         ...(baseDefense(s, sel) > naturalDefense(s, sel) ? [`+${baseDefense(s, sel) - naturalDefense(s, sel)} aura`] : []),
         ...(sel.armorCracks ? [`-${sel.armorCracks} cracked`] : []),
         ...(sel.braced ? ['braced'] : []),
+        ...(isGuarded(s, sel) ? [`+${s.config.specials.guardDefenseBonus} guarded`] : []),
       ];
       const damage = attackDamage(s, sel);
       const stats: [string, string][] = [
@@ -1444,7 +1494,9 @@ export class Controller {
     }
 
     const hints: string[] = [];
-    if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
+    if (unit.frozen) hints.push('frozen: it can\'t move this turn');
+    if (unit.poison > 0) hints.push(`poisoned: ${unit.poison} more turn${unit.poison === 1 ? '' : 's'}`);
+    if (unit.movesLeft > 0 && !unit.frozen) hints.push('Tap a green dot to move');
     if (canAct(s, unit) && unit.attacked) {
       // Dual Gunner after its attack: only Second Shot is left.
       hints.push(`tap ${sp?.name ?? 'the special'} to fire again with the same die`);

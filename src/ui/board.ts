@@ -5,7 +5,7 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitAt, unitDef, unitSize } from '../core/queries';
+import { actionBonus, armorLabel, isGuarded, maxHealth, turnsUntilTransform, unitAt, unitDef, unitSize } from '../core/queries';
 import { isCarrier } from '../core/flag';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
@@ -423,6 +423,16 @@ export class BoardView {
     el('rect', { x: -8, y: -6, width: 16, height: 12, rx: 3 }, hackMark);
     el('text', {}, hackMark).textContent = '</>';
 
+    // Status rings: ice (frozen), a green drip ring (poisoned), a steel shield ring (guarded).
+    el('circle', { r: r + 2, class: 'status-ring frozen-ring' }, g);
+    el('circle', { r: r + 2, class: 'status-ring poison-ring' }, g);
+    el('circle', { r: r + 5, class: 'status-ring guard-ring' }, g);
+    const drip = el('g', { class: 'poison-mark', transform: `translate(${-r - 4} ${r - 4})` }, g);
+    el('path', { d: 'M0 -7 C5 0 6 3 6 5 A6 6 0 0 1 -6 5 C-6 3 -5 0 0 -7Z' }, drip);
+    const ice = el('g', { class: 'frozen-mark', transform: `translate(${-r - 4} ${r - 4})` }, g);
+    el('circle', { r: 7.5 }, ice);
+    el('path', { d: 'M0 -5V5M-4.3 -2.5L4.3 2.5M4.3 -2.5L-4.3 2.5' }, ice);
+
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
 
@@ -514,6 +524,9 @@ export class BoardView {
     cls.toggle('crawling', unit.crawling);
     cls.toggle('resting', unit.resting && state.phase === 'play' && unit.owner === state.current);
     cls.toggle('burning', unit.burning);
+    cls.toggle('frozen', unit.frozen);
+    cls.toggle('poisoned', unit.poison > 0);
+    cls.toggle('guarded', unit.guarding || isGuarded(state, unit));
     cls.toggle('hacked', unit.hacked || (unit.hackPenalty > 0 && (unit.die !== null || unit.gambling)));
     cls.toggle('twin', !!unit.partnerId);
     cls.toggle('carrier', isCarrier(state, unit));
