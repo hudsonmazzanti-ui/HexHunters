@@ -2,6 +2,15 @@
 
 A pass-and-play tactical miniatures game on a hex grid, played in a phone browser (desktop works too).
 
+## Playing against the computer
+
+The title screen offers **Play vs AI** or **2 Players** (the ☰ menu can switch mode). Against the AI you are
+Player 1; the computer builds its own army (a tested preset or a random army built around its hero), deploys, and
+plays its turns step by step with the same animations as a player. It is the simulator's heuristic bot
+(`sim/bot.ts`, wrapped in `src/ai/`): each step it scores every move, attack and special it has and plays the best.
+It knows all three missions (it holds the point, carries and hunts the flag, claims and contests sites) and every
+unit, and it can only do what the rules allow, because its actions go through the same `applyAction` as yours.
+
 ## Running
 
 ```bash
@@ -39,6 +48,11 @@ All unit stats, point costs and game settings live in **`src/data/config.ts`**. 
 | Hill Giant | 5   | large (3)  | 2     | 5   | 13 | 1 (melee) | 4   | **Hurl**: rip out adjacent terrain and throw it (2 + height damage) |
 | Werewolf  | 5    | medium (2) | 3     | 5   | 7  | 3         | 2   | No special. On its owner's 3rd turn becomes a beast: large, move 3, def 6, HP 12, melee 5, **Pounce** |
 | Hacker    | 3    | small (1)  | 3     | 5   | 6  | 4         | 2   | **Hack**: enemy within 4 in sight gets -2 on its next die (min 1). No roll |
+| Bomber    | 2    | small (1)  | 4     | 4   | 2  | 1 (melee) | 1   | **Detonate**: every adjacent model takes 3 (friendly fire); the Bomber is destroyed. No roll |
+| Guardian  | 3    | medium (2) | 3     | 7   | 7  | 1 (melee) | 2   | **Guard**: until your next turn, your models next to it get +2 defense (not itself; doesn't stack) |
+| Cryomancer | 3   | small (1)  | 3     | 5   | 4  | 3         | 1   | **Freeze**: an enemy within 3 in sight can't move on its next turn (it can still attack). No roll |
+| Blinker   | 3    | small (1)  | 3     | 5   | 4  | 1 (melee) | 3   | **Blink**: teleport to an empty hex within 3, through walls and models, then attack with the same die |
+| Poisoner  | 3    | small (1)  | 3     | 5   | 4  | 4         | 1   | **Poison**: an enemy within 4 in sight takes 1 at the start of each of its next 2 turns. No roll |
 | Dual Gunner | 4  | medium (2) | 3     | 6   | 7  | 4         | 2   | **Second Shot**: after its attack, attack again with the same die |
 | Dragon    | 6    | large (3)  | 3     | 6   | 12 | 3         | 3   | **Breath**: like Torch, and everything hit burns. Flying |
 

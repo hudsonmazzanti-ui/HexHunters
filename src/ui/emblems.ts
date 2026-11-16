@@ -51,7 +51,7 @@ export function logo(): HTMLElement {
         <circle cx="160" cy="78" r="6" fill="${COLORS.p1}"/>
       </g>
       <text x="160" y="200" text-anchor="middle" class="logo-word"><tspan fill="url(#lg-steel)">HEX</tspan><tspan fill="url(#lg-gold)">HUNTERS</tspan></text>
-      <text x="160" y="232" text-anchor="middle" class="logo-tag" fill="${COLORS.muted}">TABLETOP TACTICS FOR TWO</text>
+      <text x="160" y="232" text-anchor="middle" class="logo-tag" fill="${COLORS.muted}">HEX TACTICS · SOLO OR TWO PLAYERS</text>
     </svg>`,
   );
 }

@@ -904,7 +904,7 @@ button.big {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
-  letter-spacing: 0.3em;
+  letter-spacing: 0.2em;
 }
 .logo-emblem {
   transform-origin: 160px 78px;

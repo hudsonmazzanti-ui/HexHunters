@@ -10,7 +10,8 @@ import type { GameState } from '../core/types';
 export { PLAYER_COLORS } from './theme';
 import { COLORS, PLAYER_COLORS } from './theme';
 import { miniBadge } from './minis';
-export const PLAYER_NAMES = ['Player 1', 'Player 2'] as const;
+/** Display names; the second becomes "Computer" in a game against the AI. */
+export const PLAYER_NAMES: [string, string] = ['Player 1', 'Player 2'];
 
 export interface RosterChip {
   id: string;

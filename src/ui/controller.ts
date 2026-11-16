@@ -83,6 +83,8 @@ import type { AttackStyle } from './fx';
 import { applySettingsClasses, getSettings, updateSettings } from './settings';
 import { showOverlay } from './overlay';
 import { crest, logo, trophy } from './emblems';
+import { aiActions, aiArmy } from '../ai';
+import { Rng } from '../core/rng';
 
 // Opaque, so the next player's freshly rolled dice (or army) aren't visible during handoff.
 const HANDOFF_BG = HANDOFF_COLORS;
@@ -113,6 +115,10 @@ export class Controller {
   private busy = false;
   /** The title screen shows once per page load. */
   private titleShown = false;
+  /** The seat the computer plays (Player 2) in a game against the AI; null for two players. */
+  private ai: PlayerId | null = null;
+  private aiRng = new Rng(1);
+  private aiRunning = false;
   /** The action whose events are playing (Undo snaps instead of gliding). */
   private action: Action | null = null;
 
@@ -149,8 +155,19 @@ export class Controller {
     this.render();
     if (!this.titleShown) {
       this.titleShown = true;
-      await showOverlay({ title: '', art: logo(), className: 'title-screen', buttons: [{ label: 'Play', className: 'primary big', onClick: () => {} }] });
+      await showOverlay({
+        title: '',
+        art: logo(),
+        className: 'title-screen',
+        buttons: [
+          { label: 'Play vs AI', className: 'primary big', onClick: () => (this.ai = 1) },
+          { label: '2 Players', className: 'big', onClick: () => (this.ai = null) },
+        ],
+      });
     }
+    PLAYER_NAMES[1] = this.ai === null ? 'Player 2' : 'Computer';
+    this.aiRng = new Rng((seed ^ 0x7f4a7c15) | 0);
+    this.aiRunning = false;
     await this.buildArmies();
   }
 
@@ -188,7 +205,47 @@ export class Controller {
     const crawl = crawlText(before, this.state);
     if (crawl) this.ui.message = `${this.ui.message ?? ''} ${crawl}`.trim();
     this.render();
+    void this.runAi();
     return true;
+  }
+
+  /** Is it the computer's move right now? */
+  private aiTurn(): boolean {
+    return this.ai !== null && this.state.current === this.ai && (this.state.phase === 'deploy' || this.state.phase === 'play');
+  }
+
+  /**
+   * The computer plays while it is its move: it places models during deployment, and on its
+   * turn takes one step at a time (each a move and/or an action, animated like a player's)
+   * until it ends its turn. Every action goes through the same rules as a human's.
+   */
+  private async runAi(): Promise<void> {
+    if (this.aiRunning || !this.aiTurn()) return;
+    this.aiRunning = true;
+    const game = this.state.seed;
+    const pause = () => sleep(getSettings().animations ? 380 : 0);
+    try {
+      this.render();
+      await pause();
+      for (let guard = 0; guard < 400 && this.aiTurn() && this.state.seed === game; guard++) {
+        const actions = aiActions(this.state, this.ai!, this.aiRng);
+        if (!actions.length) break;
+        let ok = true;
+        for (const action of actions) {
+          if (!this.aiTurn()) break;
+          const keep = this.ui.message;
+          ok = await this.dispatch(action);
+          if (!ok) break;
+          if (action.type === 'move') this.ui.message = keep;
+        }
+        // The rules refused something (shouldn't happen): end the turn rather than loop.
+        if (!ok && this.aiTurn() && this.state.phase === 'play') await this.dispatch({ type: 'endTurn' });
+        await pause();
+      }
+    } finally {
+      this.aiRunning = false;
+      this.render();
+    }
   }
 
   /** Locks input (board, chips, panel) while events animate. */
@@ -585,10 +642,15 @@ export class Controller {
   private async buildArmies(): Promise<void> {
     const limit = this.state.config.armyPointLimit;
     for (const p of [0, 1] as const) {
+      if (p === this.ai) {
+        // The computer picks its own army (you see it when the models are placed).
+        await this.dispatch({ type: 'chooseArmy', units: aiArmy(this.state.config, this.aiRng).units });
+        continue;
+      }
       await showOverlay({
         eyebrow: 'Army building',
         title: `${PLAYER_NAMES[p]}: build your army`,
-        lines: [`Spend up to ${limit} points.`, `${PLAYER_NAMES[other(p)]}, look away!`],
+        lines: [`Spend up to ${limit} points.`, this.ai === null ? `${PLAYER_NAMES[other(p)]}, look away!` : 'The computer is building its army too.'],
         art: crest(p),
         color: HANDOFF_BG[p],
         tapText: 'Tap to start',
@@ -706,6 +768,7 @@ export class Controller {
   }
 
   private async deployHandoff(p: PlayerId): Promise<void> {
+    if (this.ai !== null) return; // no passing the device around against the computer
     const mine = unplacedUnits(this.state, p).length;
     const theirs = unplacedUnits(this.state, other(p)).length;
     const shape = DEPLOY_SHAPES[this.state.map.deployShape];
@@ -723,6 +786,12 @@ export class Controller {
   }
 
   private async turnHandoff(player: PlayerId, round: number, events: GameEvent[], before: GameState): Promise<void> {
+    if (player === this.ai) {
+      // The computer's turn starts without a tap: just a banner over the board.
+      this.board.floatText({ q: 0, r: 0 }, `${PLAYER_NAMES[player]}'s turn`, PLAYER_COLORS[player]);
+      await sleep(getSettings().animations ? 600 : 0);
+      return;
+    }
     const lines: string[] = [];
     for (const e of events) {
       if (e.type === 'overwatch') lines.push(overwatchText(before, e));
@@ -802,6 +871,13 @@ export class Controller {
         { label: 'New game (new map)', className: 'danger', onClick: () => void this.start(randomSeed()) },
         { label: 'Restart (same map)', onClick: () => void this.start(this.state.seed) },
         {
+          label: this.ai === null ? 'Mode: 2 players (change)' : 'Mode: vs AI (change)',
+          onClick: () => {
+            this.titleShown = false;
+            void this.start(randomSeed());
+          },
+        },
+        {
           label: `Animations: ${settings.animations ? 'On' : 'Off'}`,
           className: 'toggle',
           onClick: () => {
@@ -858,7 +934,7 @@ export class Controller {
   // ---------- Input ----------
 
   private onTap(world: Point): void {
-    if (this.busy) return;
+    if (this.busy || this.aiRunning) return;
     const hex = pixelToHex(world, HEX_SIZE);
     if (!onBoard(this.state, hex)) {
       this.clearSelection();
@@ -870,7 +946,7 @@ export class Controller {
   }
 
   private onChip(id: string): void {
-    if (this.busy) return;
+    if (this.busy || this.aiRunning) return;
     this.selectUnit(id);
   }
 
@@ -1019,7 +1095,15 @@ export class Controller {
     this.renderWeather();
     setMusicFor(this.state.phase);
     this.board.render(this.state, this.boardOverlay());
-    renderPanel(this.panelModel(), (id) => this.onChip(id));
+    const model = this.panelModel();
+    if (this.aiTurn()) {
+      // The computer's move: nothing to press.
+      model.actions = [];
+      model.preview = undefined;
+      model.hint = this.ui.message ? `Computer: ${this.ui.message}` : 'The computer is thinking…';
+      model.hintWarn = false;
+    }
+    renderPanel(model, (id) => this.onChip(id));
   }
 
   private boardOverlay(): BoardOverlay {
