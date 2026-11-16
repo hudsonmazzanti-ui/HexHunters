@@ -1,5 +1,5 @@
 /**
- * Player preferences (animations, haptics), remembered in this browser.
+ * Player preferences (animations, haptics, sound), remembered in this browser.
  * Storage can be missing or blocked (private mode, tests): then the defaults are used.
  */
 export interface Settings {
@@ -7,6 +7,10 @@ export interface Settings {
   animations: boolean;
   /** Vibrate on select / hit / kill where the browser supports it. */
   haptics: boolean;
+  /** Sound effects (synthesized; see sound.ts). */
+  sound: boolean;
+  /** Background music (generated; see sound.ts). */
+  music: boolean;
 }
 
 const KEY = 'hexhunters.settings';
@@ -20,7 +24,7 @@ function prefersReducedMotion(): boolean {
 }
 
 export function defaultSettings(): Settings {
-  return { animations: !prefersReducedMotion(), haptics: true };
+  return { animations: !prefersReducedMotion(), haptics: true, sound: true, music: true };
 }
 
 function load(): Settings {
@@ -32,6 +36,8 @@ function load(): Settings {
     return {
       animations: typeof saved.animations === 'boolean' ? saved.animations : defaults.animations,
       haptics: typeof saved.haptics === 'boolean' ? saved.haptics : defaults.haptics,
+      sound: typeof saved.sound === 'boolean' ? saved.sound : defaults.sound,
+      music: typeof saved.music === 'boolean' ? saved.music : defaults.music,
     };
   } catch {
     return defaults;

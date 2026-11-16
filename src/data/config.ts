@@ -241,6 +241,66 @@ export const UNITS: Record<string, UnitDef> = {
     damage: 2,
     special: 'hack',
   },
+  bomber: {
+    name: 'Bomber',
+    label: 'Bm',
+    cost: 2,
+    size: 1, // small
+    speed: SPEED.fast,
+    defense: 4,
+    health: 2,
+    range: 1, // melee only
+    damage: 1,
+    special: 'detonate',
+  },
+  guardian: {
+    name: 'Guardian',
+    label: 'Gd',
+    cost: 3,
+    size: 2, // medium
+    speed: SPEED.normal,
+    defense: 7,
+    health: 7,
+    range: 1, // melee only
+    damage: 2,
+    special: 'guard',
+  },
+  cryomancer: {
+    name: 'Cryomancer',
+    label: 'Cr',
+    cost: 3,
+    size: 1, // small
+    speed: SPEED.normal,
+    defense: 5,
+    health: 4,
+    range: 3,
+    damage: 1,
+    special: 'freeze',
+  },
+  blinker: {
+    name: 'Blinker',
+    label: 'Bl',
+    cost: 3,
+    size: 1, // small
+    speed: SPEED.normal,
+    defense: 5,
+    health: 4,
+    range: 1, // melee only
+    damage: 3,
+    special: 'blink',
+  },
+  poisoner: {
+    name: 'Poisoner',
+    label: 'Po',
+    cost: 3,
+    size: 1, // small
+    speed: SPEED.normal,
+    defense: 5,
+    health: 4,
+    range: 4,
+    damage: 1,
+    special: 'poison',
+  },
   dualgunner: {
     name: 'Dual Gunner',
     label: 'DG',
@@ -521,6 +581,13 @@ export const DEFAULT_CONFIG: GameConfig = {
     spotRange: 7,
     premiumRange: 7,
     premiumDamage: 4,
+    detonateDamage: 3,
+    guardDefenseBonus: 2,
+    freezeRange: 3,
+    blinkRange: 3,
+    poisonRange: 4,
+    poisonDamage: 1,
+    poisonTurns: 2,
     flagCarrierSlow: 1,
   },
 };

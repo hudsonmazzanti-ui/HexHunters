@@ -63,7 +63,7 @@ export function specialUsesFor(config: GameConfig, army: string[], unitType: str
 }
 
 /** Range-type settings of specials, checked against maxRange. */
-const SPECIAL_RANGES = ['hookRange', 'hackRange', 'hurlRange', 'spotRange', 'premiumRange'] as const;
+const SPECIAL_RANGES = ['hookRange', 'hackRange', 'hurlRange', 'spotRange', 'premiumRange', 'freezeRange', 'blinkRange', 'poisonRange'] as const;
 
 /**
  * Checks the unit data: no attack or special may reach farther than `maxRange`.

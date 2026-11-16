@@ -29,7 +29,12 @@ export type SpecialId =
   | 'secondShot'
   | 'breath'
   | 'smash'
-  | 'premiumShot';
+  | 'premiumShot'
+  | 'detonate'
+  | 'guard'
+  | 'freeze'
+  | 'blink'
+  | 'poison';
 
 /** Game objectives (see src/core/missions/). One is picked at random each game. */
 export type MissionId = 'koth' | 'ctf' | 'dom';
@@ -240,6 +245,17 @@ export interface SpecialRules {
   /** Mercenary's Premium Shot: range and damage (always hits). */
   premiumRange: number;
   premiumDamage: number;
+  /** Bomber's Detonate: damage to every adjacent model. */
+  detonateDamage: number;
+  /** Guardian's Guard: defense bonus for friendly models next to it. */
+  guardDefenseBonus: number;
+  /** Cryomancer's Freeze, Blinker's Blink, Poisoner's Poison: ranges. */
+  freezeRange: number;
+  blinkRange: number;
+  poisonRange: number;
+  /** Poison: damage at the start of each of the target's turns, and for how many turns. */
+  poisonDamage: number;
+  poisonTurns: number;
   /** Capture the Flag: how much slower the carrier moves (minimum 1). */
   flagCarrierSlow: number;
 }
@@ -316,6 +332,12 @@ export interface Unit {
   armorCracks: number;
   /** Uses left of a limited special (see UnitDef.specialUses); null = unlimited. */
   usesLeft: number | null;
+  /** Guard used (Guardian): friendly models next to it get a defense bonus until its owner's next turn. */
+  guarding: boolean;
+  /** Frozen (Cryomancer): can't move on its owner's next turn. Cleared when that turn starts. */
+  frozen: boolean;
+  /** Poisoned (Poisoner): turns of poison damage left (0 = not poisoned). */
+  poison: number;
   /** Given free by a Condition (Bonus Bones): not part of the army list, placed after the rest. */
   free: boolean;
 }

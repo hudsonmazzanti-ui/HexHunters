@@ -30,6 +30,7 @@ import {
   effectiveRange,
   getUnit,
   hasDoubleAction,
+  isGuarded,
   livingUnits,
   maxHealth,
   moveReach,
@@ -77,8 +78,13 @@ import { Camera } from './camera';
 import { PLAYER_COLORS, PLAYER_NAMES, type PanelAction, type PanelModel, renderPanel, renderTopBar } from './hud';
 import { COLORS, HANDOFF_COLORS } from './theme';
 import { haptics } from './haptics';
+import { play, setMusic } from './sound';
+import type { AttackStyle } from './fx';
 import { applySettingsClasses, getSettings, updateSettings } from './settings';
 import { showOverlay } from './overlay';
+import { crest, logo, trophy } from './emblems';
+import { aiActions, aiArmy } from '../ai';
+import { Rng } from '../core/rng';
 
 // Opaque, so the next player's freshly rolled dice (or army) aren't visible during handoff.
 const HANDOFF_BG = HANDOFF_COLORS;
@@ -107,6 +113,12 @@ export class Controller {
   private board: BoardView;
   private camera!: Camera;
   private busy = false;
+  /** The title screen shows once per page load. */
+  private titleShown = false;
+  /** The seat the computer plays (Player 2) in a game against the AI; null for two players. */
+  private ai: PlayerId | null = null;
+  private aiRng = new Rng(1);
+  private aiRunning = false;
   /** The action whose events are playing (Undo snaps instead of gliding). */
   private action: Action | null = null;
 
@@ -141,6 +153,21 @@ export class Controller {
     }
     this.camera.fit();
     this.render();
+    if (!this.titleShown) {
+      this.titleShown = true;
+      await showOverlay({
+        title: '',
+        art: logo(),
+        className: 'title-screen',
+        buttons: [
+          { label: 'Play vs AI', className: 'primary big', onClick: () => (this.ai = 1) },
+          { label: '2 Players', className: 'big', onClick: () => (this.ai = null) },
+        ],
+      });
+    }
+    PLAYER_NAMES[1] = this.ai === null ? 'Player 2' : 'Computer';
+    this.aiRng = new Rng((seed ^ 0x7f4a7c15) | 0);
+    this.aiRunning = false;
     await this.buildArmies();
   }
 
@@ -154,6 +181,7 @@ export class Controller {
     } catch (e) {
       if (!(e instanceof RuleError)) throw e;
       this.ui.message = e.message;
+      play('error');
       this.render();
       return false;
     }
@@ -177,7 +205,47 @@ export class Controller {
     const crawl = crawlText(before, this.state);
     if (crawl) this.ui.message = `${this.ui.message ?? ''} ${crawl}`.trim();
     this.render();
+    void this.runAi();
     return true;
+  }
+
+  /** Is it the computer's move right now? */
+  private aiTurn(): boolean {
+    return this.ai !== null && this.state.current === this.ai && (this.state.phase === 'deploy' || this.state.phase === 'play');
+  }
+
+  /**
+   * The computer plays while it is its move: it places models during deployment, and on its
+   * turn takes one step at a time (each a move and/or an action, animated like a player's)
+   * until it ends its turn. Every action goes through the same rules as a human's.
+   */
+  private async runAi(): Promise<void> {
+    if (this.aiRunning || !this.aiTurn()) return;
+    this.aiRunning = true;
+    const game = this.state.seed;
+    const pause = () => sleep(getSettings().animations ? 380 : 0);
+    try {
+      this.render();
+      await pause();
+      for (let guard = 0; guard < 400 && this.aiTurn() && this.state.seed === game; guard++) {
+        const actions = aiActions(this.state, this.ai!, this.aiRng);
+        if (!actions.length) break;
+        let ok = true;
+        for (const action of actions) {
+          if (!this.aiTurn()) break;
+          const keep = this.ui.message;
+          ok = await this.dispatch(action);
+          if (!ok) break;
+          if (action.type === 'move') this.ui.message = keep;
+        }
+        // The rules refused something (shouldn't happen): end the turn rather than loop.
+        if (!ok && this.aiTurn() && this.state.phase === 'play') await this.dispatch({ type: 'endTurn' });
+        await pause();
+      }
+    } finally {
+      this.aiRunning = false;
+      this.render();
+    }
   }
 
   /** Locks input (board, chips, panel) while events animate. */
@@ -200,6 +268,8 @@ export class Controller {
         case 'placed': {
           this.ui = this.freshUi();
           this.render();
+          play('place');
+          this.board.fx.ring(this.board.at(ev.hex), COLORS.tileEdge, 20, 300);
           const placer = getUnit(this.state, ev.unitId)!.owner;
           if (ev.next !== null && ev.next !== placer) await this.deployHandoff(ev.next);
           break;
@@ -222,7 +292,8 @@ export class Controller {
         case 'attack': {
           const attacker = getUnit(before, ev.unitId)!;
           const target = getUnit(before, ev.targetId)!;
-          this.board.shot(attacker.pos!, target.pos!, PLAYER_COLORS[attacker.owner]);
+          await this.board.attackFx(attacker.id, attacker.pos!, target.pos!, attackStyle(before, attacker), PLAYER_COLORS[attacker.owner]);
+          this.board.impact(target.id, target.pos!, ev);
           const roll = `${ev.roll}${ev.bonus ? `+${ev.bonus}` : ''} vs ${ev.defense}`;
           this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? COLORS.fxDamage : COLORS.fxMiss);
           this.ui.message = ev.hit
@@ -239,6 +310,7 @@ export class Controller {
           await this.playSpecial(before, ev);
           break;
         case 'coinFlip': {
+          play('reveal');
           const coin = document.createElement('div');
           coin.className = 'coin';
           coin.textContent = `P${ev.winner + 1}`;
@@ -258,18 +330,26 @@ export class Controller {
         case 'gambleFailed': {
           const u = getUnit(this.state, ev.unitId);
           if (u?.pos) this.board.floatText(u.pos, 'BUST', COLORS.fxBust);
+          play('error');
           this.ui.message = `Gamble failed: rolled ${ev.roll} (${ev.reason}). The action is wasted.`;
           break;
         }
         case 'transformed': {
           const u = getUnit(this.state, ev.unitId);
           this.render();
-          if (u?.pos) this.board.floatText(u.pos, 'TRANSFORMS!', COLORS.fxGold);
+          if (u?.pos) {
+            this.board.floatText(u.pos, 'TRANSFORMS!', COLORS.fxGold);
+            this.board.fx.ring(this.board.at(u.pos), COLORS.moon, 34);
+            this.board.fx.smoke(this.board.at(u.pos), 5);
+            play('rumble');
+          }
           break;
         }
         case 'raised': {
           this.render();
           this.board.floatText(ev.at, 'RISEN', COLORS.fxInfo);
+          this.board.fx.ring(this.board.at(ev.at), COLORS.hack, 26);
+          play('buff');
           const line = `A Skeleton rises for ${PLAYER_NAMES[getUnit(this.state, ev.unitId)?.owner ?? 0]}!`;
           this.ui.message = `${this.ui.message ?? ''} ${line}`.trim();
           break;
@@ -277,19 +357,36 @@ export class Controller {
         case 'cracked': {
           this.render();
           const u = getUnit(this.state, ev.unitId);
-          if (u?.pos) this.board.floatText(u.pos, 'CRACK', COLORS.fxDamage);
+          if (u?.pos) {
+            this.board.floatText(u.pos, 'CRACK', COLORS.fxDamage);
+            this.board.fx.sparks(this.board.at(u.pos), COLORS.miniSteel, 8, 24);
+          }
           this.ui.message = `${this.ui.message ?? ''} ${crackText(this.state, ev)}`.trim();
+          break;
+        }
+        case 'poison': {
+          const pos = getUnit(before, ev.unitId)?.pos;
+          if (pos) {
+            this.board.floatText(pos, `POISON -${ev.damage}`, COLORS.miniGreen);
+            this.board.fx.smoke(this.board.at(pos), 4, COLORS.miniGreen);
+            play(ev.killed ? 'kill' : 'hit');
+          }
           break;
         }
         case 'burn': {
           const pos = getUnit(before, ev.unitId)?.pos;
-          if (pos) this.board.floatText(pos, `BURN -${ev.damage}`, COLORS.fire);
+          if (pos) {
+            this.board.floatText(pos, `BURN -${ev.damage}`, COLORS.fire);
+            this.board.fx.flames([this.board.at(pos)], this.board.at(pos));
+            play(ev.killed ? 'kill' : 'flame');
+          }
           break;
         }
         case 'overwatch': {
           const sentinel = getUnit(before, ev.unitId)!;
           const target = getUnit(before, ev.targetId)!;
-          this.board.shot(sentinel.pos!, target.pos!, COLORS.watch);
+          await this.board.attackFx(sentinel.id, sentinel.pos!, target.pos!, 'bullet', COLORS.watch);
+          this.board.impact(target.id, target.pos!, ev);
           this.board.floatText(target.pos!, ev.hit ? `-${ev.damage}` : 'MISS', ev.hit ? COLORS.fxDamage : COLORS.fxMiss);
           this.ui.message = overwatchText(before, ev);
           this.render();
@@ -297,16 +394,20 @@ export class Controller {
           break;
         }
         case 'roundScored':
+          if (ev.scorer !== null) play('score');
           // Shown on the next handoff screen.
           break;
         case 'siteClaimed': {
           this.render();
           const site = this.state.map.sites![ev.site];
           this.board.floatText(site[0], 'CLAIMED', PLAYER_COLORS[ev.player]);
+          this.board.fx.ring(this.board.at(site[0]), PLAYER_COLORS[ev.player], HEX_SIZE * 2.6, 700);
+          play('claim');
           this.ui.message = `${this.ui.message ?? ''} ${claimText(before, this.state, ev)}`.trim();
           break;
         }
         case 'sitesScored':
+          if (ev.points[0] || ev.points[1]) play('score');
           // Shown on the next handoff screen.
           break;
         case 'flagPickedUp':
@@ -320,6 +421,8 @@ export class Controller {
             if (pos) this.board.floatText(pos, 'CAPTURED!', COLORS.fxGold);
             haptics.kill();
           } else if (at) {
+            play(ev.type === 'flagPickedUp' ? 'claim' : 'place');
+            this.board.fx.ring(this.board.at(at), COLORS.flag, 26);
             this.board.floatText(at, ev.type === 'flagPickedUp' ? 'FLAG!' : ev.type === 'flagDropped' ? 'DROPPED' : 'FLAG', COLORS.flag);
           }
           const line = flagText(before, this.state, ev);
@@ -329,11 +432,14 @@ export class Controller {
         case 'turnStart':
           this.ui = this.freshUi();
           this.render();
+          play('turn');
           await this.turnHandoff(ev.player, ev.round, events, before);
           await this.board.rollDice(ev.dice, this.state.config.dieSides);
           break;
         case 'gameOver':
           this.render();
+          play('win');
+          if (ev.winner !== null) this.board.celebrate(ev.winner);
           await this.gameOverScreen(ev.winner, ev.reason);
           break;
       }
@@ -353,41 +459,157 @@ export class Controller {
       shove: 'SHOVED',
       vault: 'VAULT',
       hack: 'HACKED',
+      freeze: 'FROZEN',
+      poison: 'POISONED',
+      guard: 'GUARD',
+      detonate: 'BOOM',
       smash: 'SMASH',
     };
     const label = labels[ev.special];
+    const fx = this.board.fx;
+    const from = this.board.at(unit.pos!);
+    const there = target?.pos ? this.board.at(target.pos) : null;
+
+    // The special's own effect, before its results show.
+    switch (ev.special) {
+      case 'grenade':
+        if (ev.hex) {
+          play('whoosh');
+          await fx.shell(from, this.board.at(ev.hex), COLORS.miniOlive);
+          play('explosion');
+          fx.explosion(this.board.at(ev.hex));
+          this.board.flash([ev.hex], 'flash-impact');
+          this.board.flash(neighbors(ev.hex), 'flash-splash');
+        }
+        break;
+      case 'secondShot':
+        if (target?.pos) await this.board.attackFx(unit.id, unit.pos!, target.pos, 'bullet', COLORS.fxGold);
+        break;
+      case 'premiumShot':
+        if (target?.pos) await this.board.attackFx(unit.id, unit.pos!, target.pos, 'heavy', COLORS.fxGold);
+        break;
+      case 'hack':
+        play('hack');
+        if (there) await fx.beam(from, there, COLORS.hack);
+        break;
+      case 'spot':
+        play('buff');
+        if (there) {
+          await fx.beam(from, there, COLORS.target);
+          fx.ring(there, COLORS.target, 22);
+        }
+        break;
+      case 'torch':
+      case 'breath':
+        if (ev.dir !== undefined) {
+          const preview = previewSpecial(before, unit, { dir: ev.dir });
+          if (preview) {
+            play('flame');
+            fx.flames(preview.area.map((a) => this.board.at(a.hex)), from);
+            this.board.flash(preview.area.map((a) => a.hex), 'flash-splash');
+            await sleep(getSettings().animations ? 380 : 0);
+          }
+        }
+        break;
+      case 'heal':
+        play('heal');
+        if (there) {
+          fx.ring(there, COLORS.good, 26);
+          fx.sparks(there, COLORS.good, 6, 18);
+        }
+        break;
+      case 'eat':
+        if (target?.pos) await this.board.attackFx(unit.id, unit.pos!, target.pos, 'melee', COLORS.white);
+        if (ev.amount) fx.ring(from, COLORS.good, 24);
+        break;
+      case 'sweep':
+        play('slash');
+        fx.ring(from, COLORS.white, HEX_SIZE * 1.7, 320);
+        await sleep(getSettings().animations ? 160 : 0);
+        break;
+      case 'hook':
+        play('hook');
+        if (there) await fx.rope(from, there);
+        break;
+      case 'hurl':
+        if (ev.hex) {
+          play('rumble');
+          fx.smoke(this.board.at(ev.hex), 5);
+          this.board.drawTerrain(this.state.map); // the chunk is ripped out
+          if (there) await fx.shell(this.board.at(ev.hex), there, COLORS.fxBoulder);
+          this.board.drawTerrain(this.state.map);
+        }
+        break;
+      case 'smash':
+        if (ev.hex) {
+          await this.board.lunge(unit.id, from, this.board.at(ev.hex));
+          play('rumble');
+          fx.smoke(this.board.at(ev.hex), 9);
+          fx.sparks(this.board.at(ev.hex), COLORS.miniRock, 10, 30);
+          fx.shake(8);
+          this.board.drawTerrain(this.state.map);
+        }
+        break;
+      case 'detonate':
+        play('explosion');
+        fx.explosion(from, HEX_SIZE * 2);
+        this.board.flash(neighbors(unit.pos!), 'flash-splash');
+        break;
+      case 'guard':
+        play('buff');
+        fx.ring(from, COLORS.miniSteel, HEX_SIZE * 1.9, 600);
+        break;
+      case 'freeze':
+        play('hack');
+        if (there) {
+          await fx.beam(from, there, COLORS.miniLens);
+          fx.ring(there, COLORS.miniLens, 24);
+          fx.sparks(there, COLORS.white, 8, 20);
+        }
+        break;
+      case 'poison':
+        play('hook');
+        if (there) {
+          await fx.tracer(from, there, COLORS.miniGreen);
+          fx.smoke(there, 5, COLORS.miniGreen);
+        }
+        break;
+      case 'blink':
+        play('whoosh');
+        fx.ring(from, COLORS.special, 28);
+        fx.sparks(from, COLORS.special, 8, 22);
+        if (ev.to) fx.ring(this.board.at(ev.to), COLORS.special, 28);
+        break;
+      case 'brace':
+      case 'prep':
+      case 'load':
+      case 'overwatch':
+        play('buff');
+        fx.ring(from, ev.special === 'overwatch' ? COLORS.watch : COLORS.accent, 24);
+        break;
+      case 'dash':
+      case 'pounce':
+      case 'vault':
+        play('whoosh');
+        fx.sparks(from, COLORS.tileEdge, 5, 16);
+        break;
+      case 'swap':
+        play('whoosh');
+        fx.ring(from, COLORS.special, 28);
+        if (there) fx.ring(there, COLORS.special, 28);
+        break;
+    }
     if (label) this.board.floatText((target ?? unit).pos!, label, COLORS.fxInfo);
 
-    if (ev.special === 'grenade' && ev.hex) {
-      this.board.shot(unit.pos!, ev.hex, COLORS.fire);
-      this.board.flash([ev.hex], 'flash-impact');
-      this.board.flash(neighbors(ev.hex), 'flash-splash');
-    }
-    if (ev.special === 'secondShot' && target?.pos) this.board.shot(unit.pos!, target.pos, COLORS.fxGold);
-    if (ev.special === 'hack' && target?.pos) this.board.shot(unit.pos!, target.pos, COLORS.hack);
-    if ((ev.special === 'torch' || ev.special === 'breath') && ev.dir !== undefined) {
-      const preview = previewSpecial(before, unit, { dir: ev.dir });
-      if (preview) this.board.flash(preview.area.map((a) => a.hex), 'flash-impact');
-    }
     for (const e of ev.effects ?? []) {
       const pos = getUnit(before, e.unitId)?.pos;
       if (!pos) continue;
+      this.board.impact(e.unitId, pos, { hit: e.hit !== false, killed: e.killed });
       if (e.hit === false) this.board.floatText(pos, 'MISS', COLORS.fxMiss);
       else this.board.floatText(pos, `-${e.damage}`, COLORS.fxDamage);
     }
 
-    if (ev.special === 'smash' && ev.hex) {
-      this.board.flash([ev.hex], 'flash-impact');
-      this.board.drawTerrain(this.state.map);
-    }
-    if (ev.special === 'hurl' && ev.hex) {
-      // The map changed: the chunk is gone (and a boulder may have landed).
-      const target = ev.targetId ? getUnit(before, ev.targetId) : undefined;
-      if (target?.pos) this.board.shot(ev.hex, target.pos, COLORS.fxBoulder);
-      this.board.drawTerrain(this.state.map);
-    }
-
-    if (ev.special === 'swap') {
+    if (ev.special === 'swap' || ev.special === 'blink') {
       // The twins teleport: they just flip places.
       this.render();
     } else if (ev.movedId && ev.to) {
@@ -420,9 +642,16 @@ export class Controller {
   private async buildArmies(): Promise<void> {
     const limit = this.state.config.armyPointLimit;
     for (const p of [0, 1] as const) {
+      if (p === this.ai) {
+        // The computer picks its own army (you see it when the models are placed).
+        await this.dispatch({ type: 'chooseArmy', units: aiArmy(this.state.config, this.aiRng).units });
+        continue;
+      }
       await showOverlay({
+        eyebrow: 'Army building',
         title: `${PLAYER_NAMES[p]}: build your army`,
-        lines: [`Spend up to ${limit} points.`, `${PLAYER_NAMES[other(p)]}, look away!`],
+        lines: [`Spend up to ${limit} points.`, this.ai === null ? `${PLAYER_NAMES[other(p)]}, look away!` : 'The computer is building its army too.'],
+        art: crest(p),
         color: HANDOFF_BG[p],
         tapText: 'Tap to start',
       });
@@ -494,6 +723,20 @@ export class Controller {
     this.render();
   }
 
+  /** The Condition's weather over the board (fog, sand, wind streaks, a red moon tint...). */
+  private renderWeather(): void {
+    let box = document.getElementById('weather');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'weather';
+      box.append(document.createElement('i'), document.createElement('i'));
+      document.getElementById('stage')!.append(box);
+    }
+    const s = this.state;
+    const show = s.phase === 'deploy' || s.phase === 'play' || s.phase === 'over';
+    box.className = show ? `w-${s.condition}` : '';
+  }
+
   /** Small mission and Condition icons in the board's top-left corner; tapping reopens the briefing. */
   private renderBriefTools(): void {
     let box = document.getElementById('brief-tools');
@@ -525,10 +768,13 @@ export class Controller {
   }
 
   private async deployHandoff(p: PlayerId): Promise<void> {
+    if (this.ai !== null) return; // no passing the device around against the computer
     const mine = unplacedUnits(this.state, p).length;
     const theirs = unplacedUnits(this.state, other(p)).length;
     const shape = DEPLOY_SHAPES[this.state.map.deployShape];
     await showOverlay({
+      eyebrow: 'Deployment',
+      art: crest(p),
       title: `${PLAYER_NAMES[p]}: place a model`,
       lines: [
         `Deployment: ${shape.name}. Place one model in your highlighted zone.`,
@@ -540,10 +786,21 @@ export class Controller {
   }
 
   private async turnHandoff(player: PlayerId, round: number, events: GameEvent[], before: GameState): Promise<void> {
+    if (player === this.ai) {
+      // The computer's turn starts without a tap: just a banner over the board.
+      this.board.floatText({ q: 0, r: 0 }, `${PLAYER_NAMES[player]}'s turn`, PLAYER_COLORS[player]);
+      await sleep(getSettings().animations ? 600 : 0);
+      return;
+    }
     const lines: string[] = [];
     for (const e of events) {
       if (e.type === 'overwatch') lines.push(overwatchText(before, e));
       if (e.type === 'burn') lines.push(burnText(before, this.state, e));
+      if (e.type === 'poison') {
+        const u = getUnit(before, e.unitId);
+        const who = u ? `${PLAYER_NAMES[u.owner]} ${unitDef(before, u).name}` : 'A model';
+        lines.push(`${who} takes ${e.damage} poison damage${e.killed ? ': destroyed!' : e.left ? ` (${e.left} more turn${e.left === 1 ? '' : 's'}).` : ' (the poison wears off).'}`);
+      }
       if (e.type === 'transformed') lines.push(`${PLAYER_NAMES[player]}'s Werewolf transforms into a beast (+${e.healed} HP)!`);
       if (e.type === 'raised') lines.push('A Skeleton rose from the fallen.');
       if (e.type === 'cracked') lines.push(crackText(this.state, e));
@@ -571,8 +828,9 @@ export class Controller {
       );
       lines.push(`Score: ${this.state.scores[0]} – ${this.state.scores[1]}`);
     }
-    lines.push(`Round ${round}, turn ${this.state.turnInRound + 1} of 2.`);
     await showOverlay({
+      eyebrow: `Round ${round} · Turn ${this.state.turnInRound + 1} of 2`,
+      art: crest(player),
       title: `${PLAYER_NAMES[player]}'s turn`,
       lines,
       color: HANDOFF_BG[player],
@@ -588,8 +846,11 @@ export class Controller {
       draw: 'Both armies were wiped out at the same time.',
     };
     await showOverlay({
+      eyebrow: winner === null ? 'Game over' : 'Victory',
+      art: winner === null ? undefined : trophy(),
+      className: 'victory',
       title: winner === null ? 'Draw!' : `${PLAYER_NAMES[winner]} wins!`,
-      lines: [reasons[reason]],
+      lines: [reasons[reason], `${this.state.round} round${this.state.round === 1 ? '' : 's'} played · ${survivors(this.state)}`],
       color: winner === null ? NEUTRAL_BG : HANDOFF_BG[winner],
       buttons: [
         { label: 'New game', className: 'primary', onClick: () => void this.start(randomSeed()) },
@@ -602,6 +863,7 @@ export class Controller {
     if (this.busy) return;
     const settings = getSettings();
     void showOverlay({
+      eyebrow: 'Paused',
       title: 'HexHunters',
       lines: [`Map seed: ${this.state.seed}`],
       buttons: [
@@ -609,10 +871,35 @@ export class Controller {
         { label: 'New game (new map)', className: 'danger', onClick: () => void this.start(randomSeed()) },
         { label: 'Restart (same map)', onClick: () => void this.start(this.state.seed) },
         {
+          label: this.ai === null ? 'Mode: 2 players (change)' : 'Mode: vs AI (change)',
+          onClick: () => {
+            this.titleShown = false;
+            void this.start(randomSeed());
+          },
+        },
+        {
           label: `Animations: ${settings.animations ? 'On' : 'Off'}`,
           className: 'toggle',
           onClick: () => {
             applySettingsClasses(updateSettings({ animations: !settings.animations }));
+            this.openMenu();
+          },
+        },
+        {
+          label: `Sound: ${settings.sound ? 'On' : 'Off'}`,
+          className: 'toggle',
+          onClick: () => {
+            const next = updateSettings({ sound: !settings.sound });
+            if (next.sound) play('select');
+            this.openMenu();
+          },
+        },
+        {
+          label: `Music: ${settings.music ? 'On' : 'Off'}`,
+          className: 'toggle',
+          onClick: () => {
+            updateSettings({ music: !settings.music });
+            setMusic(this.state.phase === 'play' ? 'battle' : 'menu');
             this.openMenu();
           },
         },
@@ -647,7 +934,7 @@ export class Controller {
   // ---------- Input ----------
 
   private onTap(world: Point): void {
-    if (this.busy) return;
+    if (this.busy || this.aiRunning) return;
     const hex = pixelToHex(world, HEX_SIZE);
     if (!onBoard(this.state, hex)) {
       this.clearSelection();
@@ -659,7 +946,7 @@ export class Controller {
   }
 
   private onChip(id: string): void {
-    if (this.busy) return;
+    if (this.busy || this.aiRunning) return;
     this.selectUnit(id);
   }
 
@@ -670,6 +957,7 @@ export class Controller {
   private selectUnit(id: string | null): void {
     const unit = id ? getUnit(this.state, id) : undefined;
     if (unit && id !== this.ui.selectedId && unit.owner === this.state.current) haptics.tap();
+    if (unit && id !== this.ui.selectedId) play('select');
     this.ui.selectedId = id;
     this.ui.pendingTwin = null;
     this.ui.pendingTargetId = null;
@@ -804,8 +1092,18 @@ export class Controller {
   private render(): void {
     renderTopBar(this.state);
     this.renderBriefTools();
+    this.renderWeather();
+    setMusicFor(this.state.phase);
     this.board.render(this.state, this.boardOverlay());
-    renderPanel(this.panelModel(), (id) => this.onChip(id));
+    const model = this.panelModel();
+    if (this.aiTurn()) {
+      // The computer's move: nothing to press.
+      model.actions = [];
+      model.preview = undefined;
+      model.hint = this.ui.message ? `Computer: ${this.ui.message}` : 'The computer is thinking…';
+      model.hintWarn = false;
+    }
+    renderPanel(model, (id) => this.onChip(id));
   }
 
   private boardOverlay(): BoardOverlay {
@@ -963,6 +1261,7 @@ export class Controller {
         ...(baseDefense(s, sel) > naturalDefense(s, sel) ? [`+${baseDefense(s, sel) - naturalDefense(s, sel)} aura`] : []),
         ...(sel.armorCracks ? [`-${sel.armorCracks} cracked`] : []),
         ...(sel.braced ? ['braced'] : []),
+        ...(isGuarded(s, sel) ? [`+${s.config.specials.guardDefenseBonus} guarded`] : []),
       ];
       const damage = attackDamage(s, sel);
       const stats: [string, string][] = [
@@ -1279,7 +1578,9 @@ export class Controller {
     }
 
     const hints: string[] = [];
-    if (unit.movesLeft > 0) hints.push('Tap a green dot to move');
+    if (unit.frozen) hints.push('frozen: it can\'t move this turn');
+    if (unit.poison > 0) hints.push(`poisoned: ${unit.poison} more turn${unit.poison === 1 ? '' : 's'}`);
+    if (unit.movesLeft > 0 && !unit.frozen) hints.push('Tap a green dot to move');
     if (canAct(s, unit) && unit.attacked) {
       // Dual Gunner after its attack: only Second Shot is left.
       hints.push(`tap ${sp?.name ?? 'the special'} to fire again with the same die`);
@@ -1366,6 +1667,27 @@ export class Controller {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Calm music in menus and setup, the battle pulse during play. */
+let musicPhase = '';
+function setMusicFor(phase: string): void {
+  if (phase === musicPhase) return;
+  musicPhase = phase;
+  setMusic(phase === 'play' ? 'battle' : 'menu');
+}
+
+/** "5 – 2 models left" for the win screen. */
+const survivors = (state: GameState): string =>
+  `${livingUnits(state, 0).length} – ${livingUnits(state, 1).length} models left`;
+
+/** How a unit's basic attack looks and sounds. */
+export function attackStyle(state: GameState, unit: Unit): AttackStyle {
+  const def = unitDef(state, unit);
+  if (def.range <= 1) return 'melee';
+  if (def.indirectFire) return 'shell';
+  if (def.flying || def.hero?.aura === 'pyro' || def.special === 'torch') return 'fire';
+  return def.damage >= 4 || def.special === 'spot' ? 'heavy' : 'bullet';
+}
 
 /** "Player 2's Behemoth's armor cracks: DEF 9 (-1)." */
 function crackText(state: GameState, ev: Extract<GameEvent, { type: 'cracked' }>): string {

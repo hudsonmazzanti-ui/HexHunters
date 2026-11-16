@@ -378,6 +378,36 @@ function specialScore(state: GameState, unit: Unit, choice: SpecialChoice, w: We
     case 'premiumShot':
       v -= w.premiumShotCost;
       break;
+    case 'detonate':
+      // effectsValue already counted every model caught in the blast, the Bomber included
+      // (as friendly fire); swap that for a plain cost so it will trade itself for a good blast.
+      v += w.friendlyFire * (w.damage + w.kill) * unitValue(state, unit, w) - w.detonateSelf * unitValue(state, unit, w);
+      break;
+    case 'guard': {
+      const allies = neighbors(pos)
+        .map((h) => unitAt(state, h))
+        .filter((u): u is Unit => !!u && u.owner === unit.owner);
+      for (const a of allies) v += (w.guard * incomingDamage(state, a, a.pos!, w) * unitValue(state, a, w)) / maxHealth(state, a);
+      break;
+    }
+    case 'freeze': {
+      const t = target!;
+      const melee = unitDef(state, t).range <= 1;
+      v += (w.freeze + (melee ? w.freezeMelee : 0)) * unitValue(state, t, w);
+      break;
+    }
+    case 'poison': {
+      const r = state.config.specials;
+      v += w.poison * damageValue(state, unit, target!, r.poisonDamage * r.poisonTurns, w);
+      break;
+    }
+    case 'blink': {
+      const gain = positionScore(state, unit, choice.hex!, w) - positionScore(state, unit, pos, w);
+      v += gain;
+      // Landing next to an enemy it can then hit is the point of Blink.
+      if (livingUnits(state, other(unit.owner)).some((e) => hexDistance(e.pos!, choice.hex!) <= unitDef(state, unit).range)) v += w.pounce;
+      break;
+    }
     default:
       break;
   }

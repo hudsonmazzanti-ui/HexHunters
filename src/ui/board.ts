@@ -5,17 +5,19 @@
  */
 import { type Hex, type Point, hexCorners, hexKey, hexToPixel, hexagon } from '../core/hex';
 import { aurasOn } from '../core/auras';
-import { actionBonus, armorLabel, maxHealth, turnsUntilTransform, unitAt, unitDef, unitSize } from '../core/queries';
+import { actionBonus, armorLabel, isGuarded, maxHealth, turnsUntilTransform, unitAt, unitDef, unitSize } from '../core/queries';
 import { isCarrier } from '../core/flag';
 import type { GameMap, GameState, PlayerId, Unit } from '../core/types';
 import type { Bounds } from './camera';
 import { getSettings } from './settings';
 import { miniIcon, miniIconScale } from './minis';
 import { COLORS } from './theme';
+import { type AttackStyle, Fx } from './fx';
+import { play } from './sound';
 
 export const HEX_SIZE = 32;
 
-const BODY_RADIUS: Record<number, number> = { 1: 12, 2: 16, 3: 21 };
+const BODY_RADIUS: Record<number, number> = { 1: 14, 2: 18, 3: 23 };
 const LABEL_SIZE: Record<number, number> = { 1: 11, 2: 14, 3: 17 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -80,6 +82,20 @@ function boardDefs(): SVGDefsElement {
       <rect width="96" height="96" fill="${COLORS.tile}"/>
       <rect width="96" height="96" filter="url(#felt-noise)" fill="${COLORS.feltNoise}"/>
     </pattern>
+    <filter id="wood-grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="3"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 -0.12"/>
+    </filter>
+    <pattern id="wood" width="512" height="512" patternUnits="userSpaceOnUse">
+      <rect width="512" height="512" fill="${COLORS.boardGlow}"/>
+      <rect width="512" height="512" filter="url(#wood-grain)" fill="${COLORS.boardEdge}"/>
+      <path d="M0 170H512M0 342H512" stroke="${COLORS.boardEdge}" stroke-width="3" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="table-light" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="${COLORS.moon}" stop-opacity="0.10"/>
+      <stop offset="0.55" stop-color="${COLORS.black}" stop-opacity="0"/>
+      <stop offset="1" stop-color="${COLORS.black}" stop-opacity="0.6"/>
+    </radialGradient>
     <radialGradient id="mini-top" cx="0.4" cy="0.35" r="0.8">
       <stop offset="0" stop-color="${COLORS.miniTop}"/><stop offset="1" stop-color="${COLORS.miniTopDark}"/>
     </radialGradient>
@@ -141,6 +157,8 @@ interface UnitNodes {
   size: number;
   /** Unit type it was drawn as; redrawn if it changes (a Werewolf transforming). */
   type: string;
+  /** Where it was last drawn (for its death effect). */
+  at: Point;
   moonText: SVGTextElement;
   /** Cracking Armor (Behemoth): current defense, "DEF 7 (-3)". */
   armor: SVGGElement;
@@ -152,12 +170,15 @@ interface UnitNodes {
 
 export class BoardView {
   readonly world: SVGGElement;
+  /** Combat and feedback effects (tracers, explosions, sparks...). */
+  readonly fx!: Fx;
   private layers: Record<'base' | 'terrain' | 'watch' | 'shade' | 'goal' | 'cp' | 'dots' | 'units' | 'flag' | 'fx', SVGGElement>;
   private goals = new Map<string, SVGPolygonElement>();
   /** Domination: one group per site (its tinted hexes and outline), colored by owner. */
   private sites: SVGGElement[] = [];
   /** Domination: the banner standing on each site. */
   private siteBanners: SVGGElement[] = [];
+  private bounds: Bounds | null = null;
   /** Capture the Flag: the flag lying on the ground (hidden while carried). */
   private groundFlag: SVGGElement | null = null;
   private shades = new Map<string, SVGPolygonElement>();
@@ -171,19 +192,25 @@ export class BoardView {
 
   constructor(svg: SVGSVGElement) {
     svg.prepend(boardDefs());
+    // The wooden table under the mat (fixed: it doesn't pan or zoom with the board).
+    el('rect', { class: 'table-wood', width: '100%', height: '100%', fill: 'url(#wood)' }, svg);
+    el('rect', { class: 'table-light', width: '100%', height: '100%', fill: 'url(#table-light)' }, svg);
     this.world = el('g', {}, svg);
+    // Effects shake an inner group, so the camera's transform on `world` is left alone.
+    const stage = el('g', { class: 'fx-stage' }, this.world);
     this.layers = {
-      base: el('g', {}, this.world),
-      terrain: el('g', {}, this.world),
-      watch: el('g', {}, this.world),
-      shade: el('g', {}, this.world),
-      goal: el('g', {}, this.world),
-      cp: el('g', {}, this.world),
-      dots: el('g', {}, this.world),
-      units: el('g', {}, this.world),
-      flag: el('g', {}, this.world),
-      fx: el('g', {}, this.world),
+      base: el('g', {}, stage),
+      terrain: el('g', {}, stage),
+      watch: el('g', {}, stage),
+      shade: el('g', {}, stage),
+      goal: el('g', {}, stage),
+      cp: el('g', {}, stage),
+      dots: el('g', {}, stage),
+      units: el('g', {}, stage),
+      flag: el('g', {}, stage),
+      fx: el('g', {}, stage),
     };
+    this.fx = new Fx(this.layers.fx, stage);
   }
 
   /**
@@ -202,6 +229,11 @@ export class BoardView {
     const cpKeys = new Set(showControlPoint ? map.controlPoint.map(hexKey) : []);
     const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
+    // The mat's thickness and shadow on the table: a dark copy of the board, nudged down.
+    const under = el('g', { class: 'mat-under', transform: 'translate(0 7)' }, this.layers.base);
+    for (const h of hexagon(map.radius)) el('polygon', { points: points(h, HEX_SIZE + 2) }, under);
+    const edge = el('g', { class: 'mat-edge', transform: 'translate(0 3)' }, this.layers.base);
+    for (const h of hexagon(map.radius)) el('polygon', { points: points(h, HEX_SIZE + 0.5) }, edge);
     for (const h of hexagon(map.radius)) {
       const key = hexKey(h);
       el('polygon', { points: points(h), class: `hex-base${cpKeys.has(key) ? ' cp' : ''}` }, this.layers.base);
@@ -235,6 +267,7 @@ export class BoardView {
     // owner's color), standing at the center hex's left so a model there doesn't hide it.
     this.siteBanners = (map.sites ?? []).map((site) => banner(site[0], this.layers.flag, 'owner-none'));
     if (showControlPoint) banner(map.controlPoint[0], this.layers.flag, 'cp');
+    this.bounds = bounds;
 
     return bounds;
   }
@@ -265,6 +298,15 @@ export class BoardView {
         el('polygon', { points: pts([a, b2, top[(i + 1) % 6], top[i]]), class: `terrain-side ${cls}` }, g);
       }
       el('polygon', { points: pts(top), class: 'terrain-top' }, g);
+      // Stone detail: a lit upper-left rim and a couple of cracks (fixed per hex).
+      const cx = top.reduce((a, p) => a + p.x, 0) / 6;
+      const cy = top.reduce((a, p) => a + p.y, 0) / 6;
+      const inner = top.map((p) => ({ x: cx + (p.x - cx) * 0.84, y: cy + (p.y - cy) * 0.84 }));
+      el('polyline', { points: pts([inner[3], inner[4], inner[5], inner[0]]), class: 'terrain-rim' }, g);
+      const k = Math.abs(h.q * 7 + h.r * 13) % 6;
+      const a1 = inner[k];
+      const a2 = inner[(k + 2) % 6];
+      el('path', { d: `M${a1.x.toFixed(1)} ${a1.y.toFixed(1)} L${(cx + (k % 2 ? 3 : -3)).toFixed(1)} ${(cy + 2).toFixed(1)} L${((a2.x + cx) / 2).toFixed(1)} ${((a2.y + cy) / 2).toFixed(1)}`, class: 'terrain-crack' }, g);
     }
   }
 
@@ -303,8 +345,10 @@ export class BoardView {
     for (const [id, nodes] of this.units) {
       if (alive.has(id)) continue;
       this.units.delete(id);
+      // Destroyed: the mini topples and fades in a puff of smoke.
       nodes.g.classList.add('dead');
-      setTimeout(() => nodes.g.remove(), 400);
+      this.fx.smoke(nodes.at, 7);
+      setTimeout(() => nodes.g.remove(), 450);
     }
   }
 
@@ -344,6 +388,7 @@ export class BoardView {
     // painted figure on the base's dark top (src/ui/minis.ts). Units without an icon keep
     // their letter label.
     const mini = el('g', { class: 'mini' }, g);
+    mini.style.animationDelay = `${-(this.units.size % 7) * 0.33}s`; // so they don't bob in unison
     el('ellipse', { cx: 2, cy: r * 0.5, rx: r * 1.02, ry: r * 0.45, class: 'mini-shadow' }, mini);
     el('circle', { cy: 2.5, r, class: 'mini-edge' }, mini);
     el('circle', { r, class: 'body' }, mini);
@@ -377,6 +422,16 @@ export class BoardView {
     const hackMark = el('g', { class: 'hack-mark', transform: `translate(${-r - 6} 2)` }, g);
     el('rect', { x: -8, y: -6, width: 16, height: 12, rx: 3 }, hackMark);
     el('text', {}, hackMark).textContent = '</>';
+
+    // Status rings: ice (frozen), a green drip ring (poisoned), a steel shield ring (guarded).
+    el('circle', { r: r + 2, class: 'status-ring frozen-ring' }, g);
+    el('circle', { r: r + 2, class: 'status-ring poison-ring' }, g);
+    el('circle', { r: r + 5, class: 'status-ring guard-ring' }, g);
+    const drip = el('g', { class: 'poison-mark', transform: `translate(${-r - 4} ${r - 4})` }, g);
+    el('path', { d: 'M0 -7 C5 0 6 3 6 5 A6 6 0 0 1 -6 5 C-6 3 -5 0 0 -7Z' }, drip);
+    const ice = el('g', { class: 'frozen-mark', transform: `translate(${-r - 4} ${r - 4})` }, g);
+    el('circle', { r: 7.5 }, ice);
+    el('path', { d: 'M0 -5V5M-4.3 -2.5L4.3 2.5M4.3 -2.5L-4.3 2.5' }, ice);
 
     // Resting (Skeleton on a back-to-back turn): "Zz" above the model.
     el('text', { class: 'zz', x: r * 0.6, y: -r - 2 }, g).textContent = 'Zz';
@@ -427,9 +482,17 @@ export class BoardView {
     el('rect', { x: -9, y: -6, width: 18, height: 12, rx: 3 }, uses);
     const usesText = el('text', {}, uses);
 
-    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, type: unit.type, armor, armorText, armorRect, usesText };
+    const nodes = { g, die, dieText, dieRect, owText, moonText, hp, hpText, size, type: unit.type, at: { x: 0, y: 0 }, armor, armorText, armorRect, usesText };
     this.units.set(unit.id, nodes);
     requestAnimationFrame(() => requestAnimationFrame(() => (g.style.transition = '')));
+    // A new model drops onto the board.
+    if (getSettings().animations) {
+      try {
+        mini.animate([{ transform: 'translateY(-26px) scale(1.25)', opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translateY(-3px)', offset: 0.85 }, { transform: 'translateY(0)' }], { duration: 320, easing: 'ease-in' });
+      } catch {
+        // No animation support.
+      }
+    }
     return nodes;
   }
 
@@ -439,6 +502,7 @@ export class BoardView {
     if (!this.moving.has(unit.id)) {
       const p = hexToPixel(unit.pos!, HEX_SIZE);
       n.g.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      n.at = p;
     }
 
     const isCurrent = state.phase === 'play' && unit.owner === state.current;
@@ -447,6 +511,8 @@ export class BoardView {
     cls.toggle('p0', unit.owner === 0);
     cls.toggle('p1', unit.owner === 1);
     cls.toggle('spent', spent);
+    // Models that can still do something this turn stand at the ready (a gentle bob).
+    cls.toggle('ready', isCurrent && !spent);
     cls.toggle('selected', o.selectedId === unit.id);
     cls.toggle('target', o.targetIds.has(unit.id));
     cls.toggle('special-target', o.specialTargetIds.has(unit.id));
@@ -458,6 +524,9 @@ export class BoardView {
     cls.toggle('crawling', unit.crawling);
     cls.toggle('resting', unit.resting && state.phase === 'play' && unit.owner === state.current);
     cls.toggle('burning', unit.burning);
+    cls.toggle('frozen', unit.frozen);
+    cls.toggle('poisoned', unit.poison > 0);
+    cls.toggle('guarded', unit.guarding || isGuarded(state, unit));
     cls.toggle('hacked', unit.hacked || (unit.hackPenalty > 0 && (unit.die !== null || unit.gambling)));
     cls.toggle('twin', !!unit.partnerId);
     cls.toggle('carrier', isCarrier(state, unit));
@@ -529,6 +598,8 @@ export class BoardView {
     place(pts[0]); // start where it was (a render may already have drawn it at the end)
     try {
       const start = performance.now();
+      let step = -1;
+      if (opts.airborne) play('whoosh');
       await new Promise<void>((resolve) => {
         const frame = (now: number) => {
           const t = Math.min(1, (now - start) / duration);
@@ -536,7 +607,13 @@ export class BoardView {
           let i = 0;
           while (i < seg.length - 1 && d > seg[i]) d -= seg[i++];
           const k = seg[i] ? Math.min(1, d / seg[i]) : 1;
-          place({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k });
+          // A little hop on each hex (a footstep each time it lands); flyers glide.
+          const hop = opts.airborne || opts.durationMs ? 0 : Math.sin(Math.PI * k) * 5;
+          if (i !== step) {
+            step = i;
+            if (!opts.airborne) play('step');
+          }
+          place({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k - hop });
           if (t < 1) requestAnimationFrame(frame);
           else resolve();
         };
@@ -549,13 +626,86 @@ export class BoardView {
     }
   }
 
-  /** Brief line from attacker to target. */
-  shot(from: Hex, to: Hex, color: string): void {
-    const a = hexToPixel(from, HEX_SIZE);
-    const b = hexToPixel(to, HEX_SIZE);
-    const line = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: 'shot', stroke: color }, this.layers.fx);
-    line.style.stroke = color;
-    setTimeout(() => line.remove(), 650);
+  /** Pixel center of a hex (for effects). */
+  at(h: Hex): Point {
+    return hexToPixel(h, HEX_SIZE);
+  }
+
+  /**
+   * Plays an attack from one hex to another in the weapon's style and resolves when it
+   * lands: a tracer, a lobbed shell, a fire bolt, or (melee) the attacker lunging in.
+   */
+  async attackFx(unitId: string, from: Hex, to: Hex, style: AttackStyle, color: string): Promise<void> {
+    const a = this.at(from);
+    const b = this.at(to);
+    switch (style) {
+      case 'melee':
+        play('slash');
+        await this.lunge(unitId, a, b);
+        void this.fx.slash(b);
+        break;
+      case 'shell':
+        play('heavyShot');
+        await this.fx.shell(a, b);
+        break;
+      case 'fire':
+        play('flame');
+        await this.fx.fireBolt(a, b);
+        break;
+      case 'heavy':
+        play('heavyShot');
+        await this.fx.tracer(a, b, color, true);
+        break;
+      default:
+        play('shot');
+        await this.fx.tracer(a, b, color);
+    }
+  }
+
+  /** The model darts toward a point and back (melee). */
+  async lunge(unitId: string, a: Point, b: Point): Promise<void> {
+    const n = this.units.get(unitId);
+    if (!n || !getSettings().animations) return;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const reach = Math.min(len * 0.55, HEX_SIZE);
+    const to = `${((b.x - a.x) / len) * reach}px ${((b.y - a.y) / len) * reach}px`;
+    try {
+      const anim = n.g.animate([{ translate: '0px 0px' }, { translate: to, offset: 0.45 }, { translate: '0px 0px' }], { duration: 260, easing: 'ease-in-out' });
+      await new Promise((r) => setTimeout(r, 120)); // the blow lands at the far point
+      void anim.finished.catch(() => {});
+    } catch {
+      // No animation support.
+    }
+  }
+
+  /**
+   * A model's reaction to being attacked: sparks and a shake on a hit, a dust puff on a
+   * miss. (A destroyed model's own puff of smoke comes from render.)
+   */
+  impact(unitId: string, at: Hex, result: { hit: boolean; killed?: boolean }): void {
+    const p = this.at(at);
+    if (!result.hit) {
+      play('miss');
+      this.fx.sparks({ x: p.x + 14, y: p.y - 10 }, COLORS.fxMiss, 3, 12);
+      return;
+    }
+    play(result.killed ? 'kill' : 'hit');
+    this.fx.burstAt(p, 14, COLORS.white, 140);
+    this.fx.sparks(p, COLORS.fxGold, result.killed ? 12 : 7, result.killed ? 30 : 22);
+    if (result.killed) this.fx.shake(5);
+    const n = this.units.get(unitId);
+    if (n && getSettings().animations) {
+      n.g.classList.remove('hit');
+      void n.g.getBoundingClientRect(); // restart the animation
+      n.g.classList.add('hit');
+      setTimeout(() => n.g.classList.remove('hit'), 400);
+    }
+  }
+
+  /** Victory: confetti in the winner's colors over the whole board. */
+  celebrate(winner: PlayerId): void {
+    const c = winner === 0 ? [COLORS.p0, COLORS.p0Light] : [COLORS.p1, COLORS.p1Light];
+    if (this.bounds) this.fx.confetti(this.bounds, [...c, COLORS.accent, COLORS.white]);
   }
 
   /** Briefly highlights hexes (explosions, flames). */
@@ -569,7 +719,8 @@ export class BoardView {
   /** Text that floats up from a hex and fades out. */
   floatText(at: Hex, text: string, color: string): void {
     const p: Point = hexToPixel(at, HEX_SIZE);
-    const t = el('text', { x: p.x, y: p.y - 22, class: 'float-text', fill: color }, this.layers.fx);
+    const t = el('text', { x: p.x, y: p.y - 22, class: `float-text${/^-\d/.test(text) ? ' dmg' : ''}`, fill: color }, this.layers.fx);
+    t.style.transformOrigin = `${p.x}px ${p.y - 22}px`;
     t.textContent = text;
     setTimeout(() => t.remove(), 1150);
   }
@@ -581,6 +732,7 @@ export class BoardView {
       this.rolling.add(id);
       this.units.get(id)!.die.classList.add('rolling');
     });
+    if (ids.length && getSettings().animations) play('dice');
     const end = performance.now() + (getSettings().animations ? 700 : 0);
     while (performance.now() < end) {
       for (const id of ids) this.units.get(id)!.dieText.textContent = String(1 + Math.floor(Math.random() * sides));
@@ -595,5 +747,6 @@ export class BoardView {
       void n.die.getBoundingClientRect(); // restart the animation
       n.die.classList.add('pop');
     }
+    if (ids.length) play('diceLand');
   }
 }

@@ -91,17 +91,29 @@ button {
   border-radius: var(--radius-md);
   min-height: var(--tap);
   padding: 0 var(--space-4);
-  background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent);
+  /* A raised key: lit top edge, darker lip underneath that it presses into. */
+  background: linear-gradient(180deg, var(--c-raised), var(--panel-2));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent),
+    0 3px 0 color-mix(in srgb, var(--c-black) 45%, transparent);
   cursor: pointer;
   touch-action: manipulation;
   transition:
     transform 80ms ease-out,
-    background-color 120ms;
+    box-shadow 80ms ease-out,
+    filter 120ms;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.12);
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translateY(2px) scale(0.985);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 10%, transparent),
+    0 1px 0 color-mix(in srgb, var(--c-black) 45%, transparent);
 }
 
 button:disabled {
@@ -110,15 +122,32 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--c-moon), var(--accent));
   color: var(--c-ink);
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 60%, transparent),
+    0 3px 0 var(--c-cp-edge),
+    0 6px 16px color-mix(in srgb, var(--c-accent) 28%, transparent);
+}
+button.primary:active:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 40%, transparent),
+    0 1px 0 var(--c-cp-edge);
 }
 
 button.danger {
-  background: var(--bad);
+  background: linear-gradient(180deg, var(--c-p1-light), var(--bad));
   color: var(--c-ink);
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--c-white) 50%, transparent),
+    0 3px 0 var(--c-p1-dark);
+}
+
+button.big {
+  min-height: 60px;
+  font-size: 24px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 #app {
@@ -136,8 +165,14 @@ button.danger {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: var(--panel);
-  border-bottom: 4px solid var(--turn-color, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--turn-color, transparent) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--c-panel2), var(--panel));
+  border-bottom: 3px solid var(--turn-color, transparent);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--c-black) 55%, transparent);
+  position: relative;
+  z-index: 2;
+  transition: border-color 300ms;
 }
 
 .score {
@@ -153,9 +188,13 @@ button.danger {
 }
 
 .score .dot {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
+  box-shadow:
+    inset 0 2px 2px color-mix(in srgb, var(--c-white) 45%, transparent),
+    inset 0 -2px 2px color-mix(in srgb, var(--c-black) 35%, transparent),
+    0 0 8px currentColor;
 }
 
 .score .pts {
@@ -176,7 +215,10 @@ button.danger {
 
 .turn-label .who {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 0 14px color-mix(in srgb, currentColor 55%, transparent);
 }
 
 .turn-label .round {
@@ -197,7 +239,7 @@ button.danger {
   width: 100%;
   height: 100%;
   touch-action: none;
-  background: radial-gradient(circle at 50% 50%, var(--c-board-glow), var(--c-board-edge));
+  background: var(--c-board-edge);
 }
 
 #board-tools {
@@ -217,6 +259,12 @@ button.danger {
   background: color-mix(in srgb, var(--c-panel) 85%, transparent);
 }
 
+.mat-under polygon {
+  fill: color-mix(in srgb, var(--c-black) 38%, transparent);
+}
+.mat-edge polygon {
+  fill: var(--c-tile-edge);
+}
 .hex-base {
   /* The felt mat: the tile color with a fine noise texture (pattern in board.ts). */
   fill: url(#felt);
@@ -303,6 +351,15 @@ button.danger {
   stroke: var(--c-white);
   stroke-width: 1.5;
   pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    transform: scale(0.72);
+    opacity: 0.8;
+  }
 }
 
 /* Movement is tweened in JS (board.ts); anything else (Swap, Undo) snaps instantly. */
@@ -315,8 +372,41 @@ button.danger {
   filter: drop-shadow(0 7px 5px color-mix(in srgb, var(--c-black) 55%, transparent));
 }
 
+/* Destroyed: the mini topples, shrinks and fades (with a puff of smoke from fx.ts). */
 .unit.dead {
   opacity: 0;
+  transition: opacity 420ms ease-in;
+}
+.unit.dead .mini {
+  transform: rotate(50deg) scale(0.5);
+  transition: transform 420ms ease-in;
+}
+.unit.dead .badge,
+.unit.dead .ring {
+  display: none;
+}
+/* Hit: a white flash and a shake. */
+.unit.hit .mini {
+  animation: hit-flash 380ms ease-out;
+}
+@keyframes hit-flash {
+  0% {
+    filter: brightness(3) saturate(0);
+    transform: translate(0, 0) scale(1.12);
+  }
+  25% {
+    transform: translate(-4px, 1px);
+  }
+  45% {
+    filter: none;
+    transform: translate(4px, -1px);
+  }
+  65% {
+    transform: translate(-2px, 0);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 /* Tabletop miniature (board.ts createUnit): base edge, team rim, bevel, dark top, figure. */
@@ -376,6 +466,14 @@ button.danger {
 .unit.selected .ring.sel {
   display: block;
   stroke: var(--accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-accent) 90%, transparent));
+  animation: ring-breathe 1.6s ease-in-out infinite;
+}
+@keyframes ring-breathe {
+  50% {
+    stroke-width: 5;
+    opacity: 0.75;
+  }
 }
 
 .unit.target .ring.tgt {
@@ -449,6 +547,29 @@ button.danger {
 .die.rolling text {
   fill: var(--c-muted);
 }
+/* Rolling: the die tumbles and bounces until it lands. */
+.die.rolling {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: die-tumble 240ms linear infinite;
+}
+@keyframes die-tumble {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-7px) rotate(90deg);
+  }
+  50% {
+    transform: translateY(0) rotate(180deg);
+  }
+  75% {
+    transform: translateY(-4px) rotate(270deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
 .die.pop {
   animation: pop 300ms ease-out;
   transform-box: fill-box;
@@ -493,25 +614,39 @@ button.danger {
 
 @keyframes pop {
   0% {
-    transform: scale(1.8);
+    transform: scale(1.9);
+  }
+  55% {
+    transform: scale(0.88);
   }
   100% {
     transform: scale(1);
   }
 }
 
+/* Floating text punches in, hangs, then drifts up and fades. */
 @keyframes rise {
   0% {
     opacity: 0;
-    transform: translateY(0);
+    transform: translateY(6px) scale(0.4);
   }
-  15% {
+  12% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.35);
+  }
+  22% {
+    transform: translateY(-4px) scale(1);
+  }
+  70% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateY(-28px);
+    transform: translateY(-30px) scale(1);
   }
+}
+.float-text.dmg {
+  font-size: 28px;
 }
 
 @keyframes fade {
@@ -523,7 +658,10 @@ button.danger {
 /* ---------- Bottom panel ---------- */
 
 #panel {
-  background: var(--panel);
+  background: linear-gradient(180deg, var(--c-panel2), var(--panel) 40%);
+  box-shadow: 0 -6px 20px color-mix(in srgb, var(--c-black) 50%, transparent);
+  position: relative;
+  z-index: 2;
   padding: var(--space-3) var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
@@ -561,6 +699,7 @@ button.danger {
 
 .chip.selected {
   border-color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
 
 .chip.spent {
@@ -675,8 +814,32 @@ button.danger {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--overlay-bg, color-mix(in srgb, var(--c-overlay) 94%, transparent));
+  /* The base color (a team's on handoffs), lit in the middle and dark at the edges. */
+  background:
+    radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--c-white) 13%, transparent), transparent 62%),
+    radial-gradient(ellipse at 50% 50%, transparent 45%, color-mix(in srgb, var(--c-black) 62%, transparent)),
+    var(--overlay-bg, color-mix(in srgb, var(--c-overlay) 94%, transparent));
   text-align: center;
+  overflow: hidden;
+  animation: overlay-in 220ms ease-out;
+}
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ov-hex-rect {
+  animation: hex-drift 26s linear infinite;
+}
+@keyframes hex-drift {
+  to {
+    transform: translate(-93.6px, -162px);
+  }
 }
 
 #overlay[hidden] {
@@ -684,6 +847,7 @@ button.danger {
 }
 
 .overlay-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -691,11 +855,111 @@ button.danger {
   max-width: 420px;
   width: 100%;
 }
+/* Each part rises in, one after the other. */
+.overlay-card > * {
+  animation: rise-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 60ms);
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+}
 
 .overlay-card h1 {
   margin: 0;
-  font-size: 38px;
+  font-size: 40px;
   line-height: 1.05;
+  letter-spacing: 0.02em;
+  text-shadow: 0 3px 0 color-mix(in srgb, var(--c-black) 45%, transparent), 0 0 28px color-mix(in srgb, var(--c-white) 25%, transparent);
+}
+.overlay-card .eyebrow {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  margin-bottom: -8px;
+}
+
+/* Logo, crests and trophy (emblems.ts). */
+.logo {
+  width: min(86vw, 380px);
+}
+.logo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--c-black) 60%, transparent));
+}
+.logo-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 58px;
+  letter-spacing: 0.04em;
+}
+.logo-tag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+}
+.logo-emblem {
+  transform-origin: 160px 78px;
+  animation: emblem-pulse 3.2s ease-in-out infinite;
+}
+@keyframes emblem-pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}
+.title-screen {
+  gap: 34px;
+}
+.crest,
+.trophy {
+  position: relative;
+  width: 150px;
+  height: 160px;
+  display: grid;
+  place-items: center;
+}
+.crest svg,
+.trophy svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 14px color-mix(in srgb, var(--c-black) 55%, transparent));
+}
+.crest-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 46px;
+}
+/* Slowly turning rays of light behind a crest or trophy. */
+.crest-rays {
+  position: absolute;
+  inset: -90px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--ray) 34%, transparent) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask-image: radial-gradient(circle, var(--c-black) 22%, transparent 68%);
+  mask-image: radial-gradient(circle, var(--c-black) 22%, transparent 68%);
+  animation: rays-turn 26s linear infinite;
+}
+@keyframes rays-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.trophy svg {
+  animation: trophy-bob 2.4s ease-in-out infinite;
+}
+@keyframes trophy-bob {
+  50% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
 }
 
 .overlay-card p {
@@ -1397,6 +1661,15 @@ button.danger {
 }
 
 /* Animations off (menu setting): skip decorative motion. */
+.no-anim #overlay,
+.no-anim .overlay-card > *,
+.no-anim .ov-hex-rect,
+.no-anim .crest-rays,
+.no-anim .trophy svg,
+.no-anim .logo-emblem,
+.no-anim .die.rolling,
+.no-anim .reach-dot,
+.no-anim .unit.selected .ring.sel,
 .no-anim .die.pop,
 .no-anim .coin,
 .no-anim .overlay-card .tap {
@@ -1657,4 +1930,187 @@ button.danger {
 .mini-badge {
   display: block;
   filter: drop-shadow(0 1px 1.5px color-mix(in srgb, var(--c-black) 45%, transparent));
+}
+
+/* ---- Weather: the battlefield Condition drawn over the board (controller.renderWeather) ---- */
+#weather {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+#weather i {
+  position: absolute;
+  inset: -40%;
+  display: none;
+}
+/* Fog: two soft banks drifting across. */
+#weather.w-fog i {
+  display: block;
+  background:
+    radial-gradient(ellipse 38% 22% at 30% 40%, color-mix(in srgb, var(--c-icon-fog) 42%, transparent), transparent 70%),
+    radial-gradient(ellipse 44% 26% at 70% 62%, color-mix(in srgb, var(--c-icon-fog) 36%, transparent), transparent 70%),
+    radial-gradient(ellipse 30% 18% at 55% 22%, color-mix(in srgb, var(--c-icon-fog) 30%, transparent), transparent 70%);
+  animation: weather-drift 38s ease-in-out infinite alternate;
+}
+#weather.w-fog i + i {
+  animation-duration: 56s;
+  animation-direction: alternate-reverse;
+  opacity: 0.8;
+}
+#weather.w-fog {
+  background: color-mix(in srgb, var(--c-icon-fog) 10%, transparent);
+}
+@keyframes weather-drift {
+  from {
+    transform: translate(-9%, -3%);
+  }
+  to {
+    transform: translate(9%, 4%);
+  }
+}
+/* Tailwind and Sandstorm: streaks racing across. */
+#weather.w-tailwind i,
+#weather.w-sandstorm i {
+  display: block;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 120px,
+    color-mix(in srgb, var(--streak) 26%, transparent) 120px 123px,
+    transparent 123px 260px,
+    color-mix(in srgb, var(--streak) 16%, transparent) 260px 262px
+  );
+  animation: weather-streak 1.6s linear infinite;
+}
+#weather.w-tailwind i + i,
+#weather.w-sandstorm i + i {
+  animation-duration: 2.7s;
+  opacity: 0.6;
+}
+#weather.w-tailwind {
+  --streak: var(--c-icon-wind);
+}
+#weather.w-sandstorm {
+  --streak: var(--c-icon-sand);
+  background: color-mix(in srgb, var(--c-icon-sand) 16%, transparent);
+}
+@keyframes weather-streak {
+  to {
+    transform: translateX(262px);
+  }
+}
+/* Blood Moon: a red cast, darker at the edges. */
+#weather.w-bloodmoon {
+  background:
+    radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--c-icon-blood-moon) 55%, transparent), transparent 22%),
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--c-icon-blood-moon) 5%, transparent), color-mix(in srgb, var(--c-icon-blood-moon) 24%, transparent));
+  animation: moon-throb 5s ease-in-out infinite;
+}
+@keyframes moon-throb {
+  50% {
+    opacity: 0.75;
+  }
+}
+/* Mud: a brown, heavy cast rising from the bottom. */
+#weather.w-mud {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c-icon-mud) 10%, transparent), color-mix(in srgb, var(--c-icon-mud) 34%, transparent));
+}
+.no-anim #weather i,
+.no-anim #weather {
+  animation: none;
+}
+
+/* Corner buttons sit above the weather. */
+#board-tools,
+#brief-tools {
+  z-index: 1;
+}
+
+/* ---- Table and stone detail ---- */
+.table-wood,
+.table-light {
+  pointer-events: none;
+}
+.terrain-rim {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c-white) 38%, transparent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.terrain-crack {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c-stone-edge) 55%, transparent);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Ready models (can still move or act this turn) bob gently. */
+.unit.ready .mini {
+  animation: idle-bob 2.3s ease-in-out infinite;
+}
+@keyframes idle-bob {
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+.unit.hit .mini {
+  animation: hit-flash 380ms ease-out;
+}
+.no-anim .unit.ready .mini {
+  animation: none;
+}
+
+/* ---- New unit statuses: frozen, poisoned, guarded ---- */
+.unit .status-ring,
+.unit .poison-mark,
+.unit .frozen-mark {
+  display: none;
+  pointer-events: none;
+}
+.unit .status-ring {
+  fill: none;
+  stroke-width: 3.5;
+}
+.unit.frozen .frozen-ring {
+  display: block;
+  stroke: var(--c-mini-lens);
+  fill: color-mix(in srgb, var(--c-mini-lens) 38%, transparent);
+  stroke-dasharray: 5 3;
+}
+.unit.frozen .frozen-mark {
+  display: block;
+}
+.frozen-mark circle {
+  fill: var(--c-mini-lens);
+  stroke: var(--c-mini-ink);
+  stroke-width: 1.2;
+}
+.frozen-mark path {
+  stroke: var(--c-white);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.unit.poisoned .poison-ring {
+  display: block;
+  stroke: var(--c-mini-green);
+  stroke-dasharray: 2 4;
+  animation: spin 2.5s linear infinite;
+}
+.unit.poisoned .poison-mark {
+  display: block;
+}
+.unit.frozen.poisoned .poison-mark {
+  transform: translate(8px, 14px);
+}
+.poison-mark path {
+  fill: var(--c-mini-green);
+  stroke: var(--c-mini-ink);
+  stroke-width: 1.3;
+}
+.unit.guarded .guard-ring {
+  display: block;
+  stroke: var(--c-mini-steel);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c-white) 80%, transparent));
 }

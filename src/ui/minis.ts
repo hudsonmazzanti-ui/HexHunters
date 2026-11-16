@@ -78,7 +78,22 @@ export const MINI_ICONS: Record<string, string> = {
     <path d="M18 74 Q16 46 36 32 Q50 24 64 30 L84 40 Q88 48 80 52 L86 60 Q78 66 64 62 Q58 76 40 80 Z" ${fill(COLORS.miniDragon)}/>
     <path d="M64 62 L70 70 L60 66 Z" ${fill(B, 2.5)}/>
     <path d="M48 40 l12 4 l-11 4z" ${fill(COLORS.miniGold, 2.5)}/><circle cx="80" cy="45" r="2.5" fill="${K}"/>
-    <path d="M30 56 q6 6 14 6 M28 66 q6 4 12 4" ${line(K, 3)} opacity=".45"/>`,
+    <path d="M30 56 q6 6 14 6 M28 66 q6 4 12 4" ${line(K, 3)} opacity=".45"/>`,  bomber: `<circle cx="46" cy="58" r="25" ${fill(COLORS.miniSteelDark, 5)}/>
+    <path d="M58 38 Q66 22 78 24" ${line(K, 8)}/><path d="M58 38 Q66 22 78 24" ${line(COLORS.miniWood, 3.5)}/>
+    <path d="M80 14 l3 7 l7 1 l-5 5 l2 7 l-7 -4 l-6 4 l1 -7 l-5 -5 l7 -1z" ${fill(COLORS.miniFlame, 2.5)}/>
+    <path d="M34 50 q4-8 12-9" ${line(COLORS.white, 4)} opacity=".6"/>`,
+  guardian: `<path d="M22 20 H78 V54 Q78 76 50 88 Q22 76 22 54 Z" ${fill(COLORS.miniSteel, 5)}/>
+    <path d="M50 30 V74 M34 46 H66" ${line(COLORS.miniGold, 8)}/><path d="M50 30 V74 M34 46 H66" ${line(K, 1.5)} opacity=".3"/>`,
+  cryomancer: `<path d="M50 14 V86 M19 32 L81 68 M81 32 L19 68" ${line(K, 11)}/>
+    <path d="M50 14 V86 M19 32 L81 68 M81 32 L19 68" ${line(COLORS.miniLens, 5)}/>
+    <path d="M42 22 L50 30 L58 22 M42 78 L50 70 L58 78" ${line(COLORS.white, 4)}/>
+    <circle cx="50" cy="50" r="8" ${fill(COLORS.white, 3)}/>`,
+  blinker: `<path d="M56 12 L26 54 H46 L40 88 L76 42 H54 Z" ${fill(COLORS.miniSpecial, 4.5)}/>
+    <path d="M52 26 L38 48" ${line(COLORS.white, 3.5)} opacity=".6"/>`,
+  poisoner: `<path d="M40 14 H60 V34 L74 64 Q78 84 50 86 Q22 84 26 64 L40 34 Z" ${fill(B)}/>
+    <path d="M33 60 L30 68 Q28 80 50 81 Q72 80 70 68 L67 60 Z" fill="${COLORS.miniGreen}"/>
+    <path d="M36 14 H64" ${line(K, 6)}/><circle cx="44" cy="70" r="3" fill="${COLORS.white}"/><circle cx="56" cy="74" r="2" fill="${COLORS.white}"/>`,
+
   // ---------- Heroes ----------
   marshal: `<path d="M50 12 L59 36 L84 37 L64 52 L71 76 L50 62 L29 76 L36 52 L16 37 L41 36 Z" ${fill(COLORS.miniGold)}/>
     <path d="M30 80 L50 88 L70 80" ${line(K, 7)}/><path d="M30 80 L50 88 L70 80" ${line(COLORS.miniGold, 3)}/>`,

@@ -82,6 +82,9 @@ export function addUnit(
     armorCracks: 0,
     usesLeft: null,
     free: false,
+    guarding: false,
+    frozen: false,
+    poison: 0,
     ...extra,
   };
   state.units.push(unit);

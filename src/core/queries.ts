@@ -33,8 +33,13 @@ export const baseDefense = (state: GameState, unit: Unit): number =>
 /** Defense against attacks: base, aura bonuses and Brace. */
 export function effectiveDefense(state: GameState, unit: Unit): number {
   const bonus = unit.braced ? state.config.specials.braceDefenseBonus : 0;
-  return baseDefense(state, unit) + bonus;
+  return baseDefense(state, unit) + bonus + (isGuarded(state, unit) ? state.config.specials.guardDefenseBonus : 0);
 }
+
+/** Is a friendly Guardian that used Guard standing next to this model? (Guard doesn't cover the Guardian itself.) */
+export const isGuarded = (state: GameState, unit: Unit): boolean =>
+  !!unit.pos &&
+  state.units.some((g) => g.guarding && g.owner === unit.owner && g.id !== unit.id && !!g.pos && hexDistance(g.pos, unit.pos!) === 1);
 
 /** Max health, including aura bonuses (Warden). */
 export const maxHealth = (state: GameState, unit: Unit): number =>
@@ -79,6 +84,8 @@ export function canSeeUnit(state: GameState, viewer: Unit, target: Unit): boolea
  */
 export function moveReach(state: GameState, unit: Unit): Reach {
   if (!unit.pos) return { costs: new Map(), prev: new Map() };
+  // Frozen (Cryomancer): rooted for its own turn, whatever extra movement it gains.
+  if (unit.frozen && unit.owner === state.current) return { costs: new Map(), prev: new Map() };
   const flying = !!unitDef(state, unit).flying && !isCarrier(state, unit);
   return reachable(
     unit.pos,

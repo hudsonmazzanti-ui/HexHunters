@@ -75,6 +75,8 @@ export type GameEvent =
   | { type: 'gambleFailed'; unitId: string; roll: number; reason: string }
   /** Cracking Armor: the Behemoth lost 1 defense for good (now `defense`, `cracks` lost in total). */
   | { type: 'cracked'; unitId: string; defense: number; cracks: number }
+  /** Poison damage at the start of the poisoned model's owner's turn (`left` = turns of poison remaining). */
+  | { type: 'poison'; unitId: string; damage: number; killed: boolean; left: number }
   /** Burn damage at the start of the burning model's owner's turn. */
   | { type: 'burn'; unitId: string; damage: number; killed: boolean }
   /** A Sentinel's overwatch shot at the end of the opponent's turn. */
@@ -416,6 +418,9 @@ function newUnit(config: GameConfig, owner: PlayerId, type: string, index: numbe
     armorCracks: 0,
     usesLeft: null,
     free: false,
+    guarding: false,
+    frozen: false,
+    poison: 0,
   };
 }
 
@@ -486,6 +491,14 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     const killed = dealDamage(state, unit, damage, { burn: true });
     events.push({ type: 'burn', unitId: unit.id, damage, killed });
   }
+  // Poison ticks too (not a hit: it doesn't crack armor).
+  for (const unit of livingUnits(state, state.current)) {
+    if (unit.poison <= 0) continue;
+    unit.poison -= 1;
+    const damage = state.config.specials.poisonDamage;
+    const killed = dealDamage(state, unit, damage, { burn: true });
+    events.push({ type: 'poison', unitId: unit.id, damage, killed, left: unit.poison });
+  }
   flushFlag(state, events);
   if (checkElimination(state, events)) return;
 
@@ -506,6 +519,7 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     unit.hackPenalty = unit.hacked ? state.config.specials.hackPenalty : 0;
     unit.hacked = false;
     unit.attacked = false;
+    unit.guarding = false; // Guard lasts "until your next turn"
     unit.resting = backToBack && !!unitDef(state, unit).restsOnDoubleTurn && !auraEffects(state, unit).noRest;
     if (unit.resting) {
       // Sits this turn out: no die, no movement.
@@ -529,7 +543,8 @@ function startTurn(state: GameState, events: GameEvent[], backToBack = false): v
     if (noDie) unit.dieBonus = 0;
     unit.gambling = !noDie && !!auraEffects(state, unit).rollsOnAction;
     unit.die = unit.gambling || noDie ? null : hackedDie(rollDie(state) + unit.dieBonus, unit.hackPenalty);
-    unit.movesLeft = unitSpeed(state, unit);
+    // Frozen (Cryomancer): no movement this turn (it thaws when the turn ends).
+    unit.movesLeft = unit.frozen ? 0 : unitSpeed(state, unit);
     unit.acted = false;
     unit.specialUsed = false;
     unit.turnStartPos = unit.pos;
@@ -550,6 +565,7 @@ function endTurn(state: GameState, events: GameEvent[]): void {
     unit.attacked = false;
     unit.movesLeft = 0;
     unit.turnStartPos = null;
+    unit.frozen = false; // thawed: it sat out this turn's movement
   }
 
   // The opponent's Sentinels on overwatch fire at enemies still in their area.
